@@ -475,6 +475,371 @@ db.user_sessions.insertOne({{
             print(f"❌ Error testing PreSales access: {str(e)}")
             return False, {}
 
+    # ============ FILES ENDPOINTS TESTS ============
+
+    def test_get_project_files(self):
+        """Test GET /api/projects/:id/files returns files array"""
+        success, projects_data = self.run_test("Get Projects for Files Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            success, files_data = self.run_test("Get Project Files", "GET", 
+                                               f"api/projects/{project_id}/files", 200,
+                                               auth_token=self.admin_token)
+            if success:
+                is_array = isinstance(files_data, list)
+                print(f"   Files is array: {is_array}")
+                print(f"   Files count: {len(files_data) if is_array else 'N/A'}")
+                return success and is_array, files_data
+            return success, files_data
+        else:
+            print("⚠️  No projects found for files test")
+            return False, {}
+
+    def test_upload_file(self):
+        """Test POST /api/projects/:id/files uploads a file"""
+        success, projects_data = self.run_test("Get Projects for File Upload", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Create a test file (base64 encoded)
+            test_file_data = {
+                "file_name": "test_document.pdf",
+                "file_url": "data:application/pdf;base64,JVBERi0xLjQKJdPr6eEKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPD4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKeHJlZgowIDQKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTggMDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9TaXplIDQKL1Jvb3QgMSAwIFIKPj4Kc3RhcnR4cmVmCjE3NAolJUVPRgo=",
+                "file_type": "pdf"
+            }
+            
+            success, file_response = self.run_test("Upload File", "POST", 
+                                                  f"api/projects/{project_id}/files", 200,
+                                                  data=test_file_data,
+                                                  auth_token=self.admin_token)
+            if success:
+                # Verify file response structure
+                has_id = 'id' in file_response
+                has_name = file_response.get('file_name') == test_file_data['file_name']
+                has_uploader = 'uploaded_by' in file_response and 'uploaded_by_name' in file_response
+                has_timestamp = 'uploaded_at' in file_response
+                print(f"   File ID present: {has_id}")
+                print(f"   File name correct: {has_name}")
+                print(f"   Uploader info present: {has_uploader}")
+                print(f"   Upload timestamp present: {has_timestamp}")
+                
+                # Store file ID for deletion test
+                if has_id:
+                    self.test_file_id = file_response['id']
+                    self.test_project_id = project_id
+                
+                return success and has_id and has_name and has_uploader and has_timestamp, file_response
+            return success, file_response
+        else:
+            print("⚠️  No projects found for file upload test")
+            return False, {}
+
+    def test_delete_file_admin(self):
+        """Test DELETE /api/projects/:id/files/:file_id (Admin only)"""
+        if hasattr(self, 'test_file_id') and hasattr(self, 'test_project_id'):
+            return self.run_test("Delete File (Admin)", "DELETE", 
+                               f"api/projects/{self.test_project_id}/files/{self.test_file_id}", 200,
+                               auth_token=self.admin_token)
+        else:
+            print("⚠️  No test file available for deletion test")
+            return True, {}  # Skip if no file to delete
+
+    def test_delete_file_designer(self):
+        """Test DELETE /api/projects/:id/files/:file_id with Designer token (should fail)"""
+        # First upload a file as admin
+        success, projects_data = self.run_test("Get Projects for Designer Delete Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Upload a test file
+            test_file_data = {
+                "file_name": "test_for_designer_delete.pdf",
+                "file_url": "data:application/pdf;base64,JVBERi0xLjQKJdPr6eEK",
+                "file_type": "pdf"
+            }
+            
+            success, file_response = self.run_test("Upload File for Designer Delete Test", "POST", 
+                                                  f"api/projects/{project_id}/files", 200,
+                                                  data=test_file_data,
+                                                  auth_token=self.admin_token)
+            if success and 'id' in file_response:
+                file_id = file_response['id']
+                
+                # Try to delete as designer (should fail)
+                return self.run_test("Delete File (Designer - Should Fail)", "DELETE", 
+                                   f"api/projects/{project_id}/files/{file_id}", 403,
+                                   auth_token=self.designer_token)
+            else:
+                print("⚠️  Failed to upload test file for designer delete test")
+                return False, {}
+        else:
+            print("⚠️  No projects found for designer delete test")
+            return False, {}
+
+    # ============ NOTES ENDPOINTS TESTS ============
+
+    def test_get_project_notes(self):
+        """Test GET /api/projects/:id/notes returns notes array"""
+        success, projects_data = self.run_test("Get Projects for Notes Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            success, notes_data = self.run_test("Get Project Notes", "GET", 
+                                               f"api/projects/{project_id}/notes", 200,
+                                               auth_token=self.admin_token)
+            if success:
+                is_array = isinstance(notes_data, list)
+                print(f"   Notes is array: {is_array}")
+                print(f"   Notes count: {len(notes_data) if is_array else 'N/A'}")
+                return success and is_array, notes_data
+            return success, notes_data
+        else:
+            print("⚠️  No projects found for notes test")
+            return False, {}
+
+    def test_create_note(self):
+        """Test POST /api/projects/:id/notes creates a note"""
+        success, projects_data = self.run_test("Get Projects for Note Creation", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            note_data = {
+                "title": "Test Note",
+                "content": "This is a test note content for API testing."
+            }
+            
+            success, note_response = self.run_test("Create Note", "POST", 
+                                                  f"api/projects/{project_id}/notes", 200,
+                                                  data=note_data,
+                                                  auth_token=self.admin_token)
+            if success:
+                # Verify note response structure
+                has_id = 'id' in note_response
+                has_title = note_response.get('title') == note_data['title']
+                has_content = note_response.get('content') == note_data['content']
+                has_creator = 'created_by' in note_response and 'created_by_name' in note_response
+                has_timestamps = 'created_at' in note_response and 'updated_at' in note_response
+                print(f"   Note ID present: {has_id}")
+                print(f"   Title correct: {has_title}")
+                print(f"   Content correct: {has_content}")
+                print(f"   Creator info present: {has_creator}")
+                print(f"   Timestamps present: {has_timestamps}")
+                
+                # Store note ID for update test
+                if has_id:
+                    self.test_note_id = note_response['id']
+                    self.test_note_project_id = project_id
+                
+                return success and has_id and has_title and has_content and has_creator and has_timestamps, note_response
+            return success, note_response
+        else:
+            print("⚠️  No projects found for note creation test")
+            return False, {}
+
+    def test_update_note(self):
+        """Test PUT /api/projects/:id/notes/:note_id updates a note"""
+        if hasattr(self, 'test_note_id') and hasattr(self, 'test_note_project_id'):
+            update_data = {
+                "title": "Updated Test Note",
+                "content": "This note content has been updated via API test."
+            }
+            
+            success, note_response = self.run_test("Update Note", "PUT", 
+                                                  f"api/projects/{self.test_note_project_id}/notes/{self.test_note_id}", 200,
+                                                  data=update_data,
+                                                  auth_token=self.admin_token)
+            if success:
+                # Verify updated content
+                title_updated = note_response.get('title') == update_data['title']
+                content_updated = note_response.get('content') == update_data['content']
+                has_updated_timestamp = 'updated_at' in note_response
+                print(f"   Title updated: {title_updated}")
+                print(f"   Content updated: {content_updated}")
+                print(f"   Updated timestamp present: {has_updated_timestamp}")
+                
+                return success and title_updated and content_updated and has_updated_timestamp, note_response
+            return success, note_response
+        else:
+            print("⚠️  No test note available for update test")
+            return True, {}  # Skip if no note to update
+
+    def test_update_note_designer_permission(self):
+        """Test Designer can only update their own notes"""
+        # First create a note as admin
+        success, projects_data = self.run_test("Get Projects for Designer Note Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Create note as admin
+            note_data = {"title": "Admin Note", "content": "Created by admin"}
+            success, admin_note = self.run_test("Create Admin Note", "POST", 
+                                               f"api/projects/{project_id}/notes", 200,
+                                               data=note_data,
+                                               auth_token=self.admin_token)
+            
+            if success and 'id' in admin_note:
+                admin_note_id = admin_note['id']
+                
+                # Try to update admin's note as designer (should fail)
+                update_data = {"title": "Designer Updated", "content": "Designer tried to update"}
+                success, _ = self.run_test("Update Admin Note as Designer (Should Fail)", "PUT", 
+                                         f"api/projects/{project_id}/notes/{admin_note_id}", 403,
+                                         data=update_data,
+                                         auth_token=self.designer_token)
+                return success, {}
+            else:
+                print("⚠️  Failed to create admin note for permission test")
+                return False, {}
+        else:
+            print("⚠️  No projects found for designer note permission test")
+            return False, {}
+
+    # ============ COLLABORATORS ENDPOINTS TESTS ============
+
+    def test_get_project_collaborators(self):
+        """Test GET /api/projects/:id/collaborators returns collaborators with details"""
+        success, projects_data = self.run_test("Get Projects for Collaborators Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            success, collaborators_data = self.run_test("Get Project Collaborators", "GET", 
+                                                       f"api/projects/{project_id}/collaborators", 200,
+                                                       auth_token=self.admin_token)
+            if success:
+                is_array = isinstance(collaborators_data, list)
+                print(f"   Collaborators is array: {is_array}")
+                print(f"   Collaborators count: {len(collaborators_data) if is_array else 'N/A'}")
+                
+                # Check if collaborators have required fields
+                if is_array and len(collaborators_data) > 0:
+                    first_collab = collaborators_data[0]
+                    has_user_details = all(field in first_collab for field in ['user_id', 'name', 'email', 'role'])
+                    print(f"   Collaborator details complete: {has_user_details}")
+                    return success and is_array and has_user_details, collaborators_data
+                
+                return success and is_array, collaborators_data
+            return success, collaborators_data
+        else:
+            print("⚠️  No projects found for collaborators test")
+            return False, {}
+
+    def test_add_collaborator_admin(self):
+        """Test POST /api/projects/:id/collaborators adds collaborator (Admin/Manager only)"""
+        success, projects_data = self.run_test("Get Projects for Add Collaborator", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Add designer as collaborator
+            collaborator_data = {"user_id": self.designer_user_id}
+            
+            success, add_response = self.run_test("Add Collaborator (Admin)", "POST", 
+                                                 f"api/projects/{project_id}/collaborators", 200,
+                                                 data=collaborator_data,
+                                                 auth_token=self.admin_token)
+            if success:
+                # Verify response structure
+                has_message = 'message' in add_response
+                has_user_id = add_response.get('user_id') == self.designer_user_id
+                has_name = 'name' in add_response
+                print(f"   Success message present: {has_message}")
+                print(f"   User ID correct: {has_user_id}")
+                print(f"   User name present: {has_name}")
+                
+                # Store for removal test
+                self.test_collab_project_id = project_id
+                self.test_collab_user_id = self.designer_user_id
+                
+                return success and has_message and has_user_id and has_name, add_response
+            return success, add_response
+        else:
+            print("⚠️  No projects found for add collaborator test")
+            return False, {}
+
+    def test_add_collaborator_designer(self):
+        """Test POST /api/projects/:id/collaborators with Designer token (should fail)"""
+        success, projects_data = self.run_test("Get Projects for Designer Add Collaborator", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Try to add collaborator as designer (should fail)
+            collaborator_data = {"user_id": self.admin_user_id}
+            
+            return self.run_test("Add Collaborator (Designer - Should Fail)", "POST", 
+                               f"api/projects/{project_id}/collaborators", 403,
+                               data=collaborator_data,
+                               auth_token=self.designer_token)
+        else:
+            print("⚠️  No projects found for designer add collaborator test")
+            return False, {}
+
+    def test_remove_collaborator_admin(self):
+        """Test DELETE /api/projects/:id/collaborators/:user_id (Admin only)"""
+        if hasattr(self, 'test_collab_project_id') and hasattr(self, 'test_collab_user_id'):
+            return self.run_test("Remove Collaborator (Admin)", "DELETE", 
+                               f"api/projects/{self.test_collab_project_id}/collaborators/{self.test_collab_user_id}", 200,
+                               auth_token=self.admin_token)
+        else:
+            print("⚠️  No test collaborator available for removal test")
+            return True, {}  # Skip if no collaborator to remove
+
+    def test_remove_collaborator_designer(self):
+        """Test DELETE /api/projects/:id/collaborators/:user_id with Designer token (should fail)"""
+        # First add a collaborator as admin
+        success, projects_data = self.run_test("Get Projects for Designer Remove Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Add admin as collaborator first
+            collaborator_data = {"user_id": self.admin_user_id}
+            success, _ = self.run_test("Add Collaborator for Designer Remove Test", "POST", 
+                                     f"api/projects/{project_id}/collaborators", 200,
+                                     data=collaborator_data,
+                                     auth_token=self.admin_token)
+            
+            if success:
+                # Try to remove as designer (should fail)
+                return self.run_test("Remove Collaborator (Designer - Should Fail)", "DELETE", 
+                                   f"api/projects/{project_id}/collaborators/{self.admin_user_id}", 403,
+                                   auth_token=self.designer_token)
+            else:
+                print("⚠️  Failed to add collaborator for designer remove test")
+                return False, {}
+        else:
+            print("⚠️  No projects found for designer remove collaborator test")
+            return False, {}
+
+    def test_get_available_users(self):
+        """Test GET /api/users/available returns list of all users"""
+        success, users_data = self.run_test("Get Available Users (Admin)", "GET", "api/users/available", 200,
+                                           auth_token=self.admin_token)
+        if success:
+            is_array = isinstance(users_data, list)
+            print(f"   Users is array: {is_array}")
+            print(f"   Users count: {len(users_data) if is_array else 'N/A'}")
+            
+            # Check if users have required fields
+            if is_array and len(users_data) > 0:
+                first_user = users_data[0]
+                has_user_fields = all(field in first_user for field in ['user_id', 'name', 'email', 'role'])
+                print(f"   User fields complete: {has_user_fields}")
+                return success and is_array and has_user_fields, users_data
+            
+            return success and is_array, users_data
+        return success, users_data
+
+    def test_get_available_users_designer(self):
+        """Test GET /api/users/available with Designer token (should fail)"""
+        return self.run_test("Get Available Users (Designer - Should Fail)", "GET", "api/users/available", 403,
+                           auth_token=self.designer_token)
+
     def cleanup_test_data(self):
         """Clean up test data from MongoDB"""
         print("\n🧹 Cleaning up test data...")
