@@ -2002,7 +2002,7 @@ async def seed_projects(request: Request):
             "stage": "Production Preparation",
             "collaborators": user_ids[:3] if len(user_ids) >= 3 else user_ids,
             "summary": "High-end villa interior design with custom furniture and lighting",
-            "timeline": generate_timeline("Production Preparation", (now - timedelta(days=15)).isoformat()),
+            "timeline": generate_project_timeline("Production Preparation", (now - timedelta(days=15)).isoformat()),
             "comments": generate_comments(user_ids[:3] if len(user_ids) >= 3 else user_ids, (now - timedelta(days=15)).isoformat()),
             "updated_at": (now - timedelta(hours=6)).isoformat(),
             "created_at": (now - timedelta(days=15)).isoformat()
