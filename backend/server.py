@@ -3919,7 +3919,7 @@ async def get_calendar_events(
     end_date: Optional[str] = None,
     designer_id: Optional[str] = None,
     project_id: Optional[str] = None,
-    event_type: Optional[str] = None,  # "milestone", "task", "all"
+    event_type: Optional[str] = None,  # "milestone", "task", "meeting", "all"
     status: Optional[str] = None
 ):
     """Get calendar events (milestones + tasks) with role-based filtering"""
