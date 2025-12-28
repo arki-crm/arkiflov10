@@ -10,7 +10,9 @@ import {
   GraduationCap,
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  UserCog,
+  User
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 
@@ -33,7 +35,7 @@ const Sidebar = () => {
       path: '/dashboard', 
       label: 'Dashboard', 
       icon: LayoutDashboard,
-      roles: ['Admin', 'Manager', 'PreSales', 'Designer']
+      roles: ['Admin', 'Manager', 'PreSales', 'Designer', 'Trainee']
     },
     { 
       path: '/presales', 
@@ -54,10 +56,22 @@ const Sidebar = () => {
       roles: ['Admin', 'Manager', 'Designer']
     },
     { 
+      path: '/users', 
+      label: 'Users', 
+      icon: UserCog,
+      roles: ['Admin', 'Manager']
+    },
+    { 
       path: '/academy', 
       label: 'Academy', 
       icon: GraduationCap,
       roles: ['Admin']
+    },
+    { 
+      path: '/profile', 
+      label: 'My Profile', 
+      icon: User,
+      roles: ['Admin', 'Manager', 'PreSales', 'Designer', 'Trainee']
     },
     { 
       path: '/settings', 
@@ -74,7 +88,9 @@ const Sidebar = () => {
   const NavItem = ({ item }) => {
     const Icon = item.icon;
     const isActive = location.pathname === item.path || 
-      (item.path === '/projects' && location.pathname.startsWith('/projects/'));
+      (item.path === '/projects' && location.pathname.startsWith('/projects/')) ||
+      (item.path === '/users' && location.pathname.startsWith('/users/')) ||
+      (item.path === '/leads' && location.pathname.startsWith('/leads/'));
 
     const content = (
       <NavLink
