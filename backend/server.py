@@ -199,6 +199,49 @@ LEAD_MILESTONES = [
     {"title": "Booking Completed", "stage_ref": "Booking Completed"}
 ]
 
+# ============ TAT (Time-to-Action) CONFIGURATION ============
+
+# Lead TAT Rules (days from previous milestone completion)
+LEAD_TAT = {
+    "Lead Created": 0,  # Immediate
+    "BC Call Completed": 1,  # 1 day after lead creation
+    "BOQ Shared": 3,  # 3 days after BC Call Done
+    "Site Meeting": 2,  # 2 days after BOQ Shared
+    "Revised BOQ Shared": 2,  # 2 days after Site Meeting
+    "Waiting for Booking": None,  # No fixed date
+    "Booking Completed": None  # No fixed date
+}
+
+# Project TAT Rules (days from previous milestone completion)
+PROJECT_TAT = {
+    # Design Finalization
+    "Site Measurement": 1,
+    "Site Validation": 2,
+    "Design Meeting": 3,
+    "Design Meeting – 2": 2,
+    "Final Design Proposal & Material Selection": 3,
+    "Sign-off KWS Units & Payment": 2,
+    "Kickoff Meeting": 2,
+    # Production Preparation (3 days apart)
+    "Factory Slot Allocation": 3,
+    "JIT Project Delivery Plan": 3,
+    "Non-Modular Dependencies": 3,
+    "Raw Material Procurement": 3,
+    # Production (4 days apart)
+    "Production Kick-start": 4,
+    "Full Order Confirmation": 4,
+    "PIV / Site Readiness": 4,
+    # Delivery (5 days after PIV)
+    "Modular Order Delivery at Site": 5,
+    # Installation (3 days apart)
+    "Modular Installation": 3,
+    "Non-Modular Dependency Work for Handover": 3,
+    # Handover (2 days apart)
+    "Handover with Snag": 2,
+    "Cleaning": 2,
+    "Handover Without Snag": 2
+}
+
 # Stage order for timeline logic - 6 main stages
 STAGE_ORDER = [
     "Design Finalization",
