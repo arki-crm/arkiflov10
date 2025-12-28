@@ -466,6 +466,42 @@ frontend:
         agent: "testing"
         comment: "✅ VERIFIED: All Settings API working perfectly. Returns complete settings configuration in single request (company, branding, lead_tat, project_tat). Role-based can_edit flag working correctly: Admin=true, Manager=false. Designer access denied (403). Efficient frontend initialization endpoint."
 
+  - task: "Notifications API - CRUD Operations"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented notifications CRUD API: GET /api/notifications (with filters for type, is_read), GET /api/notifications/unread-count, PUT /api/notifications/{id}/read, PUT /api/notifications/mark-all-read, DELETE /api/notifications/{id}, DELETE /api/notifications/clear-all. All endpoints require authentication."
+
+  - task: "Notifications API - Triggers and Automation"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented notification triggers: stage changes on projects create notifications for relevant users (collaborators, admins, managers), stage changes on leads create notifications for assigned users, comment @mentions create notifications for mentioned users. Notification helper functions created."
+
+  - task: "Email Templates API - Management"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented email templates API (Admin only): GET /api/settings/email-templates (returns 5 default templates), GET /api/settings/email-templates/{template_id}, PUT /api/settings/email-templates/{template_id}, POST /api/settings/email-templates/{template_id}/reset. Templates include stage change, task assignment, task overdue, milestone delay, and user invite emails."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
