@@ -639,6 +639,7 @@ const NotesTab = ({ projectId, notes, onNotesChange, userRole, currentUserId }) 
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editTitle, editContent]);
 
   const handleCreateNote = async () => {
