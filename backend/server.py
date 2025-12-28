@@ -2077,6 +2077,362 @@ async def seed_projects(request: Request):
     
     return {"message": f"Seeded {len(sample_projects)} sample projects", "count": len(sample_projects)}
 
+# ============ DASHBOARD ENDPOINTS ============
+
+@api_router.get("/dashboard")
+async def get_dashboard(request: Request):
+    """Get dashboard data based on user role"""
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc)
+    seven_days_ago = now - timedelta(days=7)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    dashboard_data = {
+        "user_role": user.role,
+        "user_name": user.name,
+        "user_id": user.user_id
+    }
+    
+    # Common queries
+    all_leads = await db.leads.find({"is_converted": False}, {"_id": 0}).to_list(10000)
+    all_projects = await db.projects.find({}, {"_id": 0}).to_list(10000)
+    all_users = await db.users.find({}, {"_id": 0}).to_list(1000)
+    
+    # Helper to get delayed milestones
+    def get_delayed_milestones(items, is_lead=False):
+        delayed = []
+        for item in items:
+            item_id = item.get("lead_id" if is_lead else "project_id")
+            item_name = item.get("customer_name" if is_lead else "project_name")
+            timeline = item.get("timeline", [])
+            for milestone in timeline:
+                if milestone.get("status") == "delayed":
+                    expected_date_str = milestone.get("expectedDate", "")
+                    days_delayed = 0
+                    if expected_date_str:
+                        try:
+                            expected = datetime.fromisoformat(expected_date_str.replace("Z", "+00:00"))
+                            if expected.tzinfo is None:
+                                expected = expected.replace(tzinfo=timezone.utc)
+                            days_delayed = (now - expected).days
+                        except:
+                            pass
+                    
+                    # Get designer name for projects
+                    designer_name = None
+                    if not is_lead:
+                        collabs = item.get("collaborators", [])
+                        for collab_id in collabs:
+                            for u in all_users:
+                                if u.get("user_id") == collab_id and u.get("role") == "Designer":
+                                    designer_name = u.get("name")
+                                    break
+                            if designer_name:
+                                break
+                    
+                    delayed.append({
+                        "id": item_id,
+                        "name": item_name,
+                        "milestone": milestone.get("title"),
+                        "expectedDate": expected_date_str,
+                        "daysDelayed": days_delayed,
+                        "stage": milestone.get("stage_ref") or item.get("stage"),
+                        "designer": designer_name
+                    })
+        return delayed
+    
+    # Helper to get upcoming milestones (next 7 days)
+    def get_upcoming_milestones(items, is_lead=False, filter_user_id=None):
+        upcoming = []
+        for item in items:
+            # Filter by user if needed
+            if filter_user_id:
+                if not is_lead and filter_user_id not in item.get("collaborators", []):
+                    continue
+                if is_lead and item.get("designer_id") != filter_user_id:
+                    continue
+            
+            item_id = item.get("lead_id" if is_lead else "project_id")
+            item_name = item.get("customer_name" if is_lead else "project_name")
+            timeline = item.get("timeline", [])
+            
+            # Get designer name for projects
+            designer_name = None
+            if not is_lead:
+                collabs = item.get("collaborators", [])
+                for collab_id in collabs:
+                    for u in all_users:
+                        if u.get("user_id") == collab_id and u.get("role") == "Designer":
+                            designer_name = u.get("name")
+                            break
+                    if designer_name:
+                        break
+            
+            for milestone in timeline:
+                if milestone.get("status") in ["pending", "delayed"]:
+                    expected_date_str = milestone.get("expectedDate", "")
+                    if expected_date_str:
+                        try:
+                            expected = datetime.fromisoformat(expected_date_str.replace("Z", "+00:00"))
+                            if expected.tzinfo is None:
+                                expected = expected.replace(tzinfo=timezone.utc)
+                            # Next 7 days
+                            if today_start <= expected <= (now + timedelta(days=7)):
+                                upcoming.append({
+                                    "id": item_id,
+                                    "name": item_name,
+                                    "milestone": milestone.get("title"),
+                                    "expectedDate": expected_date_str,
+                                    "status": milestone.get("status"),
+                                    "stage": milestone.get("stage_ref") or item.get("stage"),
+                                    "designer": designer_name
+                                })
+                        except:
+                            pass
+        # Sort by expected date
+        upcoming.sort(key=lambda x: x.get("expectedDate", ""))
+        return upcoming[:20]  # Limit to 20
+    
+    # Helper to count stage distribution
+    def get_stage_distribution(items, stage_field="stage"):
+        distribution = {}
+        for item in items:
+            stage = item.get(stage_field, "Unknown")
+            distribution[stage] = distribution.get(stage, 0) + 1
+        return distribution
+    
+    # ============ ADMIN DASHBOARD ============
+    if user.role == "Admin":
+        # Lead metrics
+        total_leads = len(all_leads)
+        qualified_leads = len([l for l in all_leads if l.get("status") == "Qualified"])
+        converted_leads_count = await db.leads.count_documents({"is_converted": True})
+        booking_conversion_rate = round((converted_leads_count / max(total_leads + converted_leads_count, 1)) * 100, 1)
+        
+        # Calculate average lead cycle (lead creation to booking)
+        converted_leads = await db.leads.find({"is_converted": True}, {"_id": 0, "created_at": 1, "updated_at": 1}).to_list(1000)
+        avg_cycle_days = 0
+        if converted_leads:
+            total_days = 0
+            count = 0
+            for lead in converted_leads:
+                created = lead.get("created_at", "")
+                updated = lead.get("updated_at", "")
+                if created and updated:
+                    try:
+                        created_dt = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
+                        updated_dt = datetime.fromisoformat(str(updated).replace("Z", "+00:00"))
+                        total_days += (updated_dt - created_dt).days
+                        count += 1
+                    except:
+                        pass
+            if count > 0:
+                avg_cycle_days = round(total_days / count, 1)
+        
+        # Project metrics
+        total_projects = len(all_projects)
+        project_stage_distribution = get_stage_distribution(all_projects, "stage")
+        
+        # Delayed milestones
+        delayed_project_milestones = get_delayed_milestones(all_projects, is_lead=False)
+        delayed_lead_milestones = get_delayed_milestones(all_leads, is_lead=True)
+        
+        # Active designers
+        active_designers = len([u for u in all_users if u.get("role") == "Designer"])
+        
+        # Designer performance
+        designer_performance = []
+        for u in all_users:
+            if u.get("role") == "Designer":
+                user_id = u.get("user_id")
+                user_projects = [p for p in all_projects if user_id in p.get("collaborators", [])]
+                active_count = len(user_projects)
+                on_time = 0
+                delayed = 0
+                for p in user_projects:
+                    for m in p.get("timeline", []):
+                        if m.get("status") == "completed":
+                            on_time += 1
+                        elif m.get("status") == "delayed":
+                            delayed += 1
+                designer_performance.append({
+                    "user_id": user_id,
+                    "name": u.get("name"),
+                    "activeProjects": active_count,
+                    "onTimeMilestones": on_time,
+                    "delayedMilestones": delayed,
+                    "conversionRate": "85%"  # Dummy for now
+                })
+        
+        # PreSales performance
+        presales_performance = []
+        for u in all_users:
+            if u.get("role") == "PreSales":
+                user_id = u.get("user_id")
+                user_leads = [l for l in all_leads if l.get("assigned_to") == user_id]
+                converted = await db.leads.count_documents({"assigned_to": user_id, "is_converted": True})
+                presales_performance.append({
+                    "user_id": user_id,
+                    "name": u.get("name"),
+                    "totalLeads": len(user_leads) + converted,
+                    "activeLeads": len(user_leads),
+                    "converted": converted
+                })
+        
+        dashboard_data.update({
+            "kpis": {
+                "totalLeads": total_leads,
+                "qualifiedLeads": qualified_leads,
+                "totalProjects": total_projects,
+                "bookingConversionRate": booking_conversion_rate,
+                "activeDesigners": active_designers,
+                "avgTurnaroundDays": avg_cycle_days,
+                "delayedMilestonesCount": len(delayed_project_milestones) + len(delayed_lead_milestones)
+            },
+            "projectStageDistribution": project_stage_distribution,
+            "leadStageDistribution": get_stage_distribution(all_leads, "stage"),
+            "delayedMilestones": delayed_project_milestones[:15],
+            "upcomingMilestones": get_upcoming_milestones(all_projects, is_lead=False),
+            "designerPerformance": designer_performance,
+            "presalesPerformance": presales_performance
+        })
+    
+    # ============ MANAGER DASHBOARD ============
+    elif user.role == "Manager":
+        # Lead metrics
+        total_leads = len(all_leads)
+        lead_stage_distribution = get_stage_distribution(all_leads, "stage")
+        
+        # Project metrics
+        total_projects = len(all_projects)
+        project_stage_distribution = get_stage_distribution(all_projects, "stage")
+        
+        # Delayed milestones
+        delayed_project_milestones = get_delayed_milestones(all_projects, is_lead=False)
+        
+        # Designer performance
+        designer_performance = []
+        for u in all_users:
+            if u.get("role") == "Designer":
+                user_id = u.get("user_id")
+                user_projects = [p for p in all_projects if user_id in p.get("collaborators", [])]
+                active_count = len(user_projects)
+                on_time = 0
+                delayed = 0
+                for p in user_projects:
+                    for m in p.get("timeline", []):
+                        if m.get("status") == "completed":
+                            on_time += 1
+                        elif m.get("status") == "delayed":
+                            delayed += 1
+                designer_performance.append({
+                    "user_id": user_id,
+                    "name": u.get("name"),
+                    "activeProjects": active_count,
+                    "onTimeMilestones": on_time,
+                    "delayedMilestones": delayed,
+                    "conversionRate": "85%"  # Dummy for now
+                })
+        
+        dashboard_data.update({
+            "kpis": {
+                "totalLeads": total_leads,
+                "totalProjects": total_projects,
+                "delayedMilestonesCount": len(delayed_project_milestones)
+            },
+            "projectStageDistribution": project_stage_distribution,
+            "leadStageDistribution": lead_stage_distribution,
+            "delayedMilestones": delayed_project_milestones[:15],
+            "upcomingMilestones": get_upcoming_milestones(all_projects, is_lead=False),
+            "designerPerformance": designer_performance
+        })
+    
+    # ============ PRE-SALES DASHBOARD ============
+    elif user.role == "PreSales":
+        # My leads only
+        my_leads = [l for l in all_leads if l.get("assigned_to") == user.user_id]
+        
+        # Stage counts
+        bc_call_done = len([l for l in my_leads if l.get("stage") == "BC Call Done"])
+        boq_shared = len([l for l in my_leads if l.get("stage") == "BOQ Shared"])
+        waiting_booking = len([l for l in my_leads if l.get("stage") == "Waiting for Booking"])
+        
+        # Follow-ups due today (leads with milestones expected today)
+        followups_today = 0
+        for lead in my_leads:
+            for m in lead.get("timeline", []):
+                if m.get("status") in ["pending", "delayed"]:
+                    expected = m.get("expectedDate", "")
+                    if expected:
+                        try:
+                            exp_dt = datetime.fromisoformat(expected.replace("Z", "+00:00"))
+                            if exp_dt.date() == now.date():
+                                followups_today += 1
+                                break
+                        except:
+                            pass
+        
+        # Lost/dropped leads in past 7 days
+        lost_leads = await db.leads.count_documents({
+            "assigned_to": user.user_id,
+            "status": "Dropped",
+            "updated_at": {"$gte": seven_days_ago.isoformat()}
+        })
+        
+        dashboard_data.update({
+            "kpis": {
+                "myLeads": len(my_leads),
+                "bcCallDone": bc_call_done,
+                "boqShared": boq_shared,
+                "waitingForBooking": waiting_booking,
+                "followupsDueToday": followups_today,
+                "lostLeads7Days": lost_leads
+            },
+            "leadStageDistribution": get_stage_distribution(my_leads, "stage")
+        })
+    
+    # ============ DESIGNER DASHBOARD ============
+    elif user.role == "Designer":
+        # My projects only
+        my_projects = [p for p in all_projects if user.user_id in p.get("collaborators", [])]
+        
+        # Stage distribution for my projects
+        project_stage_distribution = get_stage_distribution(my_projects, "stage")
+        
+        # Delayed projects
+        delayed_milestones = get_delayed_milestones(my_projects, is_lead=False)
+        
+        # Milestones due today
+        milestones_today = 0
+        for proj in my_projects:
+            for m in proj.get("timeline", []):
+                if m.get("status") in ["pending", "delayed"]:
+                    expected = m.get("expectedDate", "")
+                    if expected:
+                        try:
+                            exp_dt = datetime.fromisoformat(expected.replace("Z", "+00:00"))
+                            if exp_dt.date() == now.date():
+                                milestones_today += 1
+                        except:
+                            pass
+        
+        # Projects delayed (having at least one delayed milestone)
+        projects_delayed = len(set([m["id"] for m in delayed_milestones]))
+        
+        dashboard_data.update({
+            "kpis": {
+                "myProjects": len(my_projects),
+                "projectsDelayed": projects_delayed,
+                "milestonesToday": milestones_today
+            },
+            "projectStageDistribution": project_stage_distribution,
+            "delayedMilestones": delayed_milestones[:10],
+            "upcomingMilestones": get_upcoming_milestones(my_projects, is_lead=False)
+        })
+    
+    return dashboard_data
+
+
 # ============ HEALTH CHECK ============
 
 @api_router.get("/")
