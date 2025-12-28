@@ -1017,6 +1017,11 @@ const ProjectDetails = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isUpdatingStage, setIsUpdatingStage] = useState(false);
+  
+  // Files and Notes state
+  const [files, setFiles] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [collaborators, setCollaborators] = useState([]);
 
   // PreSales redirect
   useEffect(() => {
@@ -1034,6 +1039,9 @@ const ProjectDetails = () => {
         withCredentials: true
       });
       setProject(response.data);
+      setFiles(response.data.files || []);
+      setNotes(response.data.notes || []);
+      setCollaborators(response.data.collaborators || []);
     } catch (err) {
       console.error('Failed to fetch project:', err);
       if (err.response?.status === 403) {
