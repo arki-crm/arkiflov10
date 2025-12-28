@@ -981,6 +981,707 @@ async def get_available_users(request: Request):
     users = await db.users.find({}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "picture": 1}).to_list(1000)
     return users
 
+@api_router.get("/users/designers")
+async def get_designers(request: Request):
+    """Get list of all designers (for assigning to leads)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager", "PreSales"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    designers = await db.users.find(
+        {"role": "Designer"}, 
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "picture": 1}
+    ).to_list(1000)
+    return designers
+
+# ============ LEADS ENDPOINTS ============
+
+def generate_lead_timeline(stage: str, created_date: str):
+    """Generate lead timeline based on current stage"""
+    base_date = datetime.fromisoformat(created_date.replace("Z", "+00:00"))
+    if base_date.tzinfo is None:
+        base_date = base_date.replace(tzinfo=timezone.utc)
+    
+    stage_index = LEAD_STAGES.index(stage) if stage in LEAD_STAGES else 0
+    
+    timeline = []
+    day_offset = 0
+    
+    for idx, milestone in enumerate(LEAD_MILESTONES):
+        milestone_stage = milestone["stage_ref"]
+        milestone_stage_index = LEAD_STAGES.index(milestone_stage) if milestone_stage in LEAD_STAGES else 0
+        
+        if milestone_stage_index < stage_index:
+            status = "completed"
+        elif milestone_stage_index == stage_index:
+            status = "completed" if idx == 0 or milestone["title"] == "Lead Created" else "pending"
+        else:
+            status = "pending"
+        
+        timeline.append({
+            "id": f"tl_{uuid.uuid4().hex[:6]}",
+            "title": milestone["title"],
+            "date": (base_date + timedelta(days=day_offset)).isoformat(),
+            "status": status,
+            "stage_ref": milestone_stage
+        })
+        day_offset += 2
+    
+    return timeline
+
+@api_router.get("/leads")
+async def list_leads(request: Request, status: Optional[str] = None, search: Optional[str] = None):
+    """List leads based on role permissions"""
+    user = await get_current_user(request)
+    
+    # Build query based on role
+    query = {"is_converted": False}
+    
+    if user.role == "Designer":
+        # Designer sees only leads assigned to them
+        query["designer_id"] = user.user_id
+    elif user.role == "PreSales":
+        # PreSales sees only their assigned leads
+        query["assigned_to"] = user.user_id
+    # Admin and Manager see all leads
+    
+    # Status filter
+    if status and status != "all":
+        query["status"] = status
+    
+    leads = await db.leads.find(query, {"_id": 0}).to_list(1000)
+    
+    # Apply search filter
+    if search:
+        search_lower = search.lower()
+        leads = [
+            l for l in leads 
+            if search_lower in l.get("customer_name", "").lower() 
+            or search_lower in l.get("customer_phone", "").replace(" ", "")
+        ]
+    
+    # Get assigned user details
+    result = []
+    for lead in leads:
+        lead_data = {**lead}
+        
+        # Get assigned pre-sales user details
+        if lead.get("assigned_to"):
+            assigned_user = await db.users.find_one(
+                {"user_id": lead["assigned_to"]}, 
+                {"_id": 0, "user_id": 1, "name": 1, "picture": 1}
+            )
+            lead_data["assigned_to_details"] = assigned_user
+        
+        # Get designer details
+        if lead.get("designer_id"):
+            designer = await db.users.find_one(
+                {"user_id": lead["designer_id"]}, 
+                {"_id": 0, "user_id": 1, "name": 1, "picture": 1}
+            )
+            lead_data["designer_details"] = designer
+        
+        # Convert datetime to string
+        if isinstance(lead_data.get("updated_at"), datetime):
+            lead_data["updated_at"] = lead_data["updated_at"].isoformat()
+        if isinstance(lead_data.get("created_at"), datetime):
+            lead_data["created_at"] = lead_data["created_at"].isoformat()
+        
+        result.append(lead_data)
+    
+    # Sort by updated_at descending
+    result.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
+    
+    return result
+
+@api_router.get("/leads/{lead_id}")
+async def get_lead(lead_id: str, request: Request):
+    """Get single lead by ID"""
+    user = await get_current_user(request)
+    
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check access based on role
+    if user.role == "Designer":
+        if lead.get("designer_id") != user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif user.role == "PreSales":
+        if lead.get("assigned_to") != user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get assigned user details
+    if lead.get("assigned_to"):
+        assigned_user = await db.users.find_one(
+            {"user_id": lead["assigned_to"]}, 
+            {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "role": 1}
+        )
+        lead["assigned_to_details"] = assigned_user
+    
+    # Get designer details
+    if lead.get("designer_id"):
+        designer = await db.users.find_one(
+            {"user_id": lead["designer_id"]}, 
+            {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "role": 1}
+        )
+        lead["designer_details"] = designer
+    
+    # Convert datetime to string
+    if isinstance(lead.get("updated_at"), datetime):
+        lead["updated_at"] = lead["updated_at"].isoformat()
+    if isinstance(lead.get("created_at"), datetime):
+        lead["created_at"] = lead["created_at"].isoformat()
+    
+    return lead
+
+@api_router.post("/leads")
+async def create_lead(lead_data: LeadCreate, request: Request):
+    """Create a new lead"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager", "PreSales"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    now = datetime.now(timezone.utc)
+    lead_id = f"lead_{uuid.uuid4().hex[:8]}"
+    
+    new_lead = {
+        "lead_id": lead_id,
+        "customer_name": lead_data.customer_name,
+        "customer_phone": lead_data.customer_phone,
+        "source": lead_data.source,
+        "status": lead_data.status,
+        "stage": "BC Call Done",
+        "assigned_to": user.user_id if user.role == "PreSales" else None,
+        "designer_id": None,
+        "is_converted": False,
+        "project_id": None,
+        "timeline": generate_lead_timeline("BC Call Done", now.isoformat()),
+        "comments": [{
+            "id": f"comment_{uuid.uuid4().hex[:8]}",
+            "user_id": "system",
+            "user_name": "System",
+            "role": "System",
+            "message": "Lead created",
+            "is_system": True,
+            "created_at": now.isoformat()
+        }],
+        "updated_at": now.isoformat(),
+        "created_at": now.isoformat()
+    }
+    
+    await db.leads.insert_one(new_lead)
+    
+    return new_lead
+
+@api_router.post("/leads/{lead_id}/comments")
+async def add_lead_comment(lead_id: str, comment: CommentCreate, request: Request):
+    """Add a comment to a lead"""
+    user = await get_current_user(request)
+    
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Check access based on role
+    if user.role == "Designer":
+        if lead.get("designer_id") != user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif user.role == "PreSales":
+        if lead.get("assigned_to") != user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    new_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": comment.message,
+        "is_system": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.leads.update_one(
+        {"lead_id": lead_id},
+        {
+            "$push": {"comments": new_comment},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+    
+    return new_comment
+
+@api_router.put("/leads/{lead_id}/stage")
+async def update_lead_stage(lead_id: str, stage_update: LeadStageUpdate, request: Request):
+    """Update lead stage"""
+    user = await get_current_user(request)
+    
+    # Only PreSales, Manager, Admin can change lead stages
+    if user.role not in ["Admin", "Manager", "PreSales"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if stage_update.stage not in LEAD_STAGES:
+        raise HTTPException(status_code=400, detail=f"Invalid stage. Must be one of: {LEAD_STAGES}")
+    
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # PreSales can only change their own leads
+    if user.role == "PreSales" and lead.get("assigned_to") != user.user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    old_stage = lead.get("stage", "BC Call Done")
+    new_stage = stage_update.stage
+    
+    if old_stage == new_stage:
+        return {"message": "Stage unchanged", "stage": new_stage}
+    
+    # Create system comment
+    system_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": f"Stage updated from \"{old_stage}\" to \"{new_stage}\"",
+        "is_system": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Update timeline
+    timeline = lead.get("timeline", [])
+    new_stage_index = LEAD_STAGES.index(new_stage)
+    
+    for item in timeline:
+        item_stage = item.get("stage_ref", "")
+        if item_stage in LEAD_STAGES:
+            item_index = LEAD_STAGES.index(item_stage)
+            if item_index <= new_stage_index:
+                item["status"] = "completed"
+            else:
+                item["status"] = "pending"
+    
+    # Update status based on stage
+    new_status = lead.get("status", "New")
+    if new_stage == "Booking Completed":
+        new_status = "Qualified"
+    elif new_stage in ["BC Call Done", "BOQ Shared"]:
+        new_status = "Contacted"
+    elif new_stage in ["Site Meeting", "Revised BOQ Shared", "Waiting for Booking"]:
+        new_status = "Waiting"
+    
+    await db.leads.update_one(
+        {"lead_id": lead_id},
+        {
+            "$set": {
+                "stage": new_stage,
+                "status": new_status,
+                "timeline": timeline,
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            },
+            "$push": {"comments": system_comment}
+        }
+    )
+    
+    return {
+        "message": "Stage updated successfully",
+        "stage": new_stage,
+        "status": new_status,
+        "system_comment": system_comment
+    }
+
+@api_router.put("/leads/{lead_id}/assign-designer")
+async def assign_designer(lead_id: str, assign_data: LeadAssignDesigner, request: Request):
+    """Assign a designer to a lead"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Admin or Manager access required")
+    
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Verify designer exists
+    designer = await db.users.find_one(
+        {"user_id": assign_data.designer_id, "role": "Designer"},
+        {"_id": 0, "name": 1}
+    )
+    
+    if not designer:
+        raise HTTPException(status_code=404, detail="Designer not found")
+    
+    # Create system comment
+    now = datetime.now(timezone.utc)
+    system_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": f"Lead assigned to {designer['name']} on {now.strftime('%d/%m/%Y at %H:%M')}",
+        "is_system": True,
+        "created_at": now.isoformat()
+    }
+    
+    await db.leads.update_one(
+        {"lead_id": lead_id},
+        {
+            "$set": {
+                "designer_id": assign_data.designer_id,
+                "updated_at": now.isoformat()
+            },
+            "$push": {"comments": system_comment}
+        }
+    )
+    
+    return {
+        "message": "Designer assigned successfully",
+        "designer_id": assign_data.designer_id,
+        "designer_name": designer["name"]
+    }
+
+@api_router.post("/leads/{lead_id}/convert")
+async def convert_to_project(lead_id: str, request: Request):
+    """Convert a lead to a project"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Admin or Manager access required")
+    
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    if lead.get("is_converted"):
+        raise HTTPException(status_code=400, detail="Lead already converted")
+    
+    if lead.get("stage") != "Booking Completed":
+        raise HTTPException(status_code=400, detail="Lead must be at 'Booking Completed' stage to convert")
+    
+    now = datetime.now(timezone.utc)
+    project_id = f"proj_{uuid.uuid4().hex[:8]}"
+    
+    # Generate project timeline
+    project_timeline = []
+    day_offset = 0
+    for stage_name in STAGE_ORDER:
+        milestones = MILESTONE_GROUPS.get(stage_name, [])
+        for milestone in milestones:
+            project_timeline.append({
+                "id": f"tl_{uuid.uuid4().hex[:6]}",
+                "title": milestone,
+                "date": (now + timedelta(days=day_offset)).isoformat(),
+                "status": "pending",
+                "stage_ref": stage_name
+            })
+            day_offset += 3
+    
+    # Mark first milestone as completed
+    if project_timeline:
+        project_timeline[0]["status"] = "completed"
+    
+    # Copy comments and add conversion system comment
+    project_comments = lead.get("comments", []).copy()
+    project_comments.append({
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": f"Project created from lead on {now.strftime('%d/%m/%Y')} by {user.name}.",
+        "is_system": True,
+        "created_at": now.isoformat()
+    })
+    
+    # Create project
+    new_project = {
+        "project_id": project_id,
+        "project_name": f"{lead['customer_name']} - Interior Project",
+        "client_name": lead["customer_name"],
+        "client_phone": lead["customer_phone"],
+        "stage": "Design Finalization",
+        "collaborators": [lead["designer_id"]] if lead.get("designer_id") else [],
+        "summary": f"Converted from lead {lead_id}",
+        "timeline": project_timeline,
+        "comments": project_comments,
+        "files": [],
+        "notes": [],
+        "updated_at": now.isoformat(),
+        "created_at": now.isoformat()
+    }
+    
+    await db.projects.insert_one(new_project)
+    
+    # Mark lead as converted
+    await db.leads.update_one(
+        {"lead_id": lead_id},
+        {
+            "$set": {
+                "is_converted": True,
+                "project_id": project_id,
+                "updated_at": now.isoformat()
+            },
+            "$push": {"comments": {
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": user.user_id,
+                "user_name": user.name,
+                "role": user.role,
+                "message": f"Converted to project {project_id}",
+                "is_system": True,
+                "created_at": now.isoformat()
+            }}
+        }
+    )
+    
+    return {
+        "message": "Lead converted to project successfully",
+        "project_id": project_id,
+        "lead_id": lead_id
+    }
+
+@api_router.post("/leads/seed")
+async def seed_leads(request: Request):
+    """Seed sample leads for testing"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Admin or Manager access required")
+    
+    # Get users
+    users = await db.users.find({}, {"_id": 0, "user_id": 1, "name": 1, "role": 1}).to_list(100)
+    presales_users = [u["user_id"] for u in users if u.get("role") == "PreSales"]
+    designer_users = [u["user_id"] for u in users if u.get("role") == "Designer"]
+    all_user_ids = [u["user_id"] for u in users]
+    
+    # Use first user as default assigned
+    default_assigned = presales_users[0] if presales_users else (all_user_ids[0] if all_user_ids else None)
+    default_designer = designer_users[0] if designer_users else None
+    
+    now = datetime.now(timezone.utc)
+    
+    sample_leads = [
+        {
+            "lead_id": f"lead_{uuid.uuid4().hex[:8]}",
+            "customer_name": "Vikram Singh",
+            "customer_phone": "9876512345",
+            "source": "Meta",
+            "status": "New",
+            "stage": "BC Call Done",
+            "assigned_to": default_assigned,
+            "designer_id": None,
+            "is_converted": False,
+            "project_id": None,
+            "timeline": generate_lead_timeline("BC Call Done", (now - timedelta(days=2)).isoformat()),
+            "comments": [{
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": "system",
+                "user_name": "System",
+                "role": "System",
+                "message": "Lead created from Meta campaign",
+                "is_system": True,
+                "created_at": (now - timedelta(days=2)).isoformat()
+            }],
+            "updated_at": now.isoformat(),
+            "created_at": (now - timedelta(days=2)).isoformat()
+        },
+        {
+            "lead_id": f"lead_{uuid.uuid4().hex[:8]}",
+            "customer_name": "Neha Gupta",
+            "customer_phone": "9123498765",
+            "source": "Walk-in",
+            "status": "Contacted",
+            "stage": "BOQ Shared",
+            "assigned_to": default_assigned,
+            "designer_id": None,
+            "is_converted": False,
+            "project_id": None,
+            "timeline": generate_lead_timeline("BOQ Shared", (now - timedelta(days=5)).isoformat()),
+            "comments": [{
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": "system",
+                "user_name": "System",
+                "role": "System",
+                "message": "Lead created",
+                "is_system": True,
+                "created_at": (now - timedelta(days=5)).isoformat()
+            }, {
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": default_assigned or "system",
+                "user_name": "Pre-Sales Team",
+                "role": "PreSales",
+                "message": "Customer interested in 2BHK complete interior. Budget: 15-20L",
+                "is_system": False,
+                "created_at": (now - timedelta(days=4)).isoformat()
+            }],
+            "updated_at": (now - timedelta(hours=6)).isoformat(),
+            "created_at": (now - timedelta(days=5)).isoformat()
+        },
+        {
+            "lead_id": f"lead_{uuid.uuid4().hex[:8]}",
+            "customer_name": "Rajesh Mehta",
+            "customer_phone": "9555123456",
+            "source": "Referral",
+            "status": "Waiting",
+            "stage": "Site Meeting",
+            "assigned_to": default_assigned,
+            "designer_id": default_designer,
+            "is_converted": False,
+            "project_id": None,
+            "timeline": generate_lead_timeline("Site Meeting", (now - timedelta(days=10)).isoformat()),
+            "comments": [{
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": "system",
+                "user_name": "System",
+                "role": "System",
+                "message": "Lead created from referral",
+                "is_system": True,
+                "created_at": (now - timedelta(days=10)).isoformat()
+            }, {
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": default_assigned or "system",
+                "user_name": "Pre-Sales Team",
+                "role": "PreSales",
+                "message": "Site visit scheduled for villa in Whitefield",
+                "is_system": False,
+                "created_at": (now - timedelta(days=7)).isoformat()
+            }],
+            "updated_at": (now - timedelta(days=1)).isoformat(),
+            "created_at": (now - timedelta(days=10)).isoformat()
+        },
+        {
+            "lead_id": f"lead_{uuid.uuid4().hex[:8]}",
+            "customer_name": "Anita Sharma",
+            "customer_phone": "9888777666",
+            "source": "Meta",
+            "status": "Waiting",
+            "stage": "Revised BOQ Shared",
+            "assigned_to": default_assigned,
+            "designer_id": default_designer,
+            "is_converted": False,
+            "project_id": None,
+            "timeline": generate_lead_timeline("Revised BOQ Shared", (now - timedelta(days=15)).isoformat()),
+            "comments": [{
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": "system",
+                "user_name": "System",
+                "role": "System",
+                "message": "Lead created",
+                "is_system": True,
+                "created_at": (now - timedelta(days=15)).isoformat()
+            }],
+            "updated_at": (now - timedelta(hours=12)).isoformat(),
+            "created_at": (now - timedelta(days=15)).isoformat()
+        },
+        {
+            "lead_id": f"lead_{uuid.uuid4().hex[:8]}",
+            "customer_name": "Kiran Reddy",
+            "customer_phone": "9444333222",
+            "source": "Walk-in",
+            "status": "Waiting",
+            "stage": "Waiting for Booking",
+            "assigned_to": default_assigned,
+            "designer_id": default_designer,
+            "is_converted": False,
+            "project_id": None,
+            "timeline": generate_lead_timeline("Waiting for Booking", (now - timedelta(days=20)).isoformat()),
+            "comments": [{
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": "system",
+                "user_name": "System",
+                "role": "System",
+                "message": "Lead created",
+                "is_system": True,
+                "created_at": (now - timedelta(days=20)).isoformat()
+            }, {
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": default_assigned or "system",
+                "user_name": "Pre-Sales Team",
+                "role": "PreSales",
+                "message": "Client reviewing final quote. Expected booking this week.",
+                "is_system": False,
+                "created_at": (now - timedelta(days=2)).isoformat()
+            }],
+            "updated_at": (now - timedelta(hours=3)).isoformat(),
+            "created_at": (now - timedelta(days=20)).isoformat()
+        },
+        {
+            "lead_id": f"lead_{uuid.uuid4().hex[:8]}",
+            "customer_name": "Suresh Kumar",
+            "customer_phone": "9222111000",
+            "source": "Referral",
+            "status": "Qualified",
+            "stage": "Booking Completed",
+            "assigned_to": default_assigned,
+            "designer_id": default_designer,
+            "is_converted": False,
+            "project_id": None,
+            "timeline": generate_lead_timeline("Booking Completed", (now - timedelta(days=25)).isoformat()),
+            "comments": [{
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": "system",
+                "user_name": "System",
+                "role": "System",
+                "message": "Lead created",
+                "is_system": True,
+                "created_at": (now - timedelta(days=25)).isoformat()
+            }, {
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": default_assigned or "system",
+                "user_name": "Pre-Sales Team",
+                "role": "PreSales",
+                "message": "Booking amount received. Ready to convert to project.",
+                "is_system": False,
+                "created_at": (now - timedelta(days=1)).isoformat()
+            }],
+            "updated_at": (now - timedelta(hours=1)).isoformat(),
+            "created_at": (now - timedelta(days=25)).isoformat()
+        },
+        {
+            "lead_id": f"lead_{uuid.uuid4().hex[:8]}",
+            "customer_name": "Meera Joshi",
+            "customer_phone": "9333222111",
+            "source": "Others",
+            "status": "Dropped",
+            "stage": "BC Call Done",
+            "assigned_to": default_assigned,
+            "designer_id": None,
+            "is_converted": False,
+            "project_id": None,
+            "timeline": generate_lead_timeline("BC Call Done", (now - timedelta(days=30)).isoformat()),
+            "comments": [{
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": "system",
+                "user_name": "System",
+                "role": "System",
+                "message": "Lead created",
+                "is_system": True,
+                "created_at": (now - timedelta(days=30)).isoformat()
+            }, {
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": default_assigned or "system",
+                "user_name": "Pre-Sales Team",
+                "role": "PreSales",
+                "message": "Customer decided to postpone renovation. Marked as dropped.",
+                "is_system": False,
+                "created_at": (now - timedelta(days=28)).isoformat()
+            }],
+            "updated_at": (now - timedelta(days=28)).isoformat(),
+            "created_at": (now - timedelta(days=30)).isoformat()
+        }
+    ]
+    
+    # Clear existing leads and insert new ones
+    await db.leads.delete_many({})
+    await db.leads.insert_many(sample_leads)
+    
+    return {"message": f"Seeded {len(sample_leads)} sample leads", "count": len(sample_leads)}
+
 @api_router.post("/projects/seed")
 async def seed_projects(request: Request):
     """Seed sample projects for testing (Admin/Manager only)"""
