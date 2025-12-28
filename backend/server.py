@@ -1914,6 +1914,22 @@ async def update_lead_stage(lead_id: str, stage_update: LeadStageUpdate, request
         }
     )
     
+    # Send notifications to relevant users
+    try:
+        relevant_users = await get_relevant_users_for_lead(lead)
+        # Remove the user who made the change
+        relevant_users = [uid for uid in relevant_users if uid != user.user_id]
+        
+        await notify_users(
+            relevant_users,
+            "Lead Stage Updated",
+            f"{user.name} moved lead '{lead.get('customer_name', 'Unknown')}' to stage '{new_stage}'",
+            "stage-change",
+            f"/leads/{lead_id}"
+        )
+    except Exception as e:
+        print(f"Error sending notifications: {e}")
+    
     return {
         "message": "Stage updated successfully",
         "stage": new_stage,
