@@ -24,10 +24,13 @@ import {
   Trash2,
   Plus,
   UserPlus,
-  X
+  X,
+  CalendarDays
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import MeetingModal from '../components/MeetingModal';
+import MeetingCard from '../components/MeetingCard';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
