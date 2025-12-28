@@ -195,6 +195,21 @@ backend:
         agent: "testing"
         comment: "✅ VERIFIED: Project stage update with TAT logic works correctly. When stage updated to 'Production Preparation', previous milestones marked as completed (8 completed milestones), first milestone in current stage marked completed, system comment generated with proper stage transition message."
 
+  - task: "Dashboard API endpoint"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added /api/dashboard endpoint that returns role-specific KPIs, metrics, delayed milestones, upcoming milestones, stage distributions, and performance data for Admin, Manager, PreSales, and Designer roles"
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: Dashboard API endpoint working perfectly! All 84 tests passed including 6 comprehensive dashboard tests. Role-based data structure validated: Admin (7 KPIs + all data), Manager (3 KPIs + project data), PreSales (6 lead-specific KPIs), Designer (3 project KPIs). Milestone structure verified with proper fields (id, name, milestone, expectedDate, daysDelayed, stage, designer). Performance data arrays working correctly. Authentication properly enforced."
+
 frontend:
   - task: "Project Timeline UI with TAT Display"
     implemented: true
