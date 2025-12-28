@@ -81,16 +81,11 @@ const COLORS = {
     cancelled: '#6B7280'
   }
 };
-    pending: '#EAB308',
-    inProgress: '#F97316',
-    completed: '#22C55E',
-    overdue: '#EF4444'
-  }
-};
 
 // Custom event component - defined outside main component
 const CalendarEventComponent = ({ event }) => {
   const isMilestone = event.type === 'milestone';
+  const isMeeting = event.type === 'meeting';
   
   return (
     <div
@@ -99,6 +94,8 @@ const CalendarEventComponent = ({ event }) => {
     >
       {isMilestone ? (
         <Milestone className="w-3 h-3 flex-shrink-0" />
+      ) : isMeeting ? (
+        <CalendarDays className="w-3 h-3 flex-shrink-0" />
       ) : (
         <ListTodo className="w-3 h-3 flex-shrink-0" />
       )}
@@ -128,6 +125,15 @@ const CalendarLegend = () => (
       <span>Task (Pending)</span>
     </div>
     <div className="flex items-center gap-1">
+      <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.task.inProgress }} />
+      <span>Task (In Progress)</span>
+    </div>
+    <div className="flex items-center gap-1">
+      <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.meeting.scheduled }} />
+      <span>Meeting (Scheduled)</span>
+    </div>
+  </div>
+);
       <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.task.inProgress }} />
       <span>Task (In Progress)</span>
     </div>
