@@ -2775,12 +2775,24 @@ async def update_project_financials(project_id: str, data: ProjectFinancialsUpda
             raise HTTPException(status_code=400, detail="Project value cannot be negative")
         update_dict["project_value"] = data.project_value
     
+    # Handle default payment schedule update (for changing Design Booking type)
     if data.payment_schedule is not None:
-        # Validate payment schedule
-        total_percentage = sum(s.get("percentage", 0) for s in data.payment_schedule)
-        if total_percentage != 100:
-            raise HTTPException(status_code=400, detail="Payment schedule percentages must total 100%")
+        errors = validate_payment_schedule(data.payment_schedule)
+        if errors:
+            raise HTTPException(status_code=400, detail="; ".join(errors))
         update_dict["payment_schedule"] = data.payment_schedule
+    
+    # Handle custom payment schedule toggle
+    if data.custom_payment_schedule_enabled is not None:
+        update_dict["custom_payment_schedule_enabled"] = data.custom_payment_schedule_enabled
+    
+    # Handle custom payment schedule update
+    if data.custom_payment_schedule is not None:
+        if data.custom_payment_schedule:  # If not empty, validate
+            errors = validate_payment_schedule(data.custom_payment_schedule)
+            if errors:
+                raise HTTPException(status_code=400, detail="; ".join(errors))
+        update_dict["custom_payment_schedule"] = data.custom_payment_schedule
     
     await db.projects.update_one(
         {"project_id": project_id},
