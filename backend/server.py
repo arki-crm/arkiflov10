@@ -651,6 +651,284 @@ async def update_stage(project_id: str, stage_update: StageUpdate, request: Requ
         "system_comment": system_comment
     }
 
+# ============ FILES ENDPOINTS ============
+
+@api_router.get("/projects/{project_id}/files")
+async def get_project_files(project_id: str, request: Request):
+    """Get all files for a project"""
+    user = await get_current_user(request)
+    
+    if user.role == "PreSales":
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if user.role == "Designer" and user.user_id not in project.get("collaborators", []):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return project.get("files", [])
+
+@api_router.post("/projects/{project_id}/files")
+async def upload_file(project_id: str, file_data: FileUpload, request: Request):
+    """Upload a file to a project"""
+    user = await get_current_user(request)
+    
+    if user.role == "PreSales":
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if user.role == "Designer" and user.user_id not in project.get("collaborators", []):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    new_file = {
+        "id": f"file_{uuid.uuid4().hex[:8]}",
+        "file_name": file_data.file_name,
+        "file_url": file_data.file_url,
+        "file_type": file_data.file_type,
+        "uploaded_by": user.user_id,
+        "uploaded_by_name": user.name,
+        "uploaded_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$push": {"files": new_file},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+    
+    return new_file
+
+@api_router.delete("/projects/{project_id}/files/{file_id}")
+async def delete_file(project_id: str, file_id: str, request: Request):
+    """Delete a file (Admin only)"""
+    user = await get_current_user(request)
+    
+    if user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$pull": {"files": {"id": file_id}},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return {"message": "File deleted successfully"}
+
+# ============ NOTES ENDPOINTS ============
+
+@api_router.get("/projects/{project_id}/notes")
+async def get_project_notes(project_id: str, request: Request):
+    """Get all notes for a project"""
+    user = await get_current_user(request)
+    
+    if user.role == "PreSales":
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if user.role == "Designer" and user.user_id not in project.get("collaborators", []):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return project.get("notes", [])
+
+@api_router.post("/projects/{project_id}/notes")
+async def create_note(project_id: str, note_data: NoteCreate, request: Request):
+    """Create a new note"""
+    user = await get_current_user(request)
+    
+    if user.role == "PreSales":
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if user.role == "Designer" and user.user_id not in project.get("collaborators", []):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    new_note = {
+        "id": f"note_{uuid.uuid4().hex[:8]}",
+        "title": note_data.title,
+        "content": note_data.content,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$push": {"notes": new_note},
+            "$set": {"updated_at": now}
+        }
+    )
+    
+    return new_note
+
+@api_router.put("/projects/{project_id}/notes/{note_id}")
+async def update_note(project_id: str, note_id: str, note_data: NoteUpdate, request: Request):
+    """Update a note (creator or Admin only)"""
+    user = await get_current_user(request)
+    
+    if user.role == "PreSales":
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Find the note
+    notes = project.get("notes", [])
+    note_index = None
+    for i, note in enumerate(notes):
+        if note["id"] == note_id:
+            note_index = i
+            break
+    
+    if note_index is None:
+        raise HTTPException(status_code=404, detail="Note not found")
+    
+    note = notes[note_index]
+    
+    # Check permission - only creator or Admin can edit
+    if note["created_by"] != user.user_id and user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Only creator or Admin can edit this note")
+    
+    # Update fields
+    now = datetime.now(timezone.utc).isoformat()
+    if note_data.title is not None:
+        notes[note_index]["title"] = note_data.title
+    if note_data.content is not None:
+        notes[note_index]["content"] = note_data.content
+    notes[note_index]["updated_at"] = now
+    
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$set": {"notes": notes, "updated_at": now}
+        }
+    )
+    
+    return notes[note_index]
+
+# ============ COLLABORATORS ENDPOINTS ============
+
+@api_router.get("/projects/{project_id}/collaborators")
+async def get_project_collaborators(project_id: str, request: Request):
+    """Get all collaborators for a project with user details"""
+    user = await get_current_user(request)
+    
+    if user.role == "PreSales":
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if user.role == "Designer" and user.user_id not in project.get("collaborators", []):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get collaborator details
+    collaborator_ids = project.get("collaborators", [])
+    collaborators = []
+    
+    for uid in collaborator_ids:
+        user_doc = await db.users.find_one({"user_id": uid}, {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "role": 1, "email": 1})
+        if user_doc:
+            collaborators.append(user_doc)
+    
+    return collaborators
+
+@api_router.post("/projects/{project_id}/collaborators")
+async def add_collaborator(project_id: str, collab_data: CollaboratorAdd, request: Request):
+    """Add a collaborator (Admin or Manager only)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Admin or Manager access required")
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Check if user exists
+    target_user = await db.users.find_one({"user_id": collab_data.user_id}, {"_id": 0})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if already a collaborator
+    if collab_data.user_id in project.get("collaborators", []):
+        raise HTTPException(status_code=400, detail="User is already a collaborator")
+    
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$push": {"collaborators": collab_data.user_id},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+    
+    return {
+        "message": "Collaborator added successfully",
+        "user_id": collab_data.user_id,
+        "name": target_user.get("name")
+    }
+
+@api_router.delete("/projects/{project_id}/collaborators/{user_id}")
+async def remove_collaborator(project_id: str, user_id: str, request: Request):
+    """Remove a collaborator (Admin only)"""
+    user = await get_current_user(request)
+    
+    if user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$pull": {"collaborators": user_id},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Collaborator not found")
+    
+    return {"message": "Collaborator removed successfully"}
+
+@api_router.get("/users/available")
+async def get_available_users(request: Request):
+    """Get list of all users (for adding collaborators)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Admin or Manager access required")
+    
+    users = await db.users.find({}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "picture": 1}).to_list(1000)
+    return users
+
 @api_router.post("/projects/seed")
 async def seed_projects(request: Request):
     """Seed sample projects for testing (Admin/Manager only)"""
