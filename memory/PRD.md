@@ -237,3 +237,25 @@ Build the foundational structure for a web application named "Arkiflo", designed
 ## Financial Data Model
 - Payment modes: Cash, Bank, UPI, Other
 - Payment structure: id, date, amount, mode, reference, addedBy, createdAt
+
+### December 28, 2025 - Payment Schedule Update (Arki Dots Business Rules)
+
+**New 3-Stage Payment Schedule:**
+1. Design Booking (default: fixed ₹25,000, can change to 10%)
+2. Production Start (50% of project value)
+3. Before Installation (remaining balance)
+
+**Payment Schedule Types:**
+- `fixed`: Fixed amount (e.g., ₹25,000)
+- `percentage`: Percentage of project value
+- `remaining`: Auto-calculated remaining balance
+
+**Custom Payment Schedule:**
+- `customPaymentScheduleEnabled`: Toggle to use custom schedule
+- `customPaymentSchedule`: Array of custom stages
+- Admin/Manager can create custom schedules with any combination
+- Validation: Only one "remaining" stage, percentages ≤ 100%
+
+**API Updates:**
+- GET /api/projects/:id/financials returns `custom_payment_schedule_enabled`, `custom_payment_schedule`, `default_payment_schedule`
+- PUT /api/projects/:id/financials accepts `custom_payment_schedule_enabled`, `custom_payment_schedule`, `payment_schedule`
