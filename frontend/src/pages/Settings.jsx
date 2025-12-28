@@ -10,6 +10,7 @@ import { Switch } from '../components/ui/switch';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { Separator } from '../components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Textarea } from '../components/ui/textarea';
 import { cn } from '../lib/utils';
 import axios from 'axios';
 import { 
@@ -23,7 +24,9 @@ import {
   ChevronRight,
   AlertCircle,
   CheckCircle2,
-  Info
+  Info,
+  Mail,
+  RotateCcw
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -36,6 +39,7 @@ const SettingsNav = ({ activeTab, setActiveTab, canEdit }) => {
     { id: 'branding', label: 'Branding', icon: Palette },
     { id: 'tat', label: 'TAT Rules', icon: Clock },
     { id: 'stages', label: 'Stages & Milestones', icon: ListChecks },
+    { id: 'emails', label: 'Email Templates', icon: Mail },
     { id: 'logs', label: 'System Logs', icon: Activity }
   ];
 
@@ -48,8 +52,8 @@ const SettingsNav = ({ activeTab, setActiveTab, canEdit }) => {
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
-          // Only show logs to admin
-          if (item.id === 'logs' && !canEdit) return null;
+          // Only show logs and emails to admin
+          if ((item.id === 'logs' || item.id === 'emails') && !canEdit) return null;
           
           return (
             <button
