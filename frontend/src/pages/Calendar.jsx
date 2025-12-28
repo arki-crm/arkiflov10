@@ -239,6 +239,7 @@ const CalendarFilterPanel = ({
                 <SelectItem value="all">All Events</SelectItem>
                 <SelectItem value="milestone">Milestones Only</SelectItem>
                 <SelectItem value="task">Tasks Only</SelectItem>
+                <SelectItem value="meeting">Meetings Only</SelectItem>
               </SelectContent>
             </Select>
           </div>
