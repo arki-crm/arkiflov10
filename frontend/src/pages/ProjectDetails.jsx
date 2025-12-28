@@ -1408,6 +1408,62 @@ const ProjectDetails = () => {
           </CardContent>
         </Card>
       )}
+
+      {activeTab === 'meetings' && (
+        <Card className="border-slate-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">Project Meetings</h3>
+              <Button 
+                onClick={() => setShowMeetingModal(true)}
+                className="bg-purple-600 hover:bg-purple-700"
+                size="sm"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Schedule Meeting
+              </Button>
+            </div>
+            
+            {loadingMeetings ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-purple-600" />
+              </div>
+            ) : meetings.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                <CalendarDays className="h-10 w-10 mx-auto text-slate-300 mb-3" />
+                <p>No meetings scheduled for this project</p>
+                <Button 
+                  variant="link" 
+                  onClick={() => setShowMeetingModal(true)}
+                  className="text-purple-600 mt-2"
+                >
+                  Schedule your first meeting
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {meetings.map(meeting => (
+                  <MeetingCard
+                    key={meeting.id}
+                    meeting={meeting}
+                    showProject={false}
+                    onMarkCompleted={(meetingId) => handleMeetingStatusUpdate(meetingId, 'Completed')}
+                    onCancel={(meetingId) => handleMeetingStatusUpdate(meetingId, 'Cancelled')}
+                  />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Meeting Modal */}
+      <MeetingModal
+        open={showMeetingModal}
+        onOpenChange={setShowMeetingModal}
+        onSuccess={fetchMeetings}
+        initialProjectId={id}
+      />
     </div>
   );
 };
