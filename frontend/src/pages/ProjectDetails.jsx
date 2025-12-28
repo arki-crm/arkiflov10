@@ -25,14 +25,23 @@ import { cn } from '../lib/utils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-// Stage configuration
-const STAGES = ["Pre 10%", "10-50%", "50-100%", "Completed"];
+// Stage configuration - 6 main stages
+const STAGES = [
+  "Design Finalization",
+  "Production Preparation",
+  "Production",
+  "Delivery",
+  "Installation",
+  "Handover"
+];
 
 const STAGE_COLORS = {
-  'Pre 10%': { bg: 'bg-slate-100', text: 'text-slate-600', ring: 'ring-slate-400' },
-  '10-50%': { bg: 'bg-amber-100', text: 'text-amber-700', ring: 'ring-amber-400' },
-  '50-100%': { bg: 'bg-blue-100', text: 'text-blue-700', ring: 'ring-blue-400' },
-  'Completed': { bg: 'bg-green-100', text: 'text-green-700', ring: 'ring-green-400' }
+  'Design Finalization': { bg: 'bg-slate-100', text: 'text-slate-600', ring: 'ring-slate-400' },
+  'Production Preparation': { bg: 'bg-amber-100', text: 'text-amber-700', ring: 'ring-amber-400' },
+  'Production': { bg: 'bg-blue-100', text: 'text-blue-700', ring: 'ring-blue-400' },
+  'Delivery': { bg: 'bg-cyan-100', text: 'text-cyan-700', ring: 'ring-cyan-400' },
+  'Installation': { bg: 'bg-purple-100', text: 'text-purple-700', ring: 'ring-purple-400' },
+  'Handover': { bg: 'bg-green-100', text: 'text-green-700', ring: 'ring-green-400' }
 };
 
 const ROLE_BADGE_STYLES = {
