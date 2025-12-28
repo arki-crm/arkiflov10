@@ -1686,23 +1686,132 @@ const ProjectDetails = () => {
               {/* Payment Schedule */}
               <Card className="border-slate-200">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <IndianRupee className="h-5 w-5 text-emerald-600" />
-                    Payment Milestones
-                  </CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <IndianRupee className="h-5 w-5 text-emerald-600" />
+                      Payment Milestones
+                    </CardTitle>
+                    {financials.can_edit && (
+                      <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={financials.custom_payment_schedule_enabled || false}
+                            onChange={async (e) => {
+                              try {
+                                await axios.put(`${API}/projects/${id}/financials`, {
+                                  custom_payment_schedule_enabled: e.target.checked
+                                }, { withCredentials: true });
+                                toast.success(e.target.checked ? 'Custom schedule enabled' : 'Using default schedule');
+                                fetchFinancials();
+                              } catch (err) {
+                                toast.error('Failed to update');
+                              }
+                            }}
+                            className="rounded border-slate-300"
+                          />
+                          <span className="text-slate-600">Use Custom Schedule</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {financials.payment_schedule?.map((milestone, index) => (
-                      <div key={index} className="p-3 bg-slate-50 rounded-lg">
-                        <p className="text-sm font-medium text-slate-700">{milestone.stage}</p>
-                        <p className="text-xs text-slate-500">{milestone.percentage}%</p>
-                        <p className="text-lg font-bold text-slate-900 mt-1">
-                          ₹{milestone.amount?.toLocaleString('en-IN') || '0'}
-                        </p>
+                  {/* Default Schedule Display */}
+                  {!financials.custom_payment_schedule_enabled && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {financials.payment_schedule?.map((milestone, index) => (
+                          <div key={index} className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                            <p className="text-sm font-semibold text-slate-700">{milestone.stage}</p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {milestone.type === 'fixed' && `Fixed: ₹${milestone.fixedAmount?.toLocaleString('en-IN')}`}
+                              {milestone.type === 'percentage' && `${milestone.percentage}% of project value`}
+                              {milestone.type === 'remaining' && 'Remaining balance'}
+                            </p>
+                            <p className="text-xl font-bold text-emerald-600 mt-2">
+                              ₹{milestone.amount?.toLocaleString('en-IN') || '0'}
+                            </p>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                      
+                      {/* Edit Default Schedule for Admin/Manager */}
+                      {financials.can_edit && (
+                        <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                          <p className="text-sm font-medium text-blue-700 mb-3">
+                            Edit Design Booking Type
+                          </p>
+                          <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                              <input
+                                type="radio"
+                                name="bookingType"
+                                checked={financials.default_payment_schedule?.[0]?.type === 'fixed'}
+                                onChange={async () => {
+                                  const newSchedule = [...(financials.default_payment_schedule || [])];
+                                  newSchedule[0] = { ...newSchedule[0], type: 'fixed' };
+                                  try {
+                                    await axios.put(`${API}/projects/${id}/financials`, {
+                                      payment_schedule: newSchedule
+                                    }, { withCredentials: true });
+                                    toast.success('Changed to fixed ₹25,000');
+                                    fetchFinancials();
+                                  } catch (err) {
+                                    toast.error('Failed to update');
+                                  }
+                                }}
+                                className="text-emerald-600"
+                              />
+                              <span>Fixed ₹25,000</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-sm cursor-pointer">
+                              <input
+                                type="radio"
+                                name="bookingType"
+                                checked={financials.default_payment_schedule?.[0]?.type === 'percentage'}
+                                onChange={async () => {
+                                  const newSchedule = [...(financials.default_payment_schedule || [])];
+                                  newSchedule[0] = { ...newSchedule[0], type: 'percentage' };
+                                  try {
+                                    await axios.put(`${API}/projects/${id}/financials`, {
+                                      payment_schedule: newSchedule
+                                    }, { withCredentials: true });
+                                    toast.success('Changed to 10% of project value');
+                                    fetchFinancials();
+                                  } catch (err) {
+                                    toast.error('Failed to update');
+                                  }
+                                }}
+                                className="text-emerald-600"
+                              />
+                              <span>10% of Project Value</span>
+                            </label>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Custom Schedule Editor */}
+                  {financials.custom_payment_schedule_enabled && (
+                    <CustomPaymentScheduleEditor
+                      schedule={financials.custom_payment_schedule || []}
+                      projectValue={financials.project_value || 0}
+                      canEdit={financials.can_edit}
+                      onSave={async (newSchedule) => {
+                        try {
+                          await axios.put(`${API}/projects/${id}/financials`, {
+                            custom_payment_schedule: newSchedule
+                          }, { withCredentials: true });
+                          toast.success('Custom schedule saved');
+                          fetchFinancials();
+                        } catch (err) {
+                          toast.error(err.response?.data?.detail || 'Failed to save');
+                        }
+                      }}
+                    />
+                  )}
                 </CardContent>
               </Card>
 
