@@ -86,7 +86,7 @@ class ProjectCreate(BaseModel):
     project_name: str
     client_name: str
     client_phone: str
-    stage: str = "Pre 10%"
+    stage: str = "Design Finalization"
     collaborators: List[str] = []
     summary: str = ""
 
@@ -111,8 +111,51 @@ class CommentCreate(BaseModel):
 class StageUpdate(BaseModel):
     stage: str
 
-# Stage order for timeline logic
-STAGE_ORDER = ["Pre 10%", "10-50%", "50-100%", "Completed"]
+# Stage order for timeline logic - 6 main stages
+STAGE_ORDER = [
+    "Design Finalization",
+    "Production Preparation",
+    "Production",
+    "Delivery",
+    "Installation",
+    "Handover"
+]
+
+# Milestone groups mapped to stages
+MILESTONE_GROUPS = {
+    "Design Finalization": [
+        "Site Measurement",
+        "Site Validation",
+        "Design Meeting",
+        "Design Meeting – 2",
+        "Final Design Proposal & Material Selection",
+        "Sign-off KWS Units & Payment",
+        "Kickoff Meeting"
+    ],
+    "Production Preparation": [
+        "Factory Slot Allocation",
+        "JIT Project Delivery Plan",
+        "Non-Modular Dependencies",
+        "Raw Material Procurement"
+    ],
+    "Production": [
+        "Production Kick-start",
+        "Full Order Confirmation",
+        "PIV / Site Readiness"
+    ],
+    "Delivery": [
+        "Modular Order Delivery at Site"
+    ],
+    "Installation": [
+        "Modular Installation",
+        "Non-Modular Dependency Work for Handover"
+    ],
+    "Handover": [
+        "Handover with Snag",
+        "Cleaning",
+        "Handover Without Snag"
+    ]
+}
 
 # ============ AUTH HELPERS ============
 
