@@ -81,6 +81,10 @@ class ArkifloAPITester:
         designer_user_id = f"test-designer-{uuid.uuid4().hex[:8]}"
         designer_session_token = f"test_designer_session_{uuid.uuid4().hex[:16]}"
         
+        # Create pure designer user for permission tests
+        pure_designer_user_id = f"test-pure-designer-{uuid.uuid4().hex[:8]}"
+        pure_designer_session_token = f"test_pure_designer_session_{uuid.uuid4().hex[:16]}"
+        
         # MongoDB commands to create test data
         mongo_commands = f'''
 use('test_database');
@@ -105,6 +109,16 @@ db.users.insertOne({{
   created_at: new Date()
 }});
 
+// Create pure designer user for permission tests
+db.users.insertOne({{
+  user_id: "{pure_designer_user_id}",
+  email: "pure.designer.test.{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com",
+  name: "Test Pure Designer", 
+  picture: "https://via.placeholder.com/150",
+  role: "Designer",
+  created_at: new Date()
+}});
+
 // Create admin session
 db.user_sessions.insertOne({{
   user_id: "{admin_user_id}",
@@ -121,10 +135,20 @@ db.user_sessions.insertOne({{
   created_at: new Date()
 }});
 
+// Create pure designer session
+db.user_sessions.insertOne({{
+  user_id: "{pure_designer_user_id}",
+  session_token: "{pure_designer_session_token}",
+  expires_at: new Date(Date.now() + 7*24*60*60*1000),
+  created_at: new Date()
+}});
+
 print("Admin session token: {admin_session_token}");
 print("Designer session token: {designer_session_token}");
+print("Pure Designer session token: {pure_designer_session_token}");
 print("Admin user ID: {admin_user_id}");
 print("Designer user ID: {designer_user_id}");
+print("Pure Designer user ID: {pure_designer_user_id}");
 '''
         
         try:
@@ -136,8 +160,10 @@ print("Designer user ID: {designer_user_id}");
                 print("✅ Test users and sessions created successfully")
                 self.admin_token = admin_session_token
                 self.designer_token = designer_session_token
+                self.pure_designer_token = pure_designer_session_token
                 self.admin_user_id = admin_user_id
                 self.designer_user_id = designer_user_id
+                self.pure_designer_user_id = pure_designer_user_id
                 return True
             else:
                 print(f"❌ Failed to create test users: {result.stderr}")
