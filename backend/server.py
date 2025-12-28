@@ -361,6 +361,8 @@ async def get_current_user(request: Request) -> User:
     # Handle datetime conversion
     if isinstance(user_doc.get("created_at"), str):
         user_doc["created_at"] = datetime.fromisoformat(user_doc["created_at"])
+    elif user_doc.get("created_at") is None:
+        user_doc["created_at"] = datetime.now(timezone.utc)
     
     return User(**user_doc)
 
