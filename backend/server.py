@@ -2500,6 +2500,213 @@ async def seed_projects(request: Request):
     
     return {"message": f"Seeded {len(sample_projects)} sample projects", "count": len(sample_projects)}
 
+# ============ PROJECT FINANCIALS ============
+
+# Default payment schedule
+DEFAULT_PAYMENT_SCHEDULE = [
+    {"stage": "Booking", "percentage": 10},
+    {"stage": "Design Finalization", "percentage": 40},
+    {"stage": "Production", "percentage": 40},
+    {"stage": "Handover", "percentage": 10}
+]
+
+class ProjectFinancialsUpdate(BaseModel):
+    project_value: Optional[float] = None
+    payment_schedule: Optional[List[dict]] = None
+
+class PaymentCreate(BaseModel):
+    amount: float
+    mode: str  # Cash, Bank, UPI, Other
+    reference: Optional[str] = ""
+    date: Optional[str] = None
+
+PAYMENT_MODES = ["Cash", "Bank", "UPI", "Other"]
+
+@api_router.get("/projects/{project_id}/financials")
+async def get_project_financials(project_id: str, request: Request):
+    """Get project financial details"""
+    user = await get_current_user(request)
+    
+    # PreSales cannot access financials
+    if user.role == "PreSales":
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Designer can only view projects they're part of
+    if user.role == "Designer" and user.user_id not in project.get("collaborators", []):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Initialize financial fields if not present
+    project_value = project.get("project_value", 0)
+    payment_schedule = project.get("payment_schedule", DEFAULT_PAYMENT_SCHEDULE)
+    payments = project.get("payments", [])
+    
+    # Calculate totals
+    total_collected = sum(p.get("amount", 0) for p in payments)
+    balance_pending = project_value - total_collected
+    
+    # Get user details for payments
+    user_ids = list(set([p.get("added_by") for p in payments if p.get("added_by")]))
+    users_map = {}
+    if user_ids:
+        users_list = await db.users.find(
+            {"user_id": {"$in": user_ids}},
+            {"_id": 0, "user_id": 1, "name": 1}
+        ).to_list(100)
+        users_map = {u["user_id"]: u.get("name", "Unknown") for u in users_list}
+    
+    # Enrich payments with user names
+    enriched_payments = []
+    for payment in payments:
+        enriched = {**payment}
+        if payment.get("added_by"):
+            enriched["added_by_name"] = users_map.get(payment["added_by"], "Unknown")
+        enriched_payments.append(enriched)
+    
+    # Sort payments by date (newest first)
+    enriched_payments.sort(key=lambda x: x.get("date", ""), reverse=True)
+    
+    # Calculate milestone amounts
+    milestone_amounts = []
+    for schedule in payment_schedule:
+        amount = (project_value * schedule.get("percentage", 0)) / 100
+        milestone_amounts.append({
+            "stage": schedule.get("stage"),
+            "percentage": schedule.get("percentage"),
+            "amount": amount
+        })
+    
+    return {
+        "project_id": project_id,
+        "project_name": project.get("project_name"),
+        "project_value": project_value,
+        "payment_schedule": milestone_amounts,
+        "payments": enriched_payments,
+        "total_collected": total_collected,
+        "balance_pending": balance_pending,
+        "can_edit": user.role in ["Admin", "Manager"],
+        "can_delete_payments": user.role == "Admin"
+    }
+
+@api_router.put("/projects/{project_id}/financials")
+async def update_project_financials(project_id: str, data: ProjectFinancialsUpdate, request: Request):
+    """Update project financial details (Admin/Manager only)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Admin or Manager access required")
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    update_dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if data.project_value is not None:
+        if data.project_value < 0:
+            raise HTTPException(status_code=400, detail="Project value cannot be negative")
+        update_dict["project_value"] = data.project_value
+    
+    if data.payment_schedule is not None:
+        # Validate payment schedule
+        total_percentage = sum(s.get("percentage", 0) for s in data.payment_schedule)
+        if total_percentage != 100:
+            raise HTTPException(status_code=400, detail="Payment schedule percentages must total 100%")
+        update_dict["payment_schedule"] = data.payment_schedule
+    
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {"$set": update_dict}
+    )
+    
+    return {"message": "Project financials updated successfully"}
+
+@api_router.post("/projects/{project_id}/payments")
+async def add_project_payment(project_id: str, payment: PaymentCreate, request: Request):
+    """Add a payment entry to a project (Admin/Manager only)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Admin or Manager access required")
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if payment.amount <= 0:
+        raise HTTPException(status_code=400, detail="Payment amount must be positive")
+    
+    if payment.mode not in PAYMENT_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid payment mode. Must be one of: {PAYMENT_MODES}")
+    
+    now = datetime.now(timezone.utc)
+    payment_id = f"payment_{uuid.uuid4().hex[:8]}"
+    
+    new_payment = {
+        "id": payment_id,
+        "date": payment.date or now.strftime("%Y-%m-%d"),
+        "amount": payment.amount,
+        "mode": payment.mode,
+        "reference": payment.reference or "",
+        "added_by": user.user_id,
+        "created_at": now.isoformat()
+    }
+    
+    # Initialize payments array if not exists and add new payment
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$push": {"payments": new_payment},
+            "$set": {"updated_at": now.isoformat()}
+        }
+    )
+    
+    # Create notification for project collaborators
+    collaborators = project.get("collaborators", [])
+    for collab_id in collaborators:
+        if collab_id != user.user_id:
+            await create_notification(
+                collab_id,
+                "Payment Added",
+                f"₹{payment.amount:,.0f} payment recorded for project '{project.get('project_name')}'",
+                "payment",
+                f"/projects/{project_id}"
+            )
+    
+    return {"message": "Payment added successfully", "payment_id": payment_id}
+
+@api_router.delete("/projects/{project_id}/payments/{payment_id}")
+async def delete_project_payment(project_id: str, payment_id: str, request: Request):
+    """Delete a payment entry (Admin only)"""
+    user = await get_current_user(request)
+    
+    if user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Check if payment exists
+    payments = project.get("payments", [])
+    payment_exists = any(p.get("id") == payment_id for p in payments)
+    if not payment_exists:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    
+    # Remove payment
+    await db.projects.update_one(
+        {"project_id": project_id},
+        {
+            "$pull": {"payments": {"id": payment_id}},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+        }
+    )
+    
+    return {"message": "Payment deleted successfully"}
+
 # ============ DASHBOARD ENDPOINTS ============
 
 @api_router.get("/dashboard")
