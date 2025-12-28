@@ -130,6 +130,13 @@ const TimelinePanel = ({ timeline, currentStage }) => {
   const groupedTimeline = groupTimelineByStage(timeline);
   const currentStageIndex = STAGES.indexOf(currentStage);
 
+  // Format date for display (DD/MM/YYYY)
+  const formatDisplayDate = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
   const getStatusIcon = (status) => {
     switch (status) {
       case 'completed':
@@ -138,6 +145,17 @@ const TimelinePanel = ({ timeline, currentStage }) => {
         return <AlertTriangle className="w-3 h-3 text-red-500" />;
       default:
         return <Clock className="w-3 h-3 text-slate-400" />;
+    }
+  };
+
+  const getStatusDotColor = (status) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-500';
+      case 'delayed':
+        return 'bg-red-500';
+      default:
+        return 'bg-slate-300';
     }
   };
 
@@ -200,22 +218,41 @@ const TimelinePanel = ({ timeline, currentStage }) => {
                   {milestones.map((item, index) => (
                     <div 
                       key={item.id || index} 
-                      className="flex items-center gap-2 py-1"
+                      className="flex items-start gap-2 py-1"
                       data-testid={`milestone-${item.id}`}
                     >
+                      {/* Status dot */}
                       <div className={cn(
-                        "w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0",
-                        item.status === 'completed' ? 'bg-green-100' :
-                        item.status === 'delayed' ? 'bg-red-100' : 'bg-slate-100'
-                      )}>
-                        {getStatusIcon(item.status)}
+                        "w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1",
+                        getStatusDotColor(item.status)
+                      )} />
+                      
+                      <div className="flex-1 min-w-0">
+                        <span className={cn(
+                          "text-xs block",
+                          item.status === 'completed' ? 'text-slate-700' : 
+                          item.status === 'delayed' ? 'text-red-600 font-medium' : 'text-slate-500'
+                        )}>
+                          {item.title}
+                        </span>
+                        
+                        {/* Date display */}
+                        <div className="flex flex-col gap-0.5 mt-0.5">
+                          {item.expectedDate && (
+                            <span className={cn(
+                              "text-[10px]",
+                              item.status === 'delayed' ? 'text-red-500' : 'text-slate-400'
+                            )}>
+                              Expected: {formatDisplayDate(item.expectedDate)}
+                            </span>
+                          )}
+                          {item.completedDate && (
+                            <span className="text-[10px] text-green-600">
+                              Completed: {formatDisplayDate(item.completedDate)}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <span className={cn(
-                        "text-xs",
-                        item.status === 'completed' ? 'text-slate-700' : 'text-slate-500'
-                      )}>
-                        {item.title}
-                      </span>
                     </div>
                   ))}
                   {milestones.length === 0 && (
