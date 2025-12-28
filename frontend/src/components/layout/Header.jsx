@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { cn } from '../../lib/utils';
-import { Search, LogOut } from 'lucide-react';
+import { Search, LogOut, Bell, User } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
@@ -14,17 +14,40 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
+import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const ROLE_BADGE_STYLES = {
   Admin: 'bg-purple-100 text-purple-700',
   Manager: 'bg-blue-100 text-blue-700',
   Designer: 'bg-pink-100 text-pink-700',
-  PreSales: 'bg-orange-100 text-orange-700'
+  PreSales: 'bg-orange-100 text-orange-700',
+  Trainee: 'bg-green-100 text-green-700'
 };
 
 const Header = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    fetchUnreadCount();
+    // Poll for new notifications every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchUnreadCount = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/notifications/unread-count`, { 
+        withCredentials: true 
+      });
+      setUnreadCount(response.data.unread_count);
+    } catch (err) {
+      // Silently fail - user might not be authenticated yet
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -56,7 +79,23 @@ const Header = () => {
         </div>
 
         {/* User Profile Section */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* Notifications Bell */}
+          <Button 
+            variant="ghost" 
+            size="sm"
+            className="relative h-9 w-9 p-0"
+            onClick={() => navigate('/notifications')}
+            data-testid="notifications-bell"
+          >
+            <Bell className="w-5 h-5 text-slate-600" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </Button>
+
           {/* Role Badge */}
           {user?.role && (
             <span 
@@ -97,6 +136,26 @@ const Header = () => {
                   </p>
                 </div>
               </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={() => navigate('/profile')}
+                className="cursor-pointer"
+              >
+                <User className="mr-2 h-4 w-4" />
+                <span>My Profile</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => navigate('/notifications')}
+                className="cursor-pointer"
+              >
+                <Bell className="mr-2 h-4 w-4" />
+                <span>Notifications</span>
+                {unreadCount > 0 && (
+                  <span className="ml-auto text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">
+                    {unreadCount}
+                  </span>
+                )}
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem 
                 onClick={handleLogout}
