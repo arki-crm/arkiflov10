@@ -17,21 +17,25 @@ import { cn } from '../lib/utils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-// Stage filter tabs
+// Stage filter tabs - updated to 6 stages
 const STAGE_FILTERS = [
-  { key: 'all', label: 'All Projects' },
-  { key: 'Pre 10%', label: 'Pre 10%' },
-  { key: '10-50%', label: '10–50%' },
-  { key: '50-100%', label: '50–100%' },
-  { key: 'Completed', label: 'Completed' }
+  { key: 'all', label: 'All' },
+  { key: 'Design Finalization', label: 'Design' },
+  { key: 'Production Preparation', label: 'Prep' },
+  { key: 'Production', label: 'Production' },
+  { key: 'Delivery', label: 'Delivery' },
+  { key: 'Installation', label: 'Installation' },
+  { key: 'Handover', label: 'Handover' }
 ];
 
 // Stage badge styles
 const STAGE_STYLES = {
-  'Pre 10%': 'bg-slate-100 text-slate-600',
-  '10-50%': 'bg-amber-100 text-amber-700',
-  '50-100%': 'bg-blue-100 text-blue-700',
-  'Completed': 'bg-green-100 text-green-700'
+  'Design Finalization': 'bg-slate-100 text-slate-600',
+  'Production Preparation': 'bg-amber-100 text-amber-700',
+  'Production': 'bg-blue-100 text-blue-700',
+  'Delivery': 'bg-cyan-100 text-cyan-700',
+  'Installation': 'bg-purple-100 text-purple-700',
+  'Handover': 'bg-green-100 text-green-700'
 };
 
 // Role badge styles
