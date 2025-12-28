@@ -1905,12 +1905,34 @@ def main():
         tester.test_auth_me_designer()
         tester.test_auth_me_no_token()
         
-        # Admin-only endpoints
+        # Admin-only endpoints (Legacy)
         tester.test_list_users_admin()
         tester.test_list_users_designer()
         tester.test_update_user_role_admin()
         tester.test_update_user_role_designer()
         tester.test_update_user_role_invalid()
+        
+        # User Management System Tests
+        print("\n👤 Testing User Management System...")
+        tester.test_list_users_new_endpoint()
+        tester.test_list_users_with_filters()
+        tester.test_list_users_manager_access()
+        tester.test_list_users_designer_denied()
+        tester.test_get_single_user()
+        tester.test_invite_user_admin()
+        tester.test_invite_user_designer_denied()
+        tester.test_invite_user_duplicate_email()
+        tester.test_update_user_admin()
+        tester.test_update_user_manager_restrictions()
+        tester.test_toggle_user_status_admin()
+        tester.test_toggle_user_status_designer_denied()
+        tester.test_delete_user_admin()
+        tester.test_delete_user_designer_denied()
+        tester.test_get_profile()
+        tester.test_update_profile()
+        tester.test_get_active_users()
+        tester.test_get_active_designers()
+        tester.test_inactive_user_login_block()
         
         # Project tests
         print("\n📁 Testing Project Endpoints...")
