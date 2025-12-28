@@ -263,6 +263,218 @@ print("Designer user ID: {designer_user_id}");
         return self.run_test("Get Nonexistent Project", "GET", "api/projects/nonexistent-id", 404,
                            auth_token=self.admin_token)
 
+    # ============ PROJECT DETAIL VIEW TESTS ============
+
+    def test_get_project_with_timeline_and_comments(self):
+        """Test GET /api/projects/:id returns timeline and comments"""
+        # First get list of projects to get a project ID
+        success, projects_data = self.run_test("Get Projects for Detail Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            success, project_data = self.run_test("Get Project Detail with Timeline/Comments", "GET", 
+                                                 f"api/projects/{project_id}", 200,
+                                                 auth_token=self.admin_token)
+            if success:
+                # Verify timeline and comments are present
+                has_timeline = 'timeline' in project_data
+                has_comments = 'comments' in project_data
+                print(f"   Timeline present: {has_timeline}")
+                print(f"   Comments present: {has_comments}")
+                if has_timeline and has_comments:
+                    print(f"   Timeline items: {len(project_data.get('timeline', []))}")
+                    print(f"   Comments count: {len(project_data.get('comments', []))}")
+                return success and has_timeline and has_comments, project_data
+            return success, project_data
+        else:
+            print("⚠️  No projects found for detail test")
+            return False, {}
+
+    def test_add_comment_to_project(self):
+        """Test POST /api/projects/:id/comments adds a comment"""
+        # First get a project ID
+        success, projects_data = self.run_test("Get Projects for Comment Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            comment_message = f"Test comment added at {datetime.now().isoformat()}"
+            
+            success, comment_data = self.run_test("Add Comment to Project", "POST", 
+                                                 f"api/projects/{project_id}/comments", 200,
+                                                 data={"message": comment_message},
+                                                 auth_token=self.admin_token)
+            if success:
+                # Verify comment structure
+                has_id = 'id' in comment_data
+                has_user_info = 'user_name' in comment_data and 'role' in comment_data
+                has_message = comment_data.get('message') == comment_message
+                has_timestamp = 'created_at' in comment_data
+                print(f"   Comment ID present: {has_id}")
+                print(f"   User info present: {has_user_info}")
+                print(f"   Message correct: {has_message}")
+                print(f"   Timestamp present: {has_timestamp}")
+                return success and has_id and has_user_info and has_message and has_timestamp, comment_data
+            return success, comment_data
+        else:
+            print("⚠️  No projects found for comment test")
+            return False, {}
+
+    def test_update_project_stage(self):
+        """Test PUT /api/projects/:id/stage changes stage and adds system comment"""
+        # First get a project ID
+        success, projects_data = self.run_test("Get Projects for Stage Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            current_stage = projects_data[0].get('stage', 'Pre 10%')
+            
+            # Choose a different stage to update to
+            stages = ["Pre 10%", "10-50%", "50-100%", "Completed"]
+            new_stage = None
+            for stage in stages:
+                if stage != current_stage:
+                    new_stage = stage
+                    break
+            
+            if new_stage:
+                success, stage_data = self.run_test("Update Project Stage", "PUT", 
+                                                   f"api/projects/{project_id}/stage", 200,
+                                                   data={"stage": new_stage},
+                                                   auth_token=self.admin_token)
+                if success:
+                    # Verify response structure
+                    has_message = 'message' in stage_data
+                    has_stage = stage_data.get('stage') == new_stage
+                    has_system_comment = 'system_comment' in stage_data
+                    print(f"   Update message present: {has_message}")
+                    print(f"   Stage updated correctly: {has_stage}")
+                    print(f"   System comment generated: {has_system_comment}")
+                    
+                    # Verify system comment structure
+                    if has_system_comment:
+                        sys_comment = stage_data['system_comment']
+                        is_system = sys_comment.get('is_system', False)
+                        has_stage_message = f'"{current_stage}"' in sys_comment.get('message', '') and f'"{new_stage}"' in sys_comment.get('message', '')
+                        print(f"   System comment is_system: {is_system}")
+                        print(f"   System comment mentions stages: {has_stage_message}")
+                    
+                    return success and has_message and has_stage and has_system_comment, stage_data
+                return success, stage_data
+            else:
+                print("⚠️  Could not find different stage to update to")
+                return False, {}
+        else:
+            print("⚠️  No projects found for stage test")
+            return False, {}
+
+    def test_add_comment_designer_access(self):
+        """Test Designer can add comments to assigned projects"""
+        # First get projects as designer
+        success, projects_data = self.run_test("Get Designer Projects for Comment", "GET", "api/projects", 200,
+                                              auth_token=self.designer_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            comment_message = f"Designer test comment at {datetime.now().isoformat()}"
+            
+            return self.run_test("Add Comment as Designer", "POST", 
+                               f"api/projects/{project_id}/comments", 200,
+                               data={"message": comment_message},
+                               auth_token=self.designer_token)
+        else:
+            print("⚠️  Designer has no assigned projects for comment test")
+            return True, {}  # This is expected if designer has no projects
+
+    def test_update_stage_designer_access(self):
+        """Test Designer can update stage for assigned projects"""
+        # First get projects as designer
+        success, projects_data = self.run_test("Get Designer Projects for Stage Update", "GET", "api/projects", 200,
+                                              auth_token=self.designer_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            current_stage = projects_data[0].get('stage', 'Pre 10%')
+            
+            # Try to update to next stage
+            stages = ["Pre 10%", "10-50%", "50-100%", "Completed"]
+            current_index = stages.index(current_stage) if current_stage in stages else 0
+            new_stage = stages[min(current_index + 1, len(stages) - 1)]
+            
+            if new_stage != current_stage:
+                return self.run_test("Update Stage as Designer", "PUT", 
+                                   f"api/projects/{project_id}/stage", 200,
+                                   data={"stage": new_stage},
+                                   auth_token=self.designer_token)
+            else:
+                print("⚠️  Project already at final stage")
+                return True, {}
+        else:
+            print("⚠️  Designer has no assigned projects for stage update test")
+            return True, {}  # This is expected if designer has no projects
+
+    def test_presales_access_denied(self):
+        """Test PreSales user cannot access project details"""
+        # Create a PreSales user for testing
+        presales_user_id = f"test-presales-{uuid.uuid4().hex[:8]}"
+        presales_session_token = f"test_presales_session_{uuid.uuid4().hex[:16]}"
+        
+        mongo_commands = f'''
+use('test_database');
+db.users.insertOne({{
+  user_id: "{presales_user_id}",
+  email: "presales.test.{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com",
+  name: "Test PreSales",
+  picture: "https://via.placeholder.com/150",
+  role: "PreSales",
+  created_at: new Date()
+}});
+db.user_sessions.insertOne({{
+  user_id: "{presales_user_id}",
+  session_token: "{presales_session_token}",
+  expires_at: new Date(Date.now() + 7*24*60*60*1000),
+  created_at: new Date()
+}});
+'''
+        
+        try:
+            import subprocess
+            result = subprocess.run(['mongosh', '--eval', mongo_commands], 
+                                  capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                # Test project access with PreSales token
+                success, projects_data = self.run_test("Get Projects for PreSales Test", "GET", "api/projects", 200,
+                                                      auth_token=self.admin_token)
+                if success and projects_data and len(projects_data) > 0:
+                    project_id = projects_data[0]['project_id']
+                    
+                    # Test project detail access (should be denied)
+                    success, _ = self.run_test("PreSales Project Detail Access (Should Fail)", "GET", 
+                                             f"api/projects/{project_id}", 403,
+                                             auth_token=presales_session_token)
+                    
+                    # Test add comment (should be denied)
+                    success2, _ = self.run_test("PreSales Add Comment (Should Fail)", "POST", 
+                                              f"api/projects/{project_id}/comments", 403,
+                                              data={"message": "Test comment"},
+                                              auth_token=presales_session_token)
+                    
+                    # Test stage update (should be denied)
+                    success3, _ = self.run_test("PreSales Update Stage (Should Fail)", "PUT", 
+                                              f"api/projects/{project_id}/stage", 403,
+                                              data={"stage": "10-50%"},
+                                              auth_token=presales_session_token)
+                    
+                    return success and success2 and success3, {}
+                else:
+                    print("⚠️  No projects found for PreSales test")
+                    return False, {}
+            else:
+                print(f"❌ Failed to create PreSales user: {result.stderr}")
+                return False, {}
+                
+        except Exception as e:
+            print(f"❌ Error testing PreSales access: {str(e)}")
+            return False, {}
+
     def cleanup_test_data(self):
         """Clean up test data from MongoDB"""
         print("\n🧹 Cleaning up test data...")
