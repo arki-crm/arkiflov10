@@ -446,7 +446,7 @@ const StagesPanel = ({ currentStage, onStageChange, canChangeStage, isUpdating }
       
       {!canChangeStage && (
         <p className="text-xs text-slate-500 mt-4 text-center">
-          You don't have permission to change the stage
+          You don&apos;t have permission to change the stage
         </p>
       )}
     </div>
