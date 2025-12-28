@@ -5,7 +5,7 @@ import { enUS } from 'date-fns/locale';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -40,14 +40,11 @@ import {
   Plus,
   ExternalLink,
   CheckCircle2,
-  Clock,
-  AlertTriangle,
   Milestone,
   ListTodo,
   X,
   MoreVertical,
-  Trash2,
-  Edit
+  Trash2
 } from 'lucide-react';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
@@ -77,6 +74,237 @@ const COLORS = {
     overdue: '#EF4444'
   }
 };
+
+// Custom event component - defined outside main component
+const CalendarEventComponent = ({ event }) => {
+  const isMilestone = event.type === 'milestone';
+  
+  return (
+    <div
+      className="flex items-center gap-1 px-1 py-0.5 rounded text-xs font-medium truncate"
+      style={{ backgroundColor: event.color, color: '#fff' }}
+    >
+      {isMilestone ? (
+        <Milestone className="w-3 h-3 flex-shrink-0" />
+      ) : (
+        <ListTodo className="w-3 h-3 flex-shrink-0" />
+      )}
+      <span className="truncate">{event.title}</span>
+    </div>
+  );
+};
+
+// Legend component - defined outside main component
+const CalendarLegend = () => (
+  <div className="flex flex-wrap items-center gap-4 mb-4 text-xs">
+    <span className="font-medium text-slate-600">Legend:</span>
+    <div className="flex items-center gap-1">
+      <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.milestone.upcoming }} />
+      <span>Milestone (Upcoming)</span>
+    </div>
+    <div className="flex items-center gap-1">
+      <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.milestone.completed }} />
+      <span>Completed</span>
+    </div>
+    <div className="flex items-center gap-1">
+      <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.milestone.delayed }} />
+      <span>Delayed/Overdue</span>
+    </div>
+    <div className="flex items-center gap-1">
+      <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.task.pending }} />
+      <span>Task (Pending)</span>
+    </div>
+    <div className="flex items-center gap-1">
+      <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.task.inProgress }} />
+      <span>Task (In Progress)</span>
+    </div>
+  </div>
+);
+
+// Toolbar component - defined outside main component
+const CalendarToolbar = ({ 
+  currentDate, 
+  onNavigate, 
+  view, 
+  onViewChange, 
+  showFilters, 
+  onToggleFilters, 
+  userRole, 
+  onCreateTask 
+}) => (
+  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onNavigate('TODAY')}
+      >
+        Today
+      </Button>
+      <div className="flex items-center border rounded-lg">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => onNavigate('PREV')}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <span className="px-3 font-medium text-sm">
+          {format(currentDate, 'MMMM yyyy')}
+        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => onNavigate('NEXT')}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+    
+    <div className="flex items-center gap-2">
+      <Select value={view} onValueChange={onViewChange}>
+        <SelectTrigger className="w-[120px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="month">Month</SelectItem>
+          <SelectItem value="week">Week</SelectItem>
+          <SelectItem value="day">Day</SelectItem>
+        </SelectContent>
+      </Select>
+      
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onToggleFilters}
+        className={showFilters ? 'bg-blue-50 border-blue-200' : ''}
+      >
+        <Filter className="h-4 w-4 mr-2" />
+        Filters
+      </Button>
+      
+      {['Admin', 'Manager', 'Designer', 'PreSales'].includes(userRole) && (
+        <Button size="sm" onClick={onCreateTask}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Task
+        </Button>
+      )}
+    </div>
+  </div>
+);
+
+// Filter panel component - defined outside main component
+const CalendarFilterPanel = ({ 
+  showFilters, 
+  filters, 
+  onFilterChange, 
+  onClearFilters, 
+  userRole, 
+  projects, 
+  designers 
+}) => {
+  if (!showFilters) return null;
+  
+  return (
+    <Card className="mb-4">
+      <CardContent className="pt-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <Label className="text-xs text-slate-500 mb-1 block">Event Type</Label>
+            <Select
+              value={filters.eventType}
+              onValueChange={(value) => onFilterChange('eventType', value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Events" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Events</SelectItem>
+                <SelectItem value="milestone">Milestones Only</SelectItem>
+                <SelectItem value="task">Tasks Only</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {userRole !== 'PreSales' && (
+            <div>
+              <Label className="text-xs text-slate-500 mb-1 block">Project</Label>
+              <Select
+                value={filters.projectId || 'all'}
+                onValueChange={(value) => onFilterChange('projectId', value === 'all' ? '' : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Projects" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Projects</SelectItem>
+                  {projects.map(project => (
+                    <SelectItem key={project.project_id} value={project.project_id}>
+                      {project.project_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          
+          {['Admin', 'Manager'].includes(userRole) && (
+            <div>
+              <Label className="text-xs text-slate-500 mb-1 block">Designer</Label>
+              <Select
+                value={filters.designerId || 'all'}
+                onValueChange={(value) => onFilterChange('designerId', value === 'all' ? '' : value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Designers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Designers</SelectItem>
+                  {designers.map(designer => (
+                    <SelectItem key={designer.user_id} value={designer.user_id}>
+                      {designer.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          
+          <div>
+            <Label className="text-xs text-slate-500 mb-1 block">Status</Label>
+            <Select
+              value={filters.status}
+              onValueChange={(value) => onFilterChange('status', value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="delayed">Delayed/Overdue</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        
+        <div className="flex justify-end mt-4">
+          <Button variant="ghost" size="sm" onClick={onClearFilters}>
+            <X className="h-4 w-4 mr-1" />
+            Clear Filters
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+// Null toolbar for calendar
+const NullToolbar = () => null;
 
 const Calendar = () => {
   const { user } = useAuth();
@@ -243,6 +471,15 @@ const Calendar = () => {
     }
   };
 
+  // Handle create task button click
+  const handleCreateTaskClick = () => {
+    // Pre-fill assigned_to for self-assignment
+    if (user?.role === 'Designer' || user?.role === 'PreSales') {
+      setNewTask(prev => ({ ...prev, assigned_to: user.user_id }));
+    }
+    setShowCreateTaskModal(true);
+  };
+
   // Create task
   const handleCreateTask = async () => {
     if (!newTask.title || !newTask.assigned_to || !newTask.due_date) {
@@ -276,234 +513,20 @@ const Calendar = () => {
     }
   };
 
-  // Custom event component
-  const EventComponent = ({ event }) => {
-    const isMilestone = event.type === 'milestone';
-    
-    return (
-      <div
-        className="flex items-center gap-1 px-1 py-0.5 rounded text-xs font-medium truncate"
-        style={{ backgroundColor: event.color, color: '#fff' }}
-      >
-        {isMilestone ? (
-          <Milestone className="w-3 h-3 flex-shrink-0" />
-        ) : (
-          <ListTodo className="w-3 h-3 flex-shrink-0" />
-        )}
-        <span className="truncate">{event.title}</span>
-      </div>
-    );
+  // Handle filter change
+  const handleFilterChange = (key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  // Custom toolbar
-  const CustomToolbar = () => (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => handleNavigate('TODAY')}
-        >
-          Today
-        </Button>
-        <div className="flex items-center border rounded-lg">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => handleNavigate('PREV')}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="px-3 font-medium text-sm">
-            {format(currentDate, 'MMMM yyyy')}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => handleNavigate('NEXT')}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-      
-      <div className="flex items-center gap-2">
-        <Select value={view} onValueChange={setView}>
-          <SelectTrigger className="w-[120px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="month">Month</SelectItem>
-            <SelectItem value="week">Week</SelectItem>
-            <SelectItem value="day">Day</SelectItem>
-          </SelectContent>
-        </Select>
-        
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowFilters(!showFilters)}
-          className={showFilters ? 'bg-blue-50 border-blue-200' : ''}
-        >
-          <Filter className="h-4 w-4 mr-2" />
-          Filters
-        </Button>
-        
-        {['Admin', 'Manager', 'Designer', 'PreSales'].includes(user?.role) && (
-          <Button
-            size="sm"
-            onClick={() => {
-              // Pre-fill assigned_to for self-assignment
-              if (user?.role === 'Designer' || user?.role === 'PreSales') {
-                setNewTask(prev => ({ ...prev, assigned_to: user.user_id }));
-              }
-              setShowCreateTaskModal(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Task
-          </Button>
-        )}
-      </div>
-    </div>
-  );
-
-  // Filter panel
-  const FilterPanel = () => {
-    if (!showFilters) return null;
-    
-    return (
-      <Card className="mb-4">
-        <CardContent className="pt-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <Label className="text-xs text-slate-500 mb-1 block">Event Type</Label>
-              <Select
-                value={filters.eventType}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, eventType: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Events" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Events</SelectItem>
-                  <SelectItem value="milestone">Milestones Only</SelectItem>
-                  <SelectItem value="task">Tasks Only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {user?.role !== 'PreSales' && (
-              <div>
-                <Label className="text-xs text-slate-500 mb-1 block">Project</Label>
-                <Select
-                  value={filters.projectId}
-                  onValueChange={(value) => setFilters(prev => ({ ...prev, projectId: value === 'all' ? '' : value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Projects" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Projects</SelectItem>
-                    {projects.map(project => (
-                      <SelectItem key={project.project_id} value={project.project_id}>
-                        {project.project_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            
-            {['Admin', 'Manager'].includes(user?.role) && (
-              <div>
-                <Label className="text-xs text-slate-500 mb-1 block">Designer</Label>
-                <Select
-                  value={filters.designerId}
-                  onValueChange={(value) => setFilters(prev => ({ ...prev, designerId: value === 'all' ? '' : value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="All Designers" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Designers</SelectItem>
-                    {designers.map(designer => (
-                      <SelectItem key={designer.user_id} value={designer.user_id}>
-                        {designer.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            
-            <div>
-              <Label className="text-xs text-slate-500 mb-1 block">Status</Label>
-              <Select
-                value={filters.status}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="All Statuses" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="delayed">Delayed/Overdue</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          
-          <div className="flex justify-end mt-4">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setFilters({
-                eventType: 'all',
-                projectId: '',
-                designerId: '',
-                status: 'all'
-              })}
-            >
-              <X className="h-4 w-4 mr-1" />
-              Clear Filters
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    );
+  // Clear filters
+  const handleClearFilters = () => {
+    setFilters({
+      eventType: 'all',
+      projectId: '',
+      designerId: '',
+      status: 'all'
+    });
   };
-
-  // Legend
-  const Legend = () => (
-    <div className="flex flex-wrap items-center gap-4 mb-4 text-xs">
-      <span className="font-medium text-slate-600">Legend:</span>
-      <div className="flex items-center gap-1">
-        <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.milestone.upcoming }} />
-        <span>Milestone (Upcoming)</span>
-      </div>
-      <div className="flex items-center gap-1">
-        <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.milestone.completed }} />
-        <span>Completed</span>
-      </div>
-      <div className="flex items-center gap-1">
-        <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.milestone.delayed }} />
-        <span>Delayed/Overdue</span>
-      </div>
-      <div className="flex items-center gap-1">
-        <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.task.pending }} />
-        <span>Task (Pending)</span>
-      </div>
-      <div className="flex items-center gap-1">
-        <div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.task.inProgress }} />
-        <span>Task (In Progress)</span>
-      </div>
-    </div>
-  );
 
   // Event style getter
   const eventStyleGetter = (event) => ({
@@ -530,6 +553,12 @@ const Calendar = () => {
       overdueTasks: tasks.filter(t => t.is_overdue).length
     };
   }, [events]);
+
+  // Calendar components config
+  const calendarComponents = useMemo(() => ({
+    event: CalendarEventComponent,
+    toolbar: NullToolbar
+  }), []);
 
   return (
     <div className="p-6 max-w-full">
@@ -565,13 +594,30 @@ const Calendar = () => {
       </div>
 
       {/* Toolbar */}
-      <CustomToolbar />
+      <CalendarToolbar
+        currentDate={currentDate}
+        onNavigate={handleNavigate}
+        view={view}
+        onViewChange={setView}
+        showFilters={showFilters}
+        onToggleFilters={() => setShowFilters(!showFilters)}
+        userRole={user?.role}
+        onCreateTask={handleCreateTaskClick}
+      />
       
       {/* Filters */}
-      <FilterPanel />
+      <CalendarFilterPanel
+        showFilters={showFilters}
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
+        userRole={user?.role}
+        projects={projects}
+        designers={designers}
+      />
       
       {/* Legend */}
-      <Legend />
+      <CalendarLegend />
 
       {/* Calendar */}
       <Card>
@@ -593,10 +639,7 @@ const Calendar = () => {
                 onNavigate={setCurrentDate}
                 onSelectEvent={handleSelectEvent}
                 eventPropGetter={eventStyleGetter}
-                components={{
-                  event: EventComponent,
-                  toolbar: () => null // Hide default toolbar
-                }}
+                components={calendarComponents}
                 popup
                 selectable={false}
                 className="arkiflo-calendar"
@@ -845,7 +888,7 @@ const Calendar = () => {
             <div>
               <Label htmlFor="task-project">Link to Project (Optional)</Label>
               <Select
-                value={newTask.project_id}
+                value={newTask.project_id || 'none'}
                 onValueChange={(value) => setNewTask(prev => ({ ...prev, project_id: value === 'none' ? '' : value }))}
               >
                 <SelectTrigger id="task-project">
