@@ -198,27 +198,33 @@ backend:
 frontend:
   - task: "Project Timeline UI with TAT Display"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/frontend/src/pages/ProjectDetails.jsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Updated TimelinePanel to show colored status dots (green=completed, gray=pending, red=delayed) and display Expected/Completed dates"
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: Project Timeline UI working perfectly! Found 6 milestone groups, 26 milestones with proper TAT display: 20 'Expected:' labels, 1 'Completed:' label, colored status dots (1 green, 1 red, 24 gray), 21 dates in DD/MM/YYYY format. Stage change functionality tested successfully. Timeline shows proper structure with Site Measurement (completed), Site Validation (delayed), Design Meeting (pending)."
 
   - task: "Lead Timeline UI with TAT Display"
     implemented: true
-    working: "NA"
+    working: true
     file: "/app/frontend/src/pages/LeadDetails.jsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Updated LeadTimelinePanel to show colored status dots and Expected/Completed dates with proper styling for delayed items"
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: Lead Timeline UI working perfectly! Found 7 timeline items with proper TAT display: 7 'Expected:' labels, 1 'Completed:' label, colored status indicators (1 green, 1 red), 8 dates in DD/MM/YYYY format. Lead stage change functionality tested successfully. Timeline shows Lead Created (completed), BC Call Completed (delayed), BOQ Shared (pending) with proper expected dates."
 
 metadata:
   created_by: "main_agent"
