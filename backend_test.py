@@ -868,6 +868,286 @@ db.user_sessions.insertOne({{
         return self.run_test("Get Available Users (Designer - Should Fail)", "GET", "api/users/available", 403,
                            auth_token=self.pure_designer_token)
 
+    # ============ LEADS ENDPOINTS TESTS ============
+
+    def test_seed_leads_admin(self):
+        """Test POST /api/leads/seed - Seed sample leads with TAT-based timeline structure"""
+        return self.run_test("Seed Leads (Admin)", "POST", "api/leads/seed", 200,
+                           auth_token=self.admin_token)
+
+    def test_seed_leads_designer(self):
+        """Test seeding leads with designer token (should fail)"""
+        return self.run_test("Seed Leads (Designer - Should Fail)", "POST", "api/leads/seed", 403,
+                           auth_token=self.pure_designer_token)
+
+    def test_list_leads_admin(self):
+        """Test GET /api/leads - Get list of leads"""
+        return self.run_test("List Leads (Admin)", "GET", "api/leads", 200,
+                           auth_token=self.admin_token)
+
+    def test_get_single_lead_with_tat_timeline(self):
+        """Test GET /api/leads/:id - Check timeline has TAT structure (id, title, expectedDate, completedDate, status, stage_ref)"""
+        # First get list of leads to get a lead ID
+        success, leads_data = self.run_test("Get Leads for TAT Timeline Test", "GET", "api/leads", 200,
+                                          auth_token=self.admin_token)
+        if success and leads_data and len(leads_data) > 0:
+            lead_id = leads_data[0]['lead_id']
+            success, lead_data = self.run_test("Get Single Lead with TAT Timeline", "GET", 
+                                             f"api/leads/{lead_id}", 200,
+                                             auth_token=self.admin_token)
+            if success:
+                # Verify timeline structure
+                has_timeline = 'timeline' in lead_data
+                timeline = lead_data.get('timeline', [])
+                
+                if has_timeline and len(timeline) > 0:
+                    first_item = timeline[0]
+                    # Check TAT-specific fields
+                    has_id = 'id' in first_item
+                    has_title = 'title' in first_item
+                    has_expected_date = 'expectedDate' in first_item
+                    has_completed_date = 'completedDate' in first_item
+                    has_status = 'status' in first_item
+                    has_stage_ref = 'stage_ref' in first_item
+                    
+                    # Check status values are valid
+                    valid_statuses = ['pending', 'completed', 'delayed']
+                    status_valid = first_item.get('status') in valid_statuses
+                    
+                    print(f"   Timeline present: {has_timeline}")
+                    print(f"   Timeline items: {len(timeline)}")
+                    print(f"   Has ID: {has_id}")
+                    print(f"   Has title: {has_title}")
+                    print(f"   Has expectedDate: {has_expected_date}")
+                    print(f"   Has completedDate: {has_completed_date}")
+                    print(f"   Has status: {has_status}")
+                    print(f"   Has stage_ref: {has_stage_ref}")
+                    print(f"   Status valid: {status_valid}")
+                    
+                    # Store lead ID for stage update test
+                    self.test_lead_id = lead_id
+                    
+                    return (success and has_timeline and has_id and has_title and 
+                           has_expected_date and has_completed_date and has_status and 
+                           has_stage_ref and status_valid), lead_data
+                else:
+                    print("   No timeline items found")
+                    return False, lead_data
+            return success, lead_data
+        else:
+            print("⚠️  No leads found for TAT timeline test")
+            return False, {}
+
+    def test_lead_stage_update_with_tat(self):
+        """Test PUT /api/leads/:id/stage - Verify TAT logic updates timeline correctly"""
+        if hasattr(self, 'test_lead_id'):
+            # Update lead stage to "BOQ Shared"
+            success, stage_data = self.run_test("Update Lead Stage with TAT", "PUT", 
+                                              f"api/leads/{self.test_lead_id}/stage", 200,
+                                              data={"stage": "BOQ Shared"},
+                                              auth_token=self.admin_token)
+            if success:
+                # Verify response structure
+                has_message = 'message' in stage_data
+                has_stage = stage_data.get('stage') == "BOQ Shared"
+                has_system_comment = 'system_comment' in stage_data
+                
+                print(f"   Update message present: {has_message}")
+                print(f"   Stage updated correctly: {has_stage}")
+                print(f"   System comment generated: {has_system_comment}")
+                
+                # Now get the lead again to verify timeline updates
+                success2, updated_lead = self.run_test("Get Updated Lead Timeline", "GET", 
+                                                     f"api/leads/{self.test_lead_id}", 200,
+                                                     auth_token=self.admin_token)
+                if success2:
+                    timeline = updated_lead.get('timeline', [])
+                    
+                    # Check that previous milestones are marked as completed
+                    completed_count = sum(1 for item in timeline if item.get('status') == 'completed')
+                    has_completed_dates = any(item.get('completedDate') for item in timeline if item.get('status') == 'completed')
+                    
+                    print(f"   Completed milestones: {completed_count}")
+                    print(f"   Has completed dates: {has_completed_dates}")
+                    
+                    return (success and success2 and has_message and has_stage and 
+                           has_system_comment and completed_count > 0 and has_completed_dates), stage_data
+                
+                return success and has_message and has_stage and has_system_comment, stage_data
+            return success, stage_data
+        else:
+            print("⚠️  No test lead available for stage update test")
+            return True, {}
+
+    def test_get_single_project_with_tat_timeline(self):
+        """Test GET /api/projects/:id - Check timeline has TAT structure"""
+        # First get list of projects to get a project ID
+        success, projects_data = self.run_test("Get Projects for TAT Timeline Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            success, project_data = self.run_test("Get Single Project with TAT Timeline", "GET", 
+                                                 f"api/projects/{project_id}", 200,
+                                                 auth_token=self.admin_token)
+            if success:
+                # Verify timeline structure
+                has_timeline = 'timeline' in project_data
+                timeline = project_data.get('timeline', [])
+                
+                if has_timeline and len(timeline) > 0:
+                    first_item = timeline[0]
+                    # Check TAT-specific fields
+                    has_id = 'id' in first_item
+                    has_title = 'title' in first_item
+                    has_expected_date = 'expectedDate' in first_item
+                    has_completed_date = 'completedDate' in first_item
+                    has_status = 'status' in first_item
+                    has_stage_ref = 'stage_ref' in first_item
+                    
+                    # Check status values are valid
+                    valid_statuses = ['pending', 'completed', 'delayed']
+                    status_valid = first_item.get('status') in valid_statuses
+                    
+                    print(f"   Timeline present: {has_timeline}")
+                    print(f"   Timeline items: {len(timeline)}")
+                    print(f"   Has ID: {has_id}")
+                    print(f"   Has title: {has_title}")
+                    print(f"   Has expectedDate: {has_expected_date}")
+                    print(f"   Has completedDate: {has_completed_date}")
+                    print(f"   Has status: {has_status}")
+                    print(f"   Has stage_ref: {has_stage_ref}")
+                    print(f"   Status valid: {status_valid}")
+                    
+                    # Store project ID for stage update test
+                    self.test_project_id_tat = project_id
+                    
+                    return (success and has_timeline and has_id and has_title and 
+                           has_expected_date and has_completed_date and has_status and 
+                           has_stage_ref and status_valid), project_data
+                else:
+                    print("   No timeline items found")
+                    return False, project_data
+            return success, project_data
+        else:
+            print("⚠️  No projects found for TAT timeline test")
+            return False, {}
+
+    def test_project_stage_update_with_tat(self):
+        """Test PUT /api/projects/:id/stage - Verify TAT logic updates timeline correctly"""
+        if hasattr(self, 'test_project_id_tat'):
+            # Update project stage to "Production Preparation"
+            success, stage_data = self.run_test("Update Project Stage with TAT", "PUT", 
+                                              f"api/projects/{self.test_project_id_tat}/stage", 200,
+                                              data={"stage": "Production Preparation"},
+                                              auth_token=self.admin_token)
+            if success:
+                # Verify response structure
+                has_message = 'message' in stage_data
+                has_stage = stage_data.get('stage') == "Production Preparation"
+                has_system_comment = 'system_comment' in stage_data
+                
+                print(f"   Update message present: {has_message}")
+                print(f"   Stage updated correctly: {has_stage}")
+                print(f"   System comment generated: {has_system_comment}")
+                
+                # Now get the project again to verify timeline updates
+                success2, updated_project = self.run_test("Get Updated Project Timeline", "GET", 
+                                                        f"api/projects/{self.test_project_id_tat}", 200,
+                                                        auth_token=self.admin_token)
+                if success2:
+                    timeline = updated_project.get('timeline', [])
+                    
+                    # Check that previous milestones are marked as completed
+                    completed_count = sum(1 for item in timeline if item.get('status') == 'completed')
+                    has_completed_dates = any(item.get('completedDate') for item in timeline if item.get('status') == 'completed')
+                    
+                    # Check that current stage first milestone is completed
+                    current_stage_items = [item for item in timeline if item.get('stage_ref') == 'Production Preparation']
+                    first_current_completed = len(current_stage_items) > 0 and current_stage_items[0].get('status') == 'completed'
+                    
+                    print(f"   Completed milestones: {completed_count}")
+                    print(f"   Has completed dates: {has_completed_dates}")
+                    print(f"   First current stage milestone completed: {first_current_completed}")
+                    
+                    return (success and success2 and has_message and has_stage and 
+                           has_system_comment and completed_count > 0 and has_completed_dates), stage_data
+                
+                return success and has_message and has_stage and has_system_comment, stage_data
+            return success, stage_data
+        else:
+            print("⚠️  No test project available for stage update test")
+            return True, {}
+
+    def test_tat_calculation_verification(self):
+        """Test that TAT calculation follows the defined rules"""
+        # Get a fresh lead to check TAT calculation
+        success, leads_data = self.run_test("Get Leads for TAT Calculation Test", "GET", "api/leads", 200,
+                                          auth_token=self.admin_token)
+        if success and leads_data and len(leads_data) > 0:
+            lead = leads_data[0]
+            timeline = lead.get('timeline', [])
+            
+            if len(timeline) >= 2:
+                # Check that expectedDate follows TAT rules
+                # Lead Created should be immediate (day 0)
+                # BC Call Completed should be 1 day after
+                # BOQ Shared should be 3 days after BC Call (cumulative 4 days)
+                
+                lead_created = next((item for item in timeline if item.get('title') == 'Lead Created'), None)
+                bc_call = next((item for item in timeline if item.get('title') == 'BC Call Completed'), None)
+                boq_shared = next((item for item in timeline if item.get('title') == 'BOQ Shared'), None)
+                
+                tat_calculation_correct = True
+                
+                if lead_created and bc_call:
+                    # Parse dates and check difference
+                    try:
+                        from datetime import datetime
+                        lead_date = datetime.fromisoformat(lead_created['expectedDate'].replace('Z', '+00:00'))
+                        bc_date = datetime.fromisoformat(bc_call['expectedDate'].replace('Z', '+00:00'))
+                        
+                        # BC Call should be 1 day after Lead Created
+                        diff_days = (bc_date - lead_date).days
+                        bc_timing_correct = diff_days == 1
+                        
+                        print(f"   Lead Created to BC Call: {diff_days} days (expected: 1)")
+                        print(f"   BC Call timing correct: {bc_timing_correct}")
+                        
+                        if not bc_timing_correct:
+                            tat_calculation_correct = False
+                            
+                    except Exception as e:
+                        print(f"   Error parsing dates: {e}")
+                        tat_calculation_correct = False
+                
+                if bc_call and boq_shared:
+                    try:
+                        bc_date = datetime.fromisoformat(bc_call['expectedDate'].replace('Z', '+00:00'))
+                        boq_date = datetime.fromisoformat(boq_shared['expectedDate'].replace('Z', '+00:00'))
+                        
+                        # BOQ should be 3 days after BC Call
+                        diff_days = (boq_date - bc_date).days
+                        boq_timing_correct = diff_days == 3
+                        
+                        print(f"   BC Call to BOQ Shared: {diff_days} days (expected: 3)")
+                        print(f"   BOQ timing correct: {boq_timing_correct}")
+                        
+                        if not boq_timing_correct:
+                            tat_calculation_correct = False
+                            
+                    except Exception as e:
+                        print(f"   Error parsing BOQ dates: {e}")
+                        tat_calculation_correct = False
+                
+                print(f"   Overall TAT calculation correct: {tat_calculation_correct}")
+                return tat_calculation_correct, lead
+            else:
+                print("   Insufficient timeline items for TAT calculation test")
+                return False, lead
+        else:
+            print("⚠️  No leads found for TAT calculation test")
+            return False, {}
+
     def cleanup_test_data(self):
         """Clean up test data from MongoDB"""
         print("\n🧹 Cleaning up test data...")
