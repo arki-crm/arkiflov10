@@ -683,11 +683,13 @@ async def update_stage(project_id: str, stage_update: StageUpdate, request: Requ
     if user.role == "Designer" and user.user_id not in project.get("collaborators", []):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    old_stage = project.get("stage", "Pre 10%")
+    old_stage = project.get("stage", "Design Finalization")
     new_stage = stage_update.stage
     
     if old_stage == new_stage:
         return {"message": "Stage unchanged", "stage": new_stage}
+    
+    now = datetime.now(timezone.utc)
     
     # Create system comment for stage change
     system_comment = {
@@ -697,10 +699,10 @@ async def update_stage(project_id: str, stage_update: StageUpdate, request: Requ
         "role": user.role,
         "message": f"Stage updated from \"{old_stage}\" to \"{new_stage}\"",
         "is_system": True,
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "created_at": now.isoformat()
     }
     
-    # Update timeline based on new stage
+    # Update timeline based on new stage with TAT-aware logic
     timeline = project.get("timeline", [])
     new_stage_index = STAGE_ORDER.index(new_stage)
     
@@ -708,17 +710,44 @@ async def update_stage(project_id: str, stage_update: StageUpdate, request: Requ
         item_stage = item.get("stage_ref", "")
         if item_stage in STAGE_ORDER:
             item_index = STAGE_ORDER.index(item_stage)
-            if item_index <= new_stage_index:
+            if item_index < new_stage_index:
+                # Past stages - mark as completed
                 item["status"] = "completed"
+                if not item.get("completedDate"):
+                    item["completedDate"] = now.isoformat()
+            elif item_index == new_stage_index:
+                # Current stage - first milestone in stage is completed
+                milestones_in_stage = [t for t in timeline if t.get("stage_ref") == item_stage]
+                is_first = milestones_in_stage and milestones_in_stage[0]["id"] == item["id"]
+                if is_first:
+                    item["status"] = "completed"
+                    if not item.get("completedDate"):
+                        item["completedDate"] = now.isoformat()
+                else:
+                    # Check if delayed
+                    expected_date_str = item.get("expectedDate", item.get("date", ""))
+                    if expected_date_str:
+                        try:
+                            expected = datetime.fromisoformat(expected_date_str.replace("Z", "+00:00"))
+                            if expected.tzinfo is None:
+                                expected = expected.replace(tzinfo=timezone.utc)
+                            if expected < now:
+                                item["status"] = "delayed"
+                            else:
+                                item["status"] = "pending"
+                        except:
+                            item["status"] = "pending"
+                    else:
+                        item["status"] = "pending"
             else:
-                # Check if delayed
-                expected_date = item.get("date", "")
-                if expected_date:
+                # Future stages - check if delayed
+                expected_date_str = item.get("expectedDate", item.get("date", ""))
+                if expected_date_str:
                     try:
-                        expected = datetime.fromisoformat(expected_date.replace("Z", "+00:00"))
+                        expected = datetime.fromisoformat(expected_date_str.replace("Z", "+00:00"))
                         if expected.tzinfo is None:
                             expected = expected.replace(tzinfo=timezone.utc)
-                        if expected < datetime.now(timezone.utc):
+                        if expected < now:
                             item["status"] = "delayed"
                         else:
                             item["status"] = "pending"
@@ -726,6 +755,7 @@ async def update_stage(project_id: str, stage_update: StageUpdate, request: Requ
                         item["status"] = "pending"
                 else:
                     item["status"] = "pending"
+                item["completedDate"] = None
     
     # Update project
     await db.projects.update_one(
@@ -734,7 +764,7 @@ async def update_stage(project_id: str, stage_update: StageUpdate, request: Requ
             "$set": {
                 "stage": new_stage,
                 "timeline": timeline,
-                "updated_at": datetime.now(timezone.utc).isoformat()
+                "updated_at": now.isoformat()
             },
             "$push": {"comments": system_comment}
         }
