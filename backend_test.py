@@ -2472,6 +2472,52 @@ def main():
         tester.test_dashboard_designer()
         tester.test_dashboard_data_structure_validation()
         
+        # Settings Tests
+        print("\n⚙️ Testing Settings Endpoints...")
+        
+        # Company Settings
+        print("\n🏢 Testing Company Settings...")
+        tester.test_get_company_settings_admin()
+        tester.test_get_company_settings_manager()
+        tester.test_get_company_settings_designer()
+        tester.test_update_company_settings_admin()
+        tester.test_update_company_settings_designer()
+        
+        # Branding Settings
+        print("\n🎨 Testing Branding Settings...")
+        tester.test_get_branding_settings_admin()
+        tester.test_update_branding_settings_admin()
+        
+        # TAT Settings
+        print("\n⏱️ Testing TAT Settings...")
+        tester.test_get_lead_tat_settings_admin()
+        tester.test_update_lead_tat_settings_admin()
+        tester.test_get_project_tat_settings_admin()
+        tester.test_update_project_tat_settings_admin()
+        
+        # Stages Settings
+        print("\n📋 Testing Stages Settings...")
+        tester.test_get_stages_settings_admin()
+        tester.test_update_stages_settings_admin()
+        tester.test_get_lead_stages_settings_admin()
+        tester.test_update_lead_stages_settings_admin()
+        
+        # Milestones Settings
+        print("\n🎯 Testing Milestones Settings...")
+        tester.test_get_milestones_settings_admin()
+        tester.test_update_milestones_settings_admin()
+        
+        # System Logs
+        print("\n📜 Testing System Logs...")
+        tester.test_get_system_logs_admin()
+        tester.test_get_system_logs_designer()
+        
+        # All Settings
+        print("\n🔧 Testing All Settings...")
+        tester.test_get_all_settings_admin()
+        tester.test_get_all_settings_manager()
+        tester.test_get_all_settings_designer()
+        
         # Logout test (do this last as it invalidates session)
         tester.test_logout()
         
