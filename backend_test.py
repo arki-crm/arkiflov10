@@ -2518,6 +2518,27 @@ def main():
         tester.test_get_all_settings_manager()
         tester.test_get_all_settings_designer()
         
+        # Notifications Tests
+        print("\n🔔 Testing Notifications API...")
+        tester.test_get_notifications_admin()
+        tester.test_get_notifications_with_filters()
+        tester.test_get_unread_count()
+        tester.test_mark_notification_read()
+        tester.test_mark_all_notifications_read()
+        tester.test_delete_notification()
+        tester.test_clear_all_notifications()
+        tester.test_notification_triggers_project_stage()
+        tester.test_notification_triggers_lead_stage()
+        tester.test_notification_triggers_comment_mentions()
+        
+        # Email Templates Tests
+        print("\n📧 Testing Email Templates API...")
+        tester.test_get_email_templates_admin()
+        tester.test_get_email_templates_designer_denied()
+        tester.test_get_single_email_template()
+        tester.test_update_email_template()
+        tester.test_reset_email_template()
+        
         # Logout test (do this last as it invalidates session)
         tester.test_logout()
         
