@@ -2041,7 +2041,7 @@ async def seed_projects(request: Request):
             "stage": "Production Preparation",
             "collaborators": user_ids,
             "summary": "Luxury penthouse complete interior renovation with terrace garden",
-            "timeline": generate_timeline("Production Preparation", (now - timedelta(days=10)).isoformat()),
+            "timeline": generate_project_timeline("Production Preparation", (now - timedelta(days=10)).isoformat()),
             "comments": generate_comments(user_ids, (now - timedelta(days=10)).isoformat()),
             "updated_at": (now - timedelta(hours=12)).isoformat(),
             "created_at": (now - timedelta(days=10)).isoformat()
