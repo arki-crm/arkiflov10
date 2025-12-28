@@ -3210,6 +3210,339 @@ async def get_all_settings(request: Request):
     }
 
 
+# ============ NOTIFICATIONS MODELS & ENDPOINTS ============
+
+class NotificationCreate(BaseModel):
+    user_id: str
+    title: str
+    message: str
+    type: str  # "stage-change" | "task" | "milestone" | "comment" | "system"
+    link_url: Optional[str] = None
+
+class NotificationUpdate(BaseModel):
+    is_read: Optional[bool] = None
+
+# Notification Types
+NOTIFICATION_TYPES = ["stage-change", "task", "milestone", "comment", "system"]
+
+async def create_notification(user_id: str, title: str, message: str, notif_type: str, link_url: str = None):
+    """Create a notification for a user"""
+    notification = {
+        "id": f"notif_{uuid.uuid4().hex[:8]}",
+        "user_id": user_id,
+        "title": title,
+        "message": message,
+        "type": notif_type,
+        "link_url": link_url,
+        "is_read": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.notifications.insert_one(notification)
+    return notification
+
+async def notify_users(user_ids: list, title: str, message: str, notif_type: str, link_url: str = None):
+    """Send notification to multiple users"""
+    for user_id in user_ids:
+        if user_id:
+            await create_notification(user_id, title, message, notif_type, link_url)
+
+async def get_relevant_users_for_project(project: dict):
+    """Get admins, managers, and project collaborators"""
+    user_ids = set()
+    
+    # Add collaborators
+    for collab_id in project.get("collaborators", []):
+        user_ids.add(collab_id)
+    
+    # Add all admins and managers
+    admins_managers = await db.users.find(
+        {"role": {"$in": ["Admin", "Manager"]}, "status": "Active"},
+        {"_id": 0, "user_id": 1}
+    ).to_list(100)
+    
+    for user in admins_managers:
+        user_ids.add(user["user_id"])
+    
+    return list(user_ids)
+
+async def get_relevant_users_for_lead(lead: dict):
+    """Get admins, managers, presales assigned, and designer"""
+    user_ids = set()
+    
+    # Add assigned presales
+    if lead.get("assigned_to"):
+        user_ids.add(lead["assigned_to"])
+    
+    # Add designer if assigned
+    if lead.get("designer_id"):
+        user_ids.add(lead["designer_id"])
+    
+    # Add all admins and managers
+    admins_managers = await db.users.find(
+        {"role": {"$in": ["Admin", "Manager"]}, "status": "Active"},
+        {"_id": 0, "user_id": 1}
+    ).to_list(100)
+    
+    for user in admins_managers:
+        user_ids.add(user["user_id"])
+    
+    return list(user_ids)
+
+# Get notifications for current user
+@api_router.get("/notifications")
+async def get_notifications(
+    request: Request,
+    type: Optional[str] = None,
+    is_read: Optional[bool] = None,
+    limit: int = 50,
+    offset: int = 0
+):
+    """Get notifications for the current user"""
+    user = await get_current_user(request)
+    
+    query = {"user_id": user.user_id}
+    
+    if type and type != "all":
+        query["type"] = type
+    
+    if is_read is not None:
+        query["is_read"] = is_read
+    
+    notifications = await db.notifications.find(query, {"_id": 0}).sort("created_at", -1).skip(offset).limit(limit).to_list(limit)
+    total = await db.notifications.count_documents(query)
+    unread_count = await db.notifications.count_documents({"user_id": user.user_id, "is_read": False})
+    
+    return {
+        "notifications": notifications,
+        "total": total,
+        "unread_count": unread_count,
+        "limit": limit,
+        "offset": offset
+    }
+
+# Get unread count only (for header badge)
+@api_router.get("/notifications/unread-count")
+async def get_unread_count(request: Request):
+    """Get unread notification count for the current user"""
+    user = await get_current_user(request)
+    count = await db.notifications.count_documents({"user_id": user.user_id, "is_read": False})
+    return {"unread_count": count}
+
+# Mark notification as read
+@api_router.put("/notifications/{notification_id}/read")
+async def mark_notification_read(notification_id: str, request: Request):
+    """Mark a notification as read"""
+    user = await get_current_user(request)
+    
+    result = await db.notifications.update_one(
+        {"id": notification_id, "user_id": user.user_id},
+        {"$set": {"is_read": True}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
+    return {"message": "Notification marked as read"}
+
+# Mark all as read
+@api_router.put("/notifications/mark-all-read")
+async def mark_all_notifications_read(request: Request):
+    """Mark all notifications as read for the current user"""
+    user = await get_current_user(request)
+    
+    result = await db.notifications.update_many(
+        {"user_id": user.user_id, "is_read": False},
+        {"$set": {"is_read": True}}
+    )
+    
+    return {"message": f"Marked {result.modified_count} notifications as read"}
+
+# Delete notification
+@api_router.delete("/notifications/{notification_id}")
+async def delete_notification(notification_id: str, request: Request):
+    """Delete a notification"""
+    user = await get_current_user(request)
+    
+    result = await db.notifications.delete_one(
+        {"id": notification_id, "user_id": user.user_id}
+    )
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
+    return {"message": "Notification deleted"}
+
+# Clear all notifications
+@api_router.delete("/notifications/clear-all")
+async def clear_all_notifications(request: Request):
+    """Clear all notifications for the current user"""
+    user = await get_current_user(request)
+    
+    result = await db.notifications.delete_many({"user_id": user.user_id})
+    
+    return {"message": f"Deleted {result.deleted_count} notifications"}
+
+
+# ============ EMAIL TEMPLATES ============
+
+DEFAULT_EMAIL_TEMPLATES = [
+    {
+        "id": "template_stage_change",
+        "name": "Stage Change Email",
+        "subject": "Stage Updated: {{projectName}}",
+        "body": "<p>Hello {{userName}},</p><p>The stage for <strong>{{projectName}}</strong> has been updated to <strong>{{stage}}</strong>.</p><p>Click below to view details.</p><p>Best regards,<br>Arkiflo Team</p>",
+        "variables": ["projectName", "userName", "stage"],
+        "updated_at": None
+    },
+    {
+        "id": "template_task_assignment",
+        "name": "Task Assignment Email",
+        "subject": "New Task Assigned: {{taskTitle}}",
+        "body": "<p>Hello {{assignedTo}},</p><p>A new task has been assigned to you:</p><p><strong>{{taskTitle}}</strong></p><p>Please review and complete it before the due date.</p><p>Best regards,<br>Arkiflo Team</p>",
+        "variables": ["taskTitle", "assignedTo", "projectName"],
+        "updated_at": None
+    },
+    {
+        "id": "template_task_overdue",
+        "name": "Task Overdue Email",
+        "subject": "Task Overdue: {{taskTitle}}",
+        "body": "<p>Hello {{assignedTo}},</p><p>Your task <strong>{{taskTitle}}</strong> is now overdue.</p><p>Please complete it as soon as possible.</p><p>Best regards,<br>Arkiflo Team</p>",
+        "variables": ["taskTitle", "assignedTo"],
+        "updated_at": None
+    },
+    {
+        "id": "template_milestone_delay",
+        "name": "Milestone Delay Email",
+        "subject": "Milestone Delayed: {{milestone}} - {{projectName}}",
+        "body": "<p>Hello {{userName}},</p><p>The milestone <strong>{{milestone}}</strong> in project <strong>{{projectName}}</strong> is now delayed.</p><p>Please take necessary action.</p><p>Best regards,<br>Arkiflo Team</p>",
+        "variables": ["milestone", "projectName", "userName"],
+        "updated_at": None
+    },
+    {
+        "id": "template_user_invite",
+        "name": "User Invite Email",
+        "subject": "You're invited to join Arkiflo",
+        "body": "<p>Hello {{userName}},</p><p>You have been invited to join <strong>Arkiflo</strong> as a <strong>{{role}}</strong>.</p><p>Click the button below to sign in with your Google account.</p><p>Best regards,<br>Arkiflo Team</p>",
+        "variables": ["userName", "role", "email"],
+        "updated_at": None
+    }
+]
+
+class EmailTemplateUpdate(BaseModel):
+    subject: Optional[str] = None
+    body: Optional[str] = None
+
+@api_router.get("/settings/email-templates")
+async def get_email_templates(request: Request):
+    """Get all email templates (Admin only)"""
+    user = await get_current_user(request)
+    
+    if user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Get from database or return defaults
+    templates = await db.email_templates.find({}, {"_id": 0}).to_list(100)
+    
+    if not templates:
+        # Initialize with defaults
+        for template in DEFAULT_EMAIL_TEMPLATES:
+            await db.email_templates.insert_one(template.copy())
+        templates = DEFAULT_EMAIL_TEMPLATES.copy()
+    
+    return templates
+
+@api_router.get("/settings/email-templates/{template_id}")
+async def get_email_template(template_id: str, request: Request):
+    """Get a single email template (Admin only)"""
+    user = await get_current_user(request)
+    
+    if user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    template = await db.email_templates.find_one({"id": template_id}, {"_id": 0})
+    
+    if not template:
+        # Check if it's a default template
+        for default in DEFAULT_EMAIL_TEMPLATES:
+            if default["id"] == template_id:
+                return default
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    return template
+
+@api_router.put("/settings/email-templates/{template_id}")
+async def update_email_template(template_id: str, update: EmailTemplateUpdate, request: Request):
+    """Update an email template (Admin only)"""
+    user = await get_current_user(request)
+    
+    if user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Build update dict
+    update_dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if update.subject is not None:
+        update_dict["subject"] = update.subject
+    
+    if update.body is not None:
+        update_dict["body"] = update.body
+    
+    # Try to update existing
+    result = await db.email_templates.update_one(
+        {"id": template_id},
+        {"$set": update_dict}
+    )
+    
+    # If not found, create from default
+    if result.matched_count == 0:
+        for default in DEFAULT_EMAIL_TEMPLATES:
+            if default["id"] == template_id:
+                new_template = default.copy()
+                new_template.update(update_dict)
+                await db.email_templates.insert_one(new_template)
+                await log_system_action("email_template_updated", user, {"template_id": template_id})
+                return {"message": "Template updated", "template": new_template}
+        
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    await log_system_action("email_template_updated", user, {"template_id": template_id})
+    
+    # Return updated template
+    updated = await db.email_templates.find_one({"id": template_id}, {"_id": 0})
+    return {"message": "Template updated", "template": updated}
+
+@api_router.post("/settings/email-templates/{template_id}/reset")
+async def reset_email_template(template_id: str, request: Request):
+    """Reset an email template to default (Admin only)"""
+    user = await get_current_user(request)
+    
+    if user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Find default template
+    default = None
+    for d in DEFAULT_EMAIL_TEMPLATES:
+        if d["id"] == template_id:
+            default = d.copy()
+            break
+    
+    if not default:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    # Reset to default
+    default["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    await db.email_templates.update_one(
+        {"id": template_id},
+        {"$set": default},
+        upsert=True
+    )
+    
+    await log_system_action("email_template_reset", user, {"template_id": template_id})
+    
+    return {"message": "Template reset to default", "template": default}
+
+
 # ============ HEALTH CHECK ============
 
 @api_router.get("/")
