@@ -2476,6 +2476,8 @@ async def seed_projects(request: Request):
             "comments": generate_comments(user_ids[:3] if len(user_ids) >= 3 else user_ids, (now - timedelta(days=15)).isoformat()),
             "project_value": 2500000,
             "payment_schedule": default_schedule,
+            "custom_payment_schedule_enabled": False,
+            "custom_payment_schedule": [],
             "payments": generate_payments(2500000, 2, (now - timedelta(days=15)).isoformat(), user.user_id),
             "updated_at": (now - timedelta(hours=6)).isoformat(),
             "created_at": (now - timedelta(days=15)).isoformat()
@@ -2492,6 +2494,8 @@ async def seed_projects(request: Request):
             "comments": generate_comments(user_ids[:2] if len(user_ids) >= 2 else user_ids, (now - timedelta(days=30)).isoformat()),
             "project_value": 1800000,
             "payment_schedule": default_schedule,
+            "custom_payment_schedule_enabled": False,
+            "custom_payment_schedule": [],
             "payments": generate_payments(1800000, 3, (now - timedelta(days=30)).isoformat(), user.user_id),
             "updated_at": (now - timedelta(days=1)).isoformat(),
             "created_at": (now - timedelta(days=30)).isoformat()
@@ -2508,6 +2512,8 @@ async def seed_projects(request: Request):
             "comments": generate_comments(user_ids[:1] if len(user_ids) >= 1 else user_ids, (now - timedelta(days=60)).isoformat()),
             "project_value": 3200000,
             "payment_schedule": default_schedule,
+            "custom_payment_schedule_enabled": False,
+            "custom_payment_schedule": [],
             "payments": generate_payments(3200000, 3, (now - timedelta(days=60)).isoformat(), user.user_id),
             "updated_at": (now - timedelta(days=2)).isoformat(),
             "created_at": (now - timedelta(days=60)).isoformat()
@@ -2524,6 +2530,8 @@ async def seed_projects(request: Request):
             "comments": generate_comments(user_ids, (now - timedelta(days=10)).isoformat()),
             "project_value": 4500000,
             "payment_schedule": default_schedule,
+            "custom_payment_schedule_enabled": False,
+            "custom_payment_schedule": [],
             "payments": generate_payments(4500000, 2, (now - timedelta(days=10)).isoformat(), user.user_id),
             "updated_at": (now - timedelta(hours=12)).isoformat(),
             "created_at": (now - timedelta(days=10)).isoformat()
@@ -2540,6 +2548,8 @@ async def seed_projects(request: Request):
             "comments": generate_comments(user_ids[:1] if len(user_ids) >= 1 else user_ids, (now - timedelta(days=3)).isoformat()),
             "project_value": 1200000,
             "payment_schedule": default_schedule,
+            "custom_payment_schedule_enabled": False,
+            "custom_payment_schedule": [],
             "payments": generate_payments(1200000, 1, (now - timedelta(days=3)).isoformat(), user.user_id),
             "updated_at": (now - timedelta(days=3)).isoformat(),
             "created_at": (now - timedelta(days=3)).isoformat()
@@ -2556,6 +2566,8 @@ async def seed_projects(request: Request):
             "comments": generate_comments(user_ids[:2] if len(user_ids) >= 2 else user_ids, (now - timedelta(days=20)).isoformat()),
             "project_value": 1500000,
             "payment_schedule": default_schedule,
+            "custom_payment_schedule_enabled": False,
+            "custom_payment_schedule": [],
             "payments": generate_payments(1500000, 3, (now - timedelta(days=20)).isoformat(), user.user_id),
             "updated_at": (now - timedelta(hours=3)).isoformat(),
             "created_at": (now - timedelta(days=20)).isoformat()
@@ -2572,6 +2584,8 @@ async def seed_projects(request: Request):
             "comments": generate_comments(user_ids, (now - timedelta(days=45)).isoformat()),
             "project_value": 650000,
             "payment_schedule": default_schedule,
+            "custom_payment_schedule_enabled": False,
+            "custom_payment_schedule": [],
             "payments": generate_payments(650000, 3, (now - timedelta(days=45)).isoformat(), user.user_id),
             "updated_at": (now - timedelta(days=7)).isoformat(),
             "created_at": (now - timedelta(days=45)).isoformat()
