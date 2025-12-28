@@ -394,15 +394,29 @@ async def create_session(request: SessionRequest, response: Response):
         picture = auth_data.get("picture")
         session_token = auth_data["session_token"]
         
+        now = datetime.now(timezone.utc)
+        
         # Check if user exists
         existing_user = await db.users.find_one({"email": email}, {"_id": 0})
         
         if existing_user:
             user_id = existing_user["user_id"]
-            # Update user info if changed
+            
+            # Check if user is inactive
+            if existing_user.get("status") == "Inactive":
+                raise HTTPException(status_code=403, detail="Your account is inactive. Please contact an administrator.")
+            
+            # Update user info and last_login
+            initials = "".join([n[0].upper() for n in name.split()[:2]]) if name else "U"
             await db.users.update_one(
                 {"user_id": user_id},
-                {"$set": {"name": name, "picture": picture}}
+                {"$set": {
+                    "name": name, 
+                    "picture": picture,
+                    "initials": initials,
+                    "last_login": now.isoformat(),
+                    "updated_at": now.isoformat()
+                }}
             )
             role = existing_user["role"]
         else:
@@ -412,13 +426,19 @@ async def create_session(request: SessionRequest, response: Response):
             
             # Create new user
             user_id = f"user_{uuid.uuid4().hex[:12]}"
+            initials = "".join([n[0].upper() for n in name.split()[:2]]) if name else "U"
             new_user = {
                 "user_id": user_id,
                 "email": email,
                 "name": name,
                 "picture": picture,
                 "role": role,
-                "created_at": datetime.now(timezone.utc).isoformat()
+                "phone": None,
+                "status": "Active",
+                "initials": initials,
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+                "last_login": now.isoformat()
             }
             await db.users.insert_one(new_user)
         
