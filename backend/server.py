@@ -824,30 +824,6 @@ async def update_profile(update_data: ProfileUpdate, request: Request):
     updated_user = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
     return format_user_response(updated_user)
 
-@api_router.get("/users/active")
-async def get_active_users(request: Request):
-    """Get list of active users (for collaborator dropdowns)"""
-    user = await get_current_user(request)
-    
-    users = await db.users.find(
-        {"status": "Active"},
-        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "picture": 1}
-    ).to_list(1000)
-    
-    return users
-
-@api_router.get("/users/active/designers")
-async def get_active_designers(request: Request):
-    """Get list of active designers (for assignment dropdowns)"""
-    user = await get_current_user(request)
-    
-    designers = await db.users.find(
-        {"status": "Active", "role": "Designer"},
-        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "picture": 1}
-    ).to_list(1000)
-    
-    return designers
-
 # ============ LEGACY USER ENDPOINTS (keep for backwards compatibility) ============
 
 @api_router.get("/auth/users", response_model=List[UserResponse])
