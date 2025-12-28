@@ -2923,6 +2923,21 @@ def main():
         tester.test_update_email_template()
         tester.test_reset_email_template()
         
+        # Meeting System Tests
+        print("\n📅 Testing Meeting System API...")
+        tester.test_create_meeting_admin()
+        tester.test_create_meeting_designer()
+        tester.test_list_meetings_admin()
+        tester.test_list_meetings_with_filters()
+        tester.test_get_single_meeting()
+        tester.test_update_meeting()
+        tester.test_delete_meeting()
+        tester.test_project_meetings()
+        tester.test_lead_meetings()
+        tester.test_check_missed_meetings()
+        tester.test_calendar_events_with_meetings()
+        tester.test_meeting_role_based_access()
+        
         # Logout test (do this last as it invalidates session)
         tester.test_logout()
         
