@@ -483,11 +483,324 @@ async def logout(request: Request, response: Response):
     response.delete_cookie(key="session_token", path="/")
     return {"message": "Logged out successfully"}
 
-# ============ USER MANAGEMENT (Admin only) ============
+# ============ USER MANAGEMENT ============
+
+VALID_ROLES = ["Admin", "Manager", "Designer", "PreSales", "Trainee"]
+
+def format_user_response(user_doc):
+    """Format user document for API response"""
+    def format_dt(dt):
+        if dt is None:
+            return None
+        if isinstance(dt, datetime):
+            return dt.isoformat()
+        return str(dt) if dt else None
+    
+    return {
+        "user_id": user_doc.get("user_id"),
+        "email": user_doc.get("email"),
+        "name": user_doc.get("name"),
+        "picture": user_doc.get("picture"),
+        "role": user_doc.get("role", "Designer"),
+        "phone": user_doc.get("phone"),
+        "status": user_doc.get("status", "Active"),
+        "created_at": format_dt(user_doc.get("created_at")),
+        "updated_at": format_dt(user_doc.get("updated_at")),
+        "last_login": format_dt(user_doc.get("last_login"))
+    }
+
+@api_router.get("/users")
+async def list_all_users(
+    request: Request,
+    status: Optional[str] = None,
+    role: Optional[str] = None,
+    search: Optional[str] = None
+):
+    """List all users (Admin and Manager only)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Build query
+    query = {}
+    
+    if status and status != "all":
+        query["status"] = status
+    
+    if role and role != "all":
+        query["role"] = role
+    
+    users = await db.users.find(query, {"_id": 0}).to_list(1000)
+    
+    # Apply search filter
+    if search:
+        search_lower = search.lower()
+        users = [
+            u for u in users
+            if search_lower in u.get("name", "").lower()
+            or search_lower in u.get("email", "").lower()
+        ]
+    
+    # Sort by created_at descending
+    users.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    
+    return [format_user_response(u) for u in users]
+
+@api_router.get("/users/{user_id}")
+async def get_user_by_id(user_id: str, request: Request):
+    """Get single user by ID (Admin and Manager only)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return format_user_response(target_user)
+
+@api_router.post("/users/invite")
+async def invite_user(invite_data: UserInvite, request: Request):
+    """Invite a new user (Admin only)"""
+    user = await get_current_user(request)
+    
+    if user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Validate role
+    if invite_data.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {VALID_ROLES}")
+    
+    # Check if email already exists
+    existing = await db.users.find_one({"email": invite_data.email}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="User with this email already exists")
+    
+    now = datetime.now(timezone.utc)
+    new_user_id = f"user_{uuid.uuid4().hex[:12]}"
+    
+    # Generate avatar from initials if no picture
+    initials = "".join([n[0].upper() for n in invite_data.name.split()[:2]]) if invite_data.name else "U"
+    
+    new_user = {
+        "user_id": new_user_id,
+        "email": invite_data.email,
+        "name": invite_data.name,
+        "picture": None,  # Will be set when user logs in with Google
+        "role": invite_data.role,
+        "phone": invite_data.phone,
+        "status": "Active",
+        "initials": initials,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "last_login": None,
+        "invited_by": user.user_id
+    }
+    
+    await db.users.insert_one(new_user)
+    
+    return {
+        "message": f"Invite sent to {invite_data.email}",
+        "user_id": new_user_id,
+        "user": format_user_response(new_user)
+    }
+
+@api_router.put("/users/{user_id}")
+async def update_user(user_id: str, update_data: UserUpdate, request: Request):
+    """Update user details (Admin and Manager with restrictions)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Manager restrictions
+    if user.role == "Manager":
+        # Cannot edit Admin users
+        if target_user.get("role") == "Admin":
+            raise HTTPException(status_code=403, detail="Managers cannot edit Admin users")
+        
+        # Cannot edit other Managers
+        if target_user.get("role") == "Manager" and target_user.get("user_id") != user.user_id:
+            raise HTTPException(status_code=403, detail="Managers cannot edit other Managers")
+        
+        # Cannot change status
+        if update_data.status is not None:
+            raise HTTPException(status_code=403, detail="Managers cannot change user status")
+        
+        # Can only assign Designer, PreSales, or Trainee roles
+        if update_data.role and update_data.role not in ["Designer", "PreSales", "Trainee"]:
+            raise HTTPException(status_code=403, detail="Managers can only assign Designer, PreSales, or Trainee roles")
+    
+    # Validate role if provided
+    if update_data.role and update_data.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {VALID_ROLES}")
+    
+    # Validate status if provided
+    if update_data.status and update_data.status not in ["Active", "Inactive"]:
+        raise HTTPException(status_code=400, detail="Invalid status. Must be 'Active' or 'Inactive'")
+    
+    # Cannot deactivate yourself
+    if update_data.status == "Inactive" and user_id == user.user_id:
+        raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
+    
+    # Build update dict
+    update_dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if update_data.name is not None:
+        update_dict["name"] = update_data.name
+        # Update initials
+        initials = "".join([n[0].upper() for n in update_data.name.split()[:2]]) if update_data.name else "U"
+        update_dict["initials"] = initials
+    
+    if update_data.phone is not None:
+        update_dict["phone"] = update_data.phone
+    
+    if update_data.role is not None:
+        update_dict["role"] = update_data.role
+    
+    if update_data.status is not None:
+        update_dict["status"] = update_data.status
+    
+    if update_data.picture is not None:
+        update_dict["picture"] = update_data.picture
+    
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": update_dict}
+    )
+    
+    # Return updated user
+    updated_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    return format_user_response(updated_user)
+
+@api_router.put("/users/{user_id}/status")
+async def toggle_user_status(user_id: str, request: Request):
+    """Toggle user status Active/Inactive (Admin only)"""
+    user = await get_current_user(request)
+    
+    if user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Cannot deactivate yourself
+    if user_id == user.user_id:
+        raise HTTPException(status_code=400, detail="Cannot change your own status")
+    
+    current_status = target_user.get("status", "Active")
+    new_status = "Inactive" if current_status == "Active" else "Active"
+    
+    await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"status": new_status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {"message": f"User status changed to {new_status}", "status": new_status}
+
+@api_router.delete("/users/{user_id}")
+async def delete_user(user_id: str, request: Request):
+    """Delete a user (Admin only)"""
+    user = await get_current_user(request)
+    
+    if user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Cannot delete yourself
+    if user_id == user.user_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    result = await db.users.delete_one({"user_id": user_id})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Also delete user sessions
+    await db.user_sessions.delete_many({"user_id": user_id})
+    
+    return {"message": "User deleted successfully"}
+
+# ============ PROFILE ENDPOINTS ============
+
+@api_router.get("/profile")
+async def get_profile(request: Request):
+    """Get current user profile"""
+    user = await get_current_user(request)
+    
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return format_user_response(user_doc)
+
+@api_router.put("/profile")
+async def update_profile(update_data: ProfileUpdate, request: Request):
+    """Update current user profile"""
+    user = await get_current_user(request)
+    
+    update_dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if update_data.name is not None:
+        update_dict["name"] = update_data.name
+        # Update initials
+        initials = "".join([n[0].upper() for n in update_data.name.split()[:2]]) if update_data.name else "U"
+        update_dict["initials"] = initials
+    
+    if update_data.phone is not None:
+        update_dict["phone"] = update_data.phone
+    
+    if update_data.picture is not None:
+        update_dict["picture"] = update_data.picture
+    
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": update_dict}
+    )
+    
+    # Return updated profile
+    updated_user = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    return format_user_response(updated_user)
+
+@api_router.get("/users/active")
+async def get_active_users(request: Request):
+    """Get list of active users (for collaborator dropdowns)"""
+    user = await get_current_user(request)
+    
+    users = await db.users.find(
+        {"status": "Active"},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "picture": 1}
+    ).to_list(1000)
+    
+    return users
+
+@api_router.get("/users/active/designers")
+async def get_active_designers(request: Request):
+    """Get list of active designers (for assignment dropdowns)"""
+    user = await get_current_user(request)
+    
+    designers = await db.users.find(
+        {"status": "Active", "role": "Designer"},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "picture": 1}
+    ).to_list(1000)
+    
+    return designers
+
+# ============ LEGACY USER ENDPOINTS (keep for backwards compatibility) ============
 
 @api_router.get("/auth/users", response_model=List[UserResponse])
 async def list_users(request: Request):
-    """List all users (Admin only)"""
+    """List all users (Admin only) - Legacy endpoint"""
     await require_admin(request)
     
     users = await db.users.find({}, {"_id": 0}).to_list(1000)
@@ -496,21 +809,22 @@ async def list_users(request: Request):
         email=u["email"],
         name=u["name"],
         picture=u.get("picture"),
-        role=u["role"]
+        role=u["role"],
+        phone=u.get("phone"),
+        status=u.get("status", "Active")
     ) for u in users]
 
 @api_router.put("/auth/users/{user_id}/role")
 async def update_user_role(user_id: str, role_update: RoleUpdateRequest, request: Request):
-    """Update user role (Admin only)"""
+    """Update user role (Admin only) - Legacy endpoint"""
     await require_admin(request)
     
-    valid_roles = ["Admin", "PreSales", "Designer", "Manager"]
-    if role_update.role not in valid_roles:
-        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {valid_roles}")
+    if role_update.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {VALID_ROLES}")
     
     result = await db.users.update_one(
         {"user_id": user_id},
-        {"$set": {"role": role_update.role}}
+        {"$set": {"role": role_update.role, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
     
     if result.matched_count == 0:
