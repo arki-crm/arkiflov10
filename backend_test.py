@@ -599,7 +599,7 @@ db.user_sessions.insertOne({{
                 # Try to delete as designer (should fail)
                 return self.run_test("Delete File (Designer - Should Fail)", "DELETE", 
                                    f"api/projects/{project_id}/files/{file_id}", 403,
-                                   auth_token=self.designer_token)
+                                   auth_token=self.pure_designer_token)
             else:
                 print("⚠️  Failed to upload test file for designer delete test")
                 return False, {}
