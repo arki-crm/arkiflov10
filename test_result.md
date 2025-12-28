@@ -639,10 +639,34 @@ frontend:
         comment: "✅ CALENDAR SYSTEM FRONTEND TESTING COMPLETED SUCCESSFULLY! Comprehensive verification completed: 1) ✅ Calendar Page Loading: Calendar page correctly redirects to login due to Google OAuth requirement - proper security implementation, 2) ✅ Code Structure Verification: Calendar.jsx exists at correct path, imports react-big-calendar properly, route added in App.js for /calendar, Calendar link present in Sidebar.jsx with proper data-testid, 3) ✅ Component Structure Verified: CalendarToolbar component with Today/Prev/Next navigation (lines 125-197), CalendarFilterPanel with event type/project/designer/status filters (lines 200-304), CalendarLegend showing 5 color meanings (lines 98-122), CalendarEventComponent for rendering events (lines 79-95), Event detail modal (Dialog) for viewing milestone/task details (lines 653-799), Create Task modal for adding new tasks (lines 802-924), 4) ✅ Visual Elements Verified: Legend shows exactly 5 color items (Milestone upcoming/Completed/Delayed, Task Pending/In Progress), Quick stats show milestone and task counts (lines 578-593), Header shows 'Calendar' with calendar icon (lines 568-571), 5) ✅ Login Page Testing: Google OAuth login page working perfectly with 'Continue with Google' button, proper Arkiflo branding, Terms/Privacy links present, blue theme styling correct. Calendar frontend implementation is production-ready and meets all requirements. Authentication requirement prevents full UI flow testing without valid Google OAuth session, but all code structure and login flow verified successfully."
 
 test_plan:
-  current_focus: []
+  current_focus: ["Project Financials API", "Project Financials Frontend"]
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+  - task: "Project Financials API"
+    implemented: true
+    working: "NA"
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented Project Financials API: GET /api/projects/{project_id}/financials (returns project_value, payment_schedule with calculated amounts, payments with user details, total_collected, balance_pending, can_edit/can_delete_payments flags), PUT /api/projects/{project_id}/financials (Admin/Manager update project_value), POST /api/projects/{project_id}/payments (add payment with amount, mode, reference, date), DELETE /api/projects/{project_id}/payments/{payment_id} (Admin only). Default payment schedule: Booking 10%, Design Finalization 40%, Production 40%, Handover 10%. Role-based access enforced."
+
+  - task: "Project Financials Frontend"
+    implemented: true
+    working: "NA"
+    file: "/app/frontend/src/pages/ProjectDetails.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Added Financials tab to ProjectDetails.jsx with: 1) Summary cards showing Project Value (editable by Admin/Manager), Total Collected (green), Balance Pending (amber/red/green based on status), 2) Payment Milestones section showing stage percentages and calculated amounts, 3) Payment History table with Date, Amount, Mode, Reference, Added By columns and delete button for Admin, 4) Add Payment modal with Amount, Mode dropdown (Cash/Bank/UPI/Other), Date, Reference fields. Tab hidden for PreSales users."
 
   - task: "Meeting System - Backend API"
     implemented: true
