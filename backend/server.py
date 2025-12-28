@@ -1609,24 +1609,8 @@ async def convert_to_project(lead_id: str, request: Request):
     now = datetime.now(timezone.utc)
     project_id = f"proj_{uuid.uuid4().hex[:8]}"
     
-    # Generate project timeline
-    project_timeline = []
-    day_offset = 0
-    for stage_name in STAGE_ORDER:
-        milestones = MILESTONE_GROUPS.get(stage_name, [])
-        for milestone in milestones:
-            project_timeline.append({
-                "id": f"tl_{uuid.uuid4().hex[:6]}",
-                "title": milestone,
-                "date": (now + timedelta(days=day_offset)).isoformat(),
-                "status": "pending",
-                "stage_ref": stage_name
-            })
-            day_offset += 3
-    
-    # Mark first milestone as completed
-    if project_timeline:
-        project_timeline[0]["status"] = "completed"
+    # Generate project timeline with TAT-aware expected dates
+    project_timeline = generate_project_timeline("Design Finalization", now.isoformat())
     
     # Copy comments and add conversion system comment
     project_comments = lead.get("comments", []).copy()
