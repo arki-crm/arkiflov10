@@ -1596,6 +1596,299 @@ const ProjectDetails = () => {
         </Card>
       )}
 
+      {/* Financials Tab */}
+      {activeTab === 'financials' && user?.role !== 'PreSales' && (
+        <div className="space-y-6">
+          {loadingFinancials ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+            </div>
+          ) : financials ? (
+            <>
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Project Value Card */}
+                <Card className="border-slate-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-slate-500">Project Value</span>
+                      {financials.can_edit && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingProjectValue(true)}
+                          className="h-7 text-xs"
+                        >
+                          <Edit2 className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                      )}
+                    </div>
+                    {editingProjectValue ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center">
+                          <span className="text-lg font-bold text-slate-400 mr-1">₹</span>
+                          <Input
+                            type="number"
+                            value={newProjectValue}
+                            onChange={(e) => setNewProjectValue(e.target.value)}
+                            className="w-32 h-8"
+                            placeholder="0"
+                          />
+                        </div>
+                        <Button size="sm" onClick={handleUpdateProjectValue} className="h-8">
+                          <Check className="h-4 w-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingProjectValue(false)} className="h-8">
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-2xl font-bold text-slate-900">
+                        ₹{financials.project_value?.toLocaleString('en-IN') || '0'}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Total Collected Card */}
+                <Card className="border-slate-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Wallet className="h-4 w-4 text-emerald-600" />
+                      <span className="text-sm text-slate-500">Total Collected</span>
+                    </div>
+                    <p className="text-2xl font-bold text-emerald-600">
+                      ₹{financials.total_collected?.toLocaleString('en-IN') || '0'}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* Balance Pending Card */}
+                <Card className="border-slate-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Receipt className="h-4 w-4 text-amber-600" />
+                      <span className="text-sm text-slate-500">Balance Pending</span>
+                    </div>
+                    <p className={cn(
+                      "text-2xl font-bold",
+                      financials.balance_pending <= 0 ? "text-emerald-600" : "text-amber-600",
+                      financials.balance_pending < 0 && "text-red-600"
+                    )}>
+                      ₹{Math.abs(financials.balance_pending)?.toLocaleString('en-IN') || '0'}
+                      {financials.balance_pending < 0 && <span className="text-sm ml-1">(Overpaid)</span>}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Payment Schedule */}
+              <Card className="border-slate-200">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <IndianRupee className="h-5 w-5 text-emerald-600" />
+                    Payment Milestones
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {financials.payment_schedule?.map((milestone, index) => (
+                      <div key={index} className="p-3 bg-slate-50 rounded-lg">
+                        <p className="text-sm font-medium text-slate-700">{milestone.stage}</p>
+                        <p className="text-xs text-slate-500">{milestone.percentage}%</p>
+                        <p className="text-lg font-bold text-slate-900 mt-1">
+                          ₹{milestone.amount?.toLocaleString('en-IN') || '0'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Payment History */}
+              <Card className="border-slate-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Receipt className="h-5 w-5 text-emerald-600" />
+                      Payment History
+                    </CardTitle>
+                    {financials.can_edit && (
+                      <Button 
+                        size="sm"
+                        onClick={() => setShowAddPaymentModal(true)}
+                        className="bg-emerald-600 hover:bg-emerald-700"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Payment
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {financials.payments?.length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <Receipt className="h-10 w-10 mx-auto text-slate-300 mb-3" />
+                      <p>No payments recorded yet</p>
+                      {financials.can_edit && (
+                        <Button 
+                          variant="link" 
+                          onClick={() => setShowAddPaymentModal(true)}
+                          className="text-emerald-600 mt-2"
+                        >
+                          Record your first payment
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200">
+                            <th className="text-left py-2 px-3 text-slate-500 font-medium">Date</th>
+                            <th className="text-right py-2 px-3 text-slate-500 font-medium">Amount</th>
+                            <th className="text-left py-2 px-3 text-slate-500 font-medium">Mode</th>
+                            <th className="text-left py-2 px-3 text-slate-500 font-medium">Reference</th>
+                            <th className="text-left py-2 px-3 text-slate-500 font-medium">Added By</th>
+                            {financials.can_delete_payments && (
+                              <th className="text-center py-2 px-3 text-slate-500 font-medium">Actions</th>
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {financials.payments?.map((payment) => (
+                            <tr key={payment.id} className="border-b border-slate-100 hover:bg-slate-50">
+                              <td className="py-3 px-3 text-slate-700">
+                                {new Date(payment.date).toLocaleDateString('en-IN', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })}
+                              </td>
+                              <td className="py-3 px-3 text-right font-medium text-emerald-600">
+                                ₹{payment.amount?.toLocaleString('en-IN')}
+                              </td>
+                              <td className="py-3 px-3">
+                                <Badge variant="secondary" className="text-xs">
+                                  {payment.mode}
+                                </Badge>
+                              </td>
+                              <td className="py-3 px-3 text-slate-600">
+                                {payment.reference || '-'}
+                              </td>
+                              <td className="py-3 px-3 text-slate-600">
+                                {payment.added_by_name || 'Unknown'}
+                              </td>
+                              {financials.can_delete_payments && (
+                                <td className="py-3 px-3 text-center">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDeletePayment(payment.id)}
+                                    className="h-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <div className="text-center py-12 text-slate-500">
+              <AlertCircle className="h-10 w-10 mx-auto text-slate-300 mb-3" />
+              <p>Unable to load financial data</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add Payment Modal */}
+      <Dialog open={showAddPaymentModal} onOpenChange={setShowAddPaymentModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <IndianRupee className="h-5 w-5 text-emerald-600" />
+              Add Payment
+            </DialogTitle>
+            <DialogDescription>
+              Record a new payment for this project
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="payment-amount">Amount *</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">₹</span>
+                <Input
+                  id="payment-amount"
+                  type="number"
+                  value={newPayment.amount}
+                  onChange={(e) => setNewPayment(prev => ({ ...prev, amount: e.target.value }))}
+                  placeholder="0"
+                  className="pl-8"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <Label htmlFor="payment-mode">Payment Mode</Label>
+              <Select
+                value={newPayment.mode}
+                onValueChange={(value) => setNewPayment(prev => ({ ...prev, mode: value }))}
+              >
+                <SelectTrigger id="payment-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Cash">Cash</SelectItem>
+                  <SelectItem value="Bank">Bank Transfer</SelectItem>
+                  <SelectItem value="UPI">UPI</SelectItem>
+                  <SelectItem value="Other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="payment-date">Date</Label>
+              <Input
+                id="payment-date"
+                type="date"
+                value={newPayment.date}
+                onChange={(e) => setNewPayment(prev => ({ ...prev, date: e.target.value }))}
+              />
+            </div>
+            
+            <div>
+              <Label htmlFor="payment-reference">Reference (Optional)</Label>
+              <Input
+                id="payment-reference"
+                value={newPayment.reference}
+                onChange={(e) => setNewPayment(prev => ({ ...prev, reference: e.target.value }))}
+                placeholder="Transaction ID or cheque number"
+              />
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAddPaymentModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddPayment} className="bg-emerald-600 hover:bg-emerald-700">
+              Add Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Meeting Modal */}
       <MeetingModal
         open={showMeetingModal}
