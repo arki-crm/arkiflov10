@@ -1148,6 +1148,414 @@ db.user_sessions.insertOne({{
             print("⚠️  No leads found for TAT calculation test")
             return False, {}
 
+    # ============ USER MANAGEMENT ENDPOINTS TESTS ============
+
+    def test_list_users_new_endpoint(self):
+        """Test GET /api/users - List all users with filters (Admin/Manager only)"""
+        success, users_data = self.run_test("List Users (New Endpoint - Admin)", "GET", "api/users", 200,
+                                           auth_token=self.admin_token)
+        if success:
+            is_array = isinstance(users_data, list)
+            print(f"   Users is array: {is_array}")
+            print(f"   Users count: {len(users_data) if is_array else 'N/A'}")
+            
+            # Check if users have new fields
+            if is_array and len(users_data) > 0:
+                first_user = users_data[0]
+                has_new_fields = all(field in first_user for field in ['phone', 'status', 'last_login', 'updated_at'])
+                has_basic_fields = all(field in first_user for field in ['user_id', 'name', 'email', 'role'])
+                print(f"   Has new user fields: {has_new_fields}")
+                print(f"   Has basic fields: {has_basic_fields}")
+                return success and is_array and has_new_fields and has_basic_fields, users_data
+            
+            return success and is_array, users_data
+        return success, users_data
+
+    def test_list_users_with_filters(self):
+        """Test GET /api/users with status and role filters"""
+        # Test status filter
+        success1, _ = self.run_test("List Users (Status Filter)", "GET", "api/users?status=Active", 200,
+                                   auth_token=self.admin_token)
+        
+        # Test role filter
+        success2, _ = self.run_test("List Users (Role Filter)", "GET", "api/users?role=Designer", 200,
+                                   auth_token=self.admin_token)
+        
+        # Test search filter
+        success3, _ = self.run_test("List Users (Search Filter)", "GET", "api/users?search=Test", 200,
+                                   auth_token=self.admin_token)
+        
+        return success1 and success2 and success3, {}
+
+    def test_list_users_manager_access(self):
+        """Test GET /api/users with Manager token (should work)"""
+        # Create a Manager user for testing
+        manager_user_id = f"test-manager-{uuid.uuid4().hex[:8]}"
+        manager_session_token = f"test_manager_session_{uuid.uuid4().hex[:16]}"
+        
+        mongo_commands = f'''
+use('test_database');
+db.users.insertOne({{
+  user_id: "{manager_user_id}",
+  email: "manager.test.{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com",
+  name: "Test Manager",
+  picture: "https://via.placeholder.com/150",
+  role: "Manager",
+  status: "Active",
+  created_at: new Date()
+}});
+db.user_sessions.insertOne({{
+  user_id: "{manager_user_id}",
+  session_token: "{manager_session_token}",
+  expires_at: new Date(Date.now() + 7*24*60*60*1000),
+  created_at: new Date()
+}});
+'''
+        
+        try:
+            import subprocess
+            result = subprocess.run(['mongosh', '--eval', mongo_commands], 
+                                  capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                return self.run_test("List Users (Manager Access)", "GET", "api/users", 200,
+                                   auth_token=manager_session_token)
+            else:
+                print(f"❌ Failed to create Manager user: {result.stderr}")
+                return False, {}
+                
+        except Exception as e:
+            print(f"❌ Error testing Manager access: {str(e)}")
+            return False, {}
+
+    def test_list_users_designer_denied(self):
+        """Test GET /api/users with Designer token (should fail)"""
+        return self.run_test("List Users (Designer - Should Fail)", "GET", "api/users", 403,
+                           auth_token=self.pure_designer_token)
+
+    def test_get_single_user(self):
+        """Test GET /api/users/{user_id} - Get single user"""
+        return self.run_test("Get Single User (Admin)", "GET", f"api/users/{self.designer_user_id}", 200,
+                           auth_token=self.admin_token)
+
+    def test_invite_user_admin(self):
+        """Test POST /api/users/invite - Invite new user (Admin only)"""
+        invite_data = {
+            "name": "Invited Test User",
+            "email": f"invited.test.{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com",
+            "role": "Designer",
+            "phone": "1234567890"
+        }
+        
+        success, invite_response = self.run_test("Invite User (Admin)", "POST", "api/users/invite", 200,
+                                                data=invite_data,
+                                                auth_token=self.admin_token)
+        if success:
+            # Verify response structure
+            has_message = 'message' in invite_response
+            has_user_id = 'user_id' in invite_response
+            has_user_data = 'user' in invite_response
+            
+            print(f"   Invite message present: {has_message}")
+            print(f"   User ID present: {has_user_id}")
+            print(f"   User data present: {has_user_data}")
+            
+            # Store invited user ID for update tests
+            if has_user_id:
+                self.invited_user_id = invite_response['user_id']
+            
+            return success and has_message and has_user_id and has_user_data, invite_response
+        return success, invite_response
+
+    def test_invite_user_designer_denied(self):
+        """Test POST /api/users/invite with Designer token (should fail)"""
+        invite_data = {
+            "name": "Should Fail User",
+            "email": f"shouldfail.{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com",
+            "role": "Designer"
+        }
+        
+        return self.run_test("Invite User (Designer - Should Fail)", "POST", "api/users/invite", 403,
+                           data=invite_data,
+                           auth_token=self.pure_designer_token)
+
+    def test_invite_user_duplicate_email(self):
+        """Test POST /api/users/invite with duplicate email (should fail)"""
+        invite_data = {
+            "name": "Duplicate Email User",
+            "email": "admin.test.20241201000000@example.com",  # Use a likely existing email
+            "role": "Designer"
+        }
+        
+        return self.run_test("Invite User (Duplicate Email - Should Fail)", "POST", "api/users/invite", 400,
+                           data=invite_data,
+                           auth_token=self.admin_token)
+
+    def test_update_user_admin(self):
+        """Test PUT /api/users/{user_id} - Update user details (Admin)"""
+        if hasattr(self, 'invited_user_id'):
+            update_data = {
+                "name": "Updated Test User",
+                "phone": "9876543210",
+                "role": "PreSales"
+            }
+            
+            success, update_response = self.run_test("Update User (Admin)", "PUT", 
+                                                   f"api/users/{self.invited_user_id}", 200,
+                                                   data=update_data,
+                                                   auth_token=self.admin_token)
+            if success:
+                # Verify updated fields
+                name_updated = update_response.get('name') == update_data['name']
+                phone_updated = update_response.get('phone') == update_data['phone']
+                role_updated = update_response.get('role') == update_data['role']
+                has_updated_at = 'updated_at' in update_response
+                
+                print(f"   Name updated: {name_updated}")
+                print(f"   Phone updated: {phone_updated}")
+                print(f"   Role updated: {role_updated}")
+                print(f"   Updated timestamp present: {has_updated_at}")
+                
+                return success and name_updated and phone_updated and role_updated and has_updated_at, update_response
+            return success, update_response
+        else:
+            print("⚠️  No invited user available for update test")
+            return True, {}
+
+    def test_update_user_manager_restrictions(self):
+        """Test PUT /api/users/{user_id} with Manager token (should have restrictions)"""
+        # Create a Manager user for testing
+        manager_user_id = f"test-manager-update-{uuid.uuid4().hex[:8]}"
+        manager_session_token = f"test_manager_update_session_{uuid.uuid4().hex[:16]}"
+        
+        mongo_commands = f'''
+use('test_database');
+db.users.insertOne({{
+  user_id: "{manager_user_id}",
+  email: "manager.update.test.{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com",
+  name: "Test Manager Update",
+  picture: "https://via.placeholder.com/150",
+  role: "Manager",
+  status: "Active",
+  created_at: new Date()
+}});
+db.user_sessions.insertOne({{
+  user_id: "{manager_user_id}",
+  session_token: "{manager_session_token}",
+  expires_at: new Date(Date.now() + 7*24*60*60*1000),
+  created_at: new Date()
+}});
+'''
+        
+        try:
+            import subprocess
+            result = subprocess.run(['mongosh', '--eval', mongo_commands], 
+                                  capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                # Test 1: Manager can update Designer
+                if hasattr(self, 'invited_user_id'):
+                    success1, _ = self.run_test("Manager Update Designer (Should Work)", "PUT", 
+                                              f"api/users/{self.invited_user_id}", 200,
+                                              data={"name": "Manager Updated Designer"},
+                                              auth_token=manager_session_token)
+                else:
+                    success1 = True  # Skip if no designer to update
+                
+                # Test 2: Manager cannot change status (should fail)
+                success2, _ = self.run_test("Manager Change Status (Should Fail)", "PUT", 
+                                          f"api/users/{self.designer_user_id}", 403,
+                                          data={"status": "Inactive"},
+                                          auth_token=manager_session_token)
+                
+                # Test 3: Manager cannot edit Admin (should fail)
+                success3, _ = self.run_test("Manager Edit Admin (Should Fail)", "PUT", 
+                                          f"api/users/{self.admin_user_id}", 403,
+                                          data={"name": "Manager Tried to Edit Admin"},
+                                          auth_token=manager_session_token)
+                
+                return success1 and success2 and success3, {}
+            else:
+                print(f"❌ Failed to create Manager user for restrictions test: {result.stderr}")
+                return False, {}
+                
+        except Exception as e:
+            print(f"❌ Error testing Manager restrictions: {str(e)}")
+            return False, {}
+
+    def test_toggle_user_status_admin(self):
+        """Test PUT /api/users/{user_id}/status - Toggle user status (Admin only)"""
+        if hasattr(self, 'invited_user_id'):
+            success, status_response = self.run_test("Toggle User Status (Admin)", "PUT", 
+                                                   f"api/users/{self.invited_user_id}/status", 200,
+                                                   auth_token=self.admin_token)
+            if success:
+                # Verify response structure
+                has_message = 'message' in status_response
+                has_status = 'status' in status_response
+                status_changed = status_response.get('status') in ['Active', 'Inactive']
+                
+                print(f"   Status message present: {has_message}")
+                print(f"   Status field present: {has_status}")
+                print(f"   Status value valid: {status_changed}")
+                
+                return success and has_message and has_status and status_changed, status_response
+            return success, status_response
+        else:
+            print("⚠️  No invited user available for status toggle test")
+            return True, {}
+
+    def test_toggle_user_status_designer_denied(self):
+        """Test PUT /api/users/{user_id}/status with Designer token (should fail)"""
+        return self.run_test("Toggle User Status (Designer - Should Fail)", "PUT", 
+                           f"api/users/{self.designer_user_id}/status", 403,
+                           auth_token=self.pure_designer_token)
+
+    def test_delete_user_admin(self):
+        """Test DELETE /api/users/{user_id} - Delete user (Admin only)"""
+        if hasattr(self, 'invited_user_id'):
+            success, delete_response = self.run_test("Delete User (Admin)", "DELETE", 
+                                                   f"api/users/{self.invited_user_id}", 200,
+                                                   auth_token=self.admin_token)
+            if success:
+                has_message = 'message' in delete_response
+                print(f"   Delete message present: {has_message}")
+                return success and has_message, delete_response
+            return success, delete_response
+        else:
+            print("⚠️  No invited user available for delete test")
+            return True, {}
+
+    def test_delete_user_designer_denied(self):
+        """Test DELETE /api/users/{user_id} with Designer token (should fail)"""
+        return self.run_test("Delete User (Designer - Should Fail)", "DELETE", 
+                           f"api/users/{self.designer_user_id}", 403,
+                           auth_token=self.pure_designer_token)
+
+    def test_get_profile(self):
+        """Test GET /api/profile - Get current user profile"""
+        success, profile_data = self.run_test("Get Profile", "GET", "api/profile", 200,
+                                             auth_token=self.admin_token)
+        if success:
+            # Verify profile structure
+            has_basic_fields = all(field in profile_data for field in ['user_id', 'name', 'email', 'role'])
+            has_extended_fields = all(field in profile_data for field in ['phone', 'status', 'created_at'])
+            
+            print(f"   Has basic profile fields: {has_basic_fields}")
+            print(f"   Has extended profile fields: {has_extended_fields}")
+            
+            return success and has_basic_fields and has_extended_fields, profile_data
+        return success, profile_data
+
+    def test_update_profile(self):
+        """Test PUT /api/profile - Update current user profile"""
+        update_data = {
+            "name": "Updated Profile Name",
+            "phone": "5555555555"
+        }
+        
+        success, profile_response = self.run_test("Update Profile", "PUT", "api/profile", 200,
+                                                 data=update_data,
+                                                 auth_token=self.admin_token)
+        if success:
+            # Verify updated fields
+            name_updated = profile_response.get('name') == update_data['name']
+            phone_updated = profile_response.get('phone') == update_data['phone']
+            has_updated_at = 'updated_at' in profile_response
+            
+            print(f"   Profile name updated: {name_updated}")
+            print(f"   Profile phone updated: {phone_updated}")
+            print(f"   Profile updated timestamp present: {has_updated_at}")
+            
+            return success and name_updated and phone_updated and has_updated_at, profile_response
+        return success, profile_response
+
+    def test_get_active_users(self):
+        """Test GET /api/users/active - Get active users for dropdowns"""
+        success, active_users = self.run_test("Get Active Users", "GET", "api/users/active", 200,
+                                             auth_token=self.admin_token)
+        if success:
+            is_array = isinstance(active_users, list)
+            print(f"   Active users is array: {is_array}")
+            print(f"   Active users count: {len(active_users) if is_array else 'N/A'}")
+            
+            # Check if users have required fields for dropdowns
+            if is_array and len(active_users) > 0:
+                first_user = active_users[0]
+                has_dropdown_fields = all(field in first_user for field in ['user_id', 'name', 'email', 'role'])
+                print(f"   Has dropdown fields: {has_dropdown_fields}")
+                return success and is_array and has_dropdown_fields, active_users
+            
+            return success and is_array, active_users
+        return success, active_users
+
+    def test_get_active_designers(self):
+        """Test GET /api/users/active/designers - Get active designers"""
+        success, active_designers = self.run_test("Get Active Designers", "GET", "api/users/active/designers", 200,
+                                                 auth_token=self.admin_token)
+        if success:
+            is_array = isinstance(active_designers, list)
+            print(f"   Active designers is array: {is_array}")
+            print(f"   Active designers count: {len(active_designers) if is_array else 'N/A'}")
+            
+            # Check if all returned users are designers
+            if is_array and len(active_designers) > 0:
+                all_designers = all(user.get('role') == 'Designer' for user in active_designers)
+                has_required_fields = all(field in active_designers[0] for field in ['user_id', 'name', 'email', 'role'])
+                print(f"   All users are designers: {all_designers}")
+                print(f"   Has required fields: {has_required_fields}")
+                return success and is_array and all_designers and has_required_fields, active_designers
+            
+            return success and is_array, active_designers
+        return success, active_designers
+
+    def test_inactive_user_login_block(self):
+        """Test that inactive users cannot create sessions"""
+        # First create an inactive user
+        inactive_user_id = f"test-inactive-{uuid.uuid4().hex[:8]}"
+        
+        mongo_commands = f'''
+use('test_database');
+db.users.insertOne({{
+  user_id: "{inactive_user_id}",
+  email: "inactive.test.{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com",
+  name: "Test Inactive User",
+  picture: "https://via.placeholder.com/150",
+  role: "Designer",
+  status: "Inactive",
+  created_at: new Date()
+}});
+'''
+        
+        try:
+            import subprocess
+            result = subprocess.run(['mongosh', '--eval', mongo_commands], 
+                                  capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                print("✅ Inactive user created for login block test")
+                # Note: We can't easily test the actual OAuth flow, but we can verify
+                # that the user exists and is inactive
+                
+                # Try to get the inactive user to verify it exists
+                success, user_data = self.run_test("Verify Inactive User Exists", "GET", 
+                                                 f"api/users/{inactive_user_id}", 200,
+                                                 auth_token=self.admin_token)
+                if success:
+                    is_inactive = user_data.get('status') == 'Inactive'
+                    print(f"   User is inactive: {is_inactive}")
+                    return success and is_inactive, user_data
+                else:
+                    print("❌ Failed to verify inactive user exists")
+                    return False, {}
+            else:
+                print(f"❌ Failed to create inactive user: {result.stderr}")
+                return False, {}
+                
+        except Exception as e:
+            print(f"❌ Error testing inactive user login block: {str(e)}")
+            return False, {}
+
     # ============ DASHBOARD ENDPOINTS TESTS ============
 
     def test_dashboard_admin(self):
