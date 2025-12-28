@@ -461,6 +461,11 @@ const LeadDetails = () => {
   const [loadingDesigners, setLoadingDesigners] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [converting, setConverting] = useState(false);
+  
+  // Meetings state
+  const [meetings, setMeetings] = useState([]);
+  const [loadingMeetings, setLoadingMeetings] = useState(false);
+  const [showMeetingModal, setShowMeetingModal] = useState(false);
 
   // Fetch lead
   const fetchLead = async () => {
