@@ -316,6 +316,19 @@ def main():
         tester.test_update_user_role_designer()
         tester.test_update_user_role_invalid()
         
+        # Project tests
+        print("\n📁 Testing Project Endpoints...")
+        tester.test_seed_projects_admin()
+        tester.test_seed_projects_designer()
+        tester.test_list_projects_admin()
+        tester.test_list_projects_designer()
+        tester.test_list_projects_no_auth()
+        tester.test_list_projects_with_stage_filter()
+        tester.test_list_projects_with_search()
+        tester.test_get_single_project_admin()
+        tester.test_get_single_project_designer()
+        tester.test_get_nonexistent_project()
+        
         # Logout test (do this last as it invalidates session)
         tester.test_logout()
         
