@@ -491,9 +491,39 @@ const LeadDetails = () => {
   useEffect(() => {
     if (id) {
       fetchLead();
+      fetchMeetings();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Fetch meetings for this lead
+  const fetchMeetings = async () => {
+    try {
+      setLoadingMeetings(true);
+      const response = await axios.get(`${API}/leads/${id}/meetings`, {
+        withCredentials: true
+      });
+      setMeetings(response.data || []);
+    } catch (err) {
+      console.error('Failed to fetch meetings:', err);
+    } finally {
+      setLoadingMeetings(false);
+    }
+  };
+
+  // Handle meeting status update
+  const handleMeetingStatusUpdate = async (meetingId, status) => {
+    try {
+      await axios.put(`${API}/meetings/${meetingId}`, { status }, {
+        withCredentials: true
+      });
+      toast.success(`Meeting ${status.toLowerCase()}`);
+      fetchMeetings();
+    } catch (err) {
+      console.error('Failed to update meeting:', err);
+      toast.error('Failed to update meeting');
+    }
+  };
 
   // Add comment
   const handleAddComment = async (message) => {
