@@ -1072,9 +1072,15 @@ const CustomPaymentScheduleEditor = ({ schedule, projectValue, canEdit, onSave }
   const [localSchedule, setLocalSchedule] = useState(schedule || []);
   const [saving, setSaving] = useState(false);
 
+  // Sync local state when schedule prop changes
+  const scheduleJson = JSON.stringify(schedule);
   useEffect(() => {
-    setLocalSchedule(schedule || []);
-  }, [schedule]);
+    const parsed = schedule || [];
+    if (JSON.stringify(localSchedule) !== JSON.stringify(parsed)) {
+      setLocalSchedule(parsed);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduleJson]);
 
   const addStage = () => {
     setLocalSchedule([...localSchedule, {
@@ -1281,7 +1287,7 @@ const CustomPaymentScheduleEditor = ({ schedule, projectValue, canEdit, onSave }
           )}
           {hasMultipleRemaining() && (
             <p className="text-sm text-red-600">
-              ⚠️ Only one "remaining" stage is allowed
+              ⚠️ Only one &quot;remaining&quot; stage is allowed
             </p>
           )}
 
