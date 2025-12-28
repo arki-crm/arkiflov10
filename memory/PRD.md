@@ -62,11 +62,29 @@ Build the foundational structure for a web application named "Arkiflo", designed
 - ✅ System-generated comments for stage changes
 - ✅ Stage selector with visual progress indicator
 - ✅ Stage change auto-updates timeline and generates system comment
-- ✅ Files tab placeholder
-- ✅ Notes tab placeholder
-- ✅ Collaborators tab with team list (disabled add/remove for now)
 - ✅ PreSales redirect to dashboard with "Access denied" toast
 - ✅ Designer can only access/modify assigned projects
+
+### December 28, 2025 - Phase 4: Files, Notes, Collaborators
+- ✅ **Files Module**:
+  - Upload files (images, PDFs, DOCX) with drag & drop
+  - File grid with icons, names, uploader, date
+  - Download files
+  - Admin-only delete
+  - Designer/Manager/Admin can upload
+  - Empty state when no files
+- ✅ **Notes Module**:
+  - Notepad-style editor with title + body
+  - Auto-save on typing (1s debounce)
+  - Notes list sidebar (Notion-style)
+  - Creator & Admin can edit, others read-only
+  - Empty state
+- ✅ **Collaborators Module**:
+  - List collaborators with avatars, names, roles
+  - Add Collaborator button (Admin/Manager)
+  - Search users in dialog
+  - Remove button (Admin only)
+  - Empty state when no collaborators
 
 ## Pages & Routes
 | Route | Page | Access |
@@ -83,9 +101,9 @@ Build the foundational structure for a web application named "Arkiflo", designed
 
 ### P0 - Next Sprint
 - [ ] CRM Lead management module
-- [ ] Create/Edit project functionality  
-- [ ] Team assignment (add/remove collaborators)
-- [ ] Files module (upload/download documents)
+- [ ] Create/Edit project functionality
+- [ ] Cloud file storage integration (S3/GCS)
+- [ ] Email notifications for comments/stage changes
 
 ### P1 - Future
 - [ ] Pre-Sales pipeline & inquiry tracking
@@ -120,3 +138,19 @@ Build the foundational structure for a web application named "Arkiflo", designed
 - `POST /api/projects/:project_id/comments` - Add comment to project
 - `PUT /api/projects/:project_id/stage` - Update project stage (auto-generates system comment)
 - `POST /api/projects/seed` - Seed sample projects (Admin/Manager)
+
+### Files
+- `GET /api/projects/:project_id/files` - Get project files
+- `POST /api/projects/:project_id/files` - Upload file
+- `DELETE /api/projects/:project_id/files/:file_id` - Delete file (Admin only)
+
+### Notes
+- `GET /api/projects/:project_id/notes` - Get project notes
+- `POST /api/projects/:project_id/notes` - Create note
+- `PUT /api/projects/:project_id/notes/:note_id` - Update note
+
+### Collaborators
+- `GET /api/projects/:project_id/collaborators` - Get project collaborators
+- `POST /api/projects/:project_id/collaborators` - Add collaborator (Admin/Manager)
+- `DELETE /api/projects/:project_id/collaborators/:user_id` - Remove collaborator (Admin only)
+- `GET /api/users/available` - Get all users for adding collaborators
