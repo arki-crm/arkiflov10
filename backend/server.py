@@ -90,6 +90,30 @@ class ProjectCreate(BaseModel):
     collaborators: List[str] = []
     summary: str = ""
 
+class TimelineItem(BaseModel):
+    id: str
+    title: str
+    date: str
+    status: str  # "pending", "completed", "delayed"
+
+class CommentItem(BaseModel):
+    id: str
+    user_id: str
+    user_name: str
+    role: str
+    message: str
+    is_system: bool = False
+    created_at: str
+
+class CommentCreate(BaseModel):
+    message: str
+
+class StageUpdate(BaseModel):
+    stage: str
+
+# Stage order for timeline logic
+STAGE_ORDER = ["Pre 10%", "10-50%", "50-100%", "Completed"]
+
 # ============ AUTH HELPERS ============
 
 async def get_current_user(request: Request) -> User:
