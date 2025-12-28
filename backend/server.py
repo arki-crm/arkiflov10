@@ -2028,7 +2028,7 @@ async def seed_projects(request: Request):
             "stage": "Handover",
             "collaborators": user_ids[:1] if len(user_ids) >= 1 else user_ids,
             "summary": "Elegant lobby design with Indian contemporary theme",
-            "timeline": generate_timeline("Handover", (now - timedelta(days=60)).isoformat()),
+            "timeline": generate_project_timeline("Handover", (now - timedelta(days=60)).isoformat()),
             "comments": generate_comments(user_ids[:1] if len(user_ids) >= 1 else user_ids, (now - timedelta(days=60)).isoformat()),
             "updated_at": (now - timedelta(days=2)).isoformat(),
             "created_at": (now - timedelta(days=60)).isoformat()
