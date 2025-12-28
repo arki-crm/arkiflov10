@@ -2060,6 +2060,14 @@ async def convert_to_project(lead_id: str, request: Request):
         "comments": project_comments,
         "files": [],
         "notes": [],
+        "project_value": 0,
+        "payment_schedule": [
+            {"stage": "Booking", "percentage": 10},
+            {"stage": "Design Finalization", "percentage": 40},
+            {"stage": "Production", "percentage": 40},
+            {"stage": "Handover", "percentage": 10}
+        ],
+        "payments": [],
         "updated_at": now.isoformat(),
         "created_at": now.isoformat()
     }
