@@ -2471,6 +2471,9 @@ async def seed_projects(request: Request):
             "summary": "Modern workspace design for 50+ employees with collaborative zones",
             "timeline": generate_project_timeline("Production", (now - timedelta(days=30)).isoformat()),
             "comments": generate_comments(user_ids[:2] if len(user_ids) >= 2 else user_ids, (now - timedelta(days=30)).isoformat()),
+            "project_value": 1800000,
+            "payment_schedule": default_schedule,
+            "payments": generate_payments(1800000, 3, (now - timedelta(days=30)).isoformat(), user.user_id),
             "updated_at": (now - timedelta(days=1)).isoformat(),
             "created_at": (now - timedelta(days=30)).isoformat()
         },
@@ -2484,6 +2487,9 @@ async def seed_projects(request: Request):
             "summary": "Elegant lobby design with Indian contemporary theme",
             "timeline": generate_project_timeline("Handover", (now - timedelta(days=60)).isoformat()),
             "comments": generate_comments(user_ids[:1] if len(user_ids) >= 1 else user_ids, (now - timedelta(days=60)).isoformat()),
+            "project_value": 3200000,
+            "payment_schedule": default_schedule,
+            "payments": generate_payments(3200000, 3, (now - timedelta(days=60)).isoformat(), user.user_id),
             "updated_at": (now - timedelta(days=2)).isoformat(),
             "created_at": (now - timedelta(days=60)).isoformat()
         },
@@ -2497,6 +2503,9 @@ async def seed_projects(request: Request):
             "summary": "Luxury penthouse complete interior renovation with terrace garden",
             "timeline": generate_project_timeline("Production Preparation", (now - timedelta(days=10)).isoformat()),
             "comments": generate_comments(user_ids, (now - timedelta(days=10)).isoformat()),
+            "project_value": 4500000,
+            "payment_schedule": default_schedule,
+            "payments": generate_payments(4500000, 2, (now - timedelta(days=10)).isoformat(), user.user_id),
             "updated_at": (now - timedelta(hours=12)).isoformat(),
             "created_at": (now - timedelta(days=10)).isoformat()
         },
@@ -2510,6 +2519,9 @@ async def seed_projects(request: Request):
             "summary": "Fine dining restaurant with fusion Indian-European theme",
             "timeline": generate_project_timeline("Design Finalization", (now - timedelta(days=3)).isoformat()),
             "comments": generate_comments(user_ids[:1] if len(user_ids) >= 1 else user_ids, (now - timedelta(days=3)).isoformat()),
+            "project_value": 1200000,
+            "payment_schedule": default_schedule,
+            "payments": generate_payments(1200000, 1, (now - timedelta(days=3)).isoformat(), user.user_id),
             "updated_at": (now - timedelta(days=3)).isoformat(),
             "created_at": (now - timedelta(days=3)).isoformat()
         },
@@ -2523,6 +2535,9 @@ async def seed_projects(request: Request):
             "summary": "4BHK smart home with automated lighting and climate control",
             "timeline": generate_project_timeline("Installation", (now - timedelta(days=20)).isoformat()),
             "comments": generate_comments(user_ids[:2] if len(user_ids) >= 2 else user_ids, (now - timedelta(days=20)).isoformat()),
+            "project_value": 1500000,
+            "payment_schedule": default_schedule,
+            "payments": generate_payments(1500000, 3, (now - timedelta(days=20)).isoformat(), user.user_id),
             "updated_at": (now - timedelta(hours=3)).isoformat(),
             "created_at": (now - timedelta(days=20)).isoformat()
         },
