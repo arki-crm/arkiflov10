@@ -535,9 +535,7 @@ frontend:
 
 test_plan:
   current_focus:
-    - "Manager Dashboard UI"
-    - "PreSales Dashboard UI"
-    - "Designer Dashboard UI"
+    - "Settings Module Frontend UI"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
