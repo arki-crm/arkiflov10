@@ -196,6 +196,73 @@ print("Designer user ID: {designer_user_id}");
                            f"api/auth/users/{self.designer_user_id}/role", 400,
                            data={"role": "InvalidRole"}, auth_token=self.admin_token)
 
+    # ============ PROJECT TESTS ============
+
+    def test_seed_projects_admin(self):
+        """Test seeding projects (Admin only)"""
+        return self.run_test("Seed Projects (Admin)", "POST", "api/projects/seed", 200,
+                           auth_token=self.admin_token)
+
+    def test_seed_projects_designer(self):
+        """Test seeding projects with designer token (should fail)"""
+        return self.run_test("Seed Projects (Designer - Should Fail)", "POST", "api/projects/seed", 403,
+                           auth_token=self.designer_token)
+
+    def test_list_projects_admin(self):
+        """Test list projects endpoint (Admin sees all)"""
+        return self.run_test("List Projects (Admin)", "GET", "api/projects", 200,
+                           auth_token=self.admin_token)
+
+    def test_list_projects_designer(self):
+        """Test list projects endpoint (Designer sees only assigned)"""
+        return self.run_test("List Projects (Designer)", "GET", "api/projects", 200,
+                           auth_token=self.designer_token)
+
+    def test_list_projects_no_auth(self):
+        """Test list projects endpoint without authentication"""
+        return self.run_test("List Projects (No Auth)", "GET", "api/projects", 401)
+
+    def test_list_projects_with_stage_filter(self):
+        """Test list projects with stage filter"""
+        return self.run_test("List Projects (Stage Filter)", "GET", "api/projects?stage=Pre 10%", 200,
+                           auth_token=self.admin_token)
+
+    def test_list_projects_with_search(self):
+        """Test list projects with search parameter"""
+        return self.run_test("List Projects (Search)", "GET", "api/projects?search=Modern", 200,
+                           auth_token=self.admin_token)
+
+    def test_get_single_project_admin(self):
+        """Test get single project (Admin access)"""
+        # First get list of projects to get a project ID
+        success, projects_data = self.run_test("Get Projects for Single Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            return self.run_test("Get Single Project (Admin)", "GET", f"api/projects/{project_id}", 200,
+                               auth_token=self.admin_token)
+        else:
+            print("⚠️  No projects found for single project test")
+            return False, {}
+
+    def test_get_single_project_designer(self):
+        """Test get single project (Designer access - may be restricted)"""
+        # First get list of projects to get a project ID
+        success, projects_data = self.run_test("Get Projects for Designer Test", "GET", "api/projects", 200,
+                                              auth_token=self.designer_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            return self.run_test("Get Single Project (Designer)", "GET", f"api/projects/{project_id}", 200,
+                               auth_token=self.designer_token)
+        else:
+            print("⚠️  No projects found for designer single project test")
+            return False, {}
+
+    def test_get_nonexistent_project(self):
+        """Test get project that doesn't exist"""
+        return self.run_test("Get Nonexistent Project", "GET", "api/projects/nonexistent-id", 404,
+                           auth_token=self.admin_token)
+
     def cleanup_test_data(self):
         """Clean up test data from MongoDB"""
         print("\n🧹 Cleaning up test data...")
