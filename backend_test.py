@@ -915,6 +915,30 @@ def main():
         tester.test_update_stage_designer_access()
         tester.test_presales_access_denied()
         
+        # Files endpoints tests
+        print("\n📁 Testing Files Endpoints...")
+        tester.test_get_project_files()
+        tester.test_upload_file()
+        tester.test_delete_file_admin()
+        tester.test_delete_file_designer()
+        
+        # Notes endpoints tests
+        print("\n📝 Testing Notes Endpoints...")
+        tester.test_get_project_notes()
+        tester.test_create_note()
+        tester.test_update_note()
+        tester.test_update_note_designer_permission()
+        
+        # Collaborators endpoints tests
+        print("\n👥 Testing Collaborators Endpoints...")
+        tester.test_get_project_collaborators()
+        tester.test_add_collaborator_admin()
+        tester.test_add_collaborator_designer()
+        tester.test_remove_collaborator_admin()
+        tester.test_remove_collaborator_designer()
+        tester.test_get_available_users()
+        tester.test_get_available_users_designer()
+        
         # Logout test (do this last as it invalidates session)
         tester.test_logout()
         
