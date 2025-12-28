@@ -2755,18 +2755,6 @@ async def get_project_financials(project_id: str, request: Request):
         "can_edit": user.role in ["Admin", "Manager"],
         "can_delete_payments": user.role == "Admin"
     }
-    
-    return {
-        "project_id": project_id,
-        "project_name": project.get("project_name"),
-        "project_value": project_value,
-        "payment_schedule": milestone_amounts,
-        "payments": enriched_payments,
-        "total_collected": total_collected,
-        "balance_pending": balance_pending,
-        "can_edit": user.role in ["Admin", "Manager"],
-        "can_delete_payments": user.role == "Admin"
-    }
 
 @api_router.put("/projects/{project_id}/financials")
 async def update_project_financials(project_id: str, data: ProjectFinancialsUpdate, request: Request):
