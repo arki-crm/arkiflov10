@@ -3845,6 +3845,22 @@ def main():
         tester.test_update_email_template()
         tester.test_reset_email_template()
         
+        # Project Financials Tests
+        print("\n💰 Testing Project Financials API...")
+        tester.test_seed_projects_with_financials()
+        tester.test_get_project_financials_admin()
+        tester.test_get_project_financials_designer()
+        tester.test_get_project_financials_presales_denied()
+        tester.test_update_project_financials_admin()
+        tester.test_update_project_financials_negative_value()
+        tester.test_update_project_financials_designer_denied()
+        tester.test_add_project_payment_admin()
+        tester.test_add_project_payment_validation()
+        tester.test_add_project_payment_designer_denied()
+        tester.test_delete_project_payment_admin()
+        tester.test_delete_project_payment_manager_denied()
+        tester.test_delete_nonexistent_payment()
+        
         # Meeting System Tests
         print("\n📅 Testing Meeting System API...")
         tester.test_create_meeting_admin()
