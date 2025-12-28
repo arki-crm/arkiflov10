@@ -3597,6 +3597,544 @@ async def reset_email_template(template_id: str, request: Request):
     return {"message": "Template reset to default", "template": default}
 
 
+# ============ TASK MODELS ============
+
+class TaskCreate(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    project_id: Optional[str] = None  # None for standalone tasks
+    assigned_to: str
+    priority: str = "Medium"  # Low, Medium, High
+    due_date: str
+    
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    project_id: Optional[str] = None
+    assigned_to: Optional[str] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
+    due_date: Optional[str] = None
+
+TASK_PRIORITIES = ["Low", "Medium", "High"]
+TASK_STATUSES = ["Pending", "In Progress", "Completed"]
+
+# ============ TASK ENDPOINTS ============
+
+@api_router.get("/tasks")
+async def list_tasks(
+    request: Request,
+    project_id: Optional[str] = None,
+    assigned_to: Optional[str] = None,
+    status: Optional[str] = None,
+    priority: Optional[str] = None,
+    standalone: Optional[bool] = None
+):
+    """List tasks with filters - role-based access"""
+    user = await get_current_user(request)
+    
+    query = {}
+    
+    # Role-based filtering
+    if user.role == "Designer":
+        # Designers see only tasks assigned to them
+        query["assigned_to"] = user.user_id
+    elif user.role == "PreSales":
+        # PreSales see only tasks assigned to them
+        query["assigned_to"] = user.user_id
+    
+    # Apply filters
+    if project_id:
+        query["project_id"] = project_id
+    
+    if assigned_to and user.role in ["Admin", "Manager"]:
+        query["assigned_to"] = assigned_to
+    
+    if status and status != "all":
+        query["status"] = status
+    
+    if priority and priority != "all":
+        query["priority"] = priority
+    
+    if standalone is not None:
+        if standalone:
+            query["project_id"] = None
+        else:
+            query["project_id"] = {"$ne": None}
+    
+    tasks = await db.tasks.find(query, {"_id": 0}).to_list(1000)
+    
+    # Get assignee details
+    user_ids = list(set([t.get("assigned_to") for t in tasks if t.get("assigned_to")]))
+    user_ids.extend([t.get("assigned_by") for t in tasks if t.get("assigned_by")])
+    user_ids = list(set(user_ids))
+    
+    users_map = {}
+    if user_ids:
+        users_list = await db.users.find(
+            {"user_id": {"$in": user_ids}},
+            {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "role": 1}
+        ).to_list(1000)
+        users_map = {u["user_id"]: u for u in users_list}
+    
+    # Get project details for project-linked tasks
+    project_ids = list(set([t.get("project_id") for t in tasks if t.get("project_id")]))
+    projects_map = {}
+    if project_ids:
+        projects_list = await db.projects.find(
+            {"project_id": {"$in": project_ids}},
+            {"_id": 0, "project_id": 1, "project_name": 1, "client_name": 1}
+        ).to_list(1000)
+        projects_map = {p["project_id"]: p for p in projects_list}
+    
+    # Enrich tasks with user and project details
+    result = []
+    for task in tasks:
+        enriched = {**task}
+        
+        if task.get("assigned_to") and task["assigned_to"] in users_map:
+            enriched["assigned_to_user"] = users_map[task["assigned_to"]]
+        
+        if task.get("assigned_by") and task["assigned_by"] in users_map:
+            enriched["assigned_by_user"] = users_map[task["assigned_by"]]
+        
+        if task.get("project_id") and task["project_id"] in projects_map:
+            enriched["project"] = projects_map[task["project_id"]]
+        
+        result.append(enriched)
+    
+    # Sort by due_date ascending
+    result.sort(key=lambda x: x.get("due_date", ""))
+    
+    return result
+
+@api_router.get("/tasks/{task_id}")
+async def get_task(task_id: str, request: Request):
+    """Get single task by ID"""
+    user = await get_current_user(request)
+    
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Role-based access check
+    if user.role in ["Designer", "PreSales"] and task.get("assigned_to") != user.user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get assignee details
+    if task.get("assigned_to"):
+        assignee = await db.users.find_one(
+            {"user_id": task["assigned_to"]},
+            {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "role": 1}
+        )
+        if assignee:
+            task["assigned_to_user"] = assignee
+    
+    if task.get("assigned_by"):
+        assigner = await db.users.find_one(
+            {"user_id": task["assigned_by"]},
+            {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "role": 1}
+        )
+        if assigner:
+            task["assigned_by_user"] = assigner
+    
+    # Get project details
+    if task.get("project_id"):
+        project = await db.projects.find_one(
+            {"project_id": task["project_id"]},
+            {"_id": 0, "project_id": 1, "project_name": 1, "client_name": 1}
+        )
+        if project:
+            task["project"] = project
+    
+    return task
+
+@api_router.post("/tasks")
+async def create_task(task_data: TaskCreate, request: Request):
+    """Create a new task"""
+    user = await get_current_user(request)
+    
+    # Only Admin, Manager can create tasks for others
+    # Designers/PreSales can only create tasks for themselves
+    if user.role in ["Designer", "PreSales"] and task_data.assigned_to != user.user_id:
+        raise HTTPException(status_code=403, detail="You can only create tasks for yourself")
+    
+    # Validate priority
+    if task_data.priority not in TASK_PRIORITIES:
+        raise HTTPException(status_code=400, detail=f"Invalid priority. Must be one of: {TASK_PRIORITIES}")
+    
+    # Validate project if provided
+    if task_data.project_id:
+        project = await db.projects.find_one({"project_id": task_data.project_id}, {"_id": 0})
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Validate assignee
+    assignee = await db.users.find_one({"user_id": task_data.assigned_to}, {"_id": 0})
+    if not assignee:
+        raise HTTPException(status_code=404, detail="Assigned user not found")
+    
+    now = datetime.now(timezone.utc)
+    task_id = f"task_{uuid.uuid4().hex[:8]}"
+    
+    new_task = {
+        "id": task_id,
+        "title": task_data.title,
+        "description": task_data.description or "",
+        "project_id": task_data.project_id,
+        "assigned_to": task_data.assigned_to,
+        "assigned_by": user.user_id,
+        "priority": task_data.priority,
+        "status": "Pending",
+        "due_date": task_data.due_date,
+        "auto_generated": False,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    await db.tasks.insert_one(new_task)
+    
+    # Create notification for assignee if different from creator
+    if task_data.assigned_to != user.user_id:
+        project_name = ""
+        if task_data.project_id:
+            project = await db.projects.find_one({"project_id": task_data.project_id}, {"_id": 0, "project_name": 1})
+            project_name = f" for project '{project.get('project_name', '')}'" if project else ""
+        
+        await create_notification(
+            task_data.assigned_to,
+            "New Task Assigned",
+            f"{user.name} assigned you a task: '{task_data.title}'{project_name}",
+            "task",
+            f"/calendar"
+        )
+    
+    return {"message": "Task created successfully", "task": new_task}
+
+@api_router.put("/tasks/{task_id}")
+async def update_task(task_id: str, task_data: TaskUpdate, request: Request):
+    """Update a task"""
+    user = await get_current_user(request)
+    
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Role-based access check
+    # Designers/PreSales can only update their own tasks
+    if user.role in ["Designer", "PreSales"]:
+        if task.get("assigned_to") != user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+        # They can only update status
+        if task_data.assigned_to or task_data.assigned_to == "":
+            raise HTTPException(status_code=403, detail="Cannot change assignee")
+    
+    # Validate priority if provided
+    if task_data.priority and task_data.priority not in TASK_PRIORITIES:
+        raise HTTPException(status_code=400, detail=f"Invalid priority. Must be one of: {TASK_PRIORITIES}")
+    
+    # Validate status if provided
+    if task_data.status and task_data.status not in TASK_STATUSES:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {TASK_STATUSES}")
+    
+    # Validate project if provided
+    if task_data.project_id:
+        project = await db.projects.find_one({"project_id": task_data.project_id}, {"_id": 0})
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Validate assignee if provided
+    if task_data.assigned_to:
+        assignee = await db.users.find_one({"user_id": task_data.assigned_to}, {"_id": 0})
+        if not assignee:
+            raise HTTPException(status_code=404, detail="Assigned user not found")
+    
+    # Build update dict
+    update_dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    if task_data.title is not None:
+        update_dict["title"] = task_data.title
+    if task_data.description is not None:
+        update_dict["description"] = task_data.description
+    if task_data.project_id is not None:
+        update_dict["project_id"] = task_data.project_id if task_data.project_id else None
+    if task_data.assigned_to is not None:
+        update_dict["assigned_to"] = task_data.assigned_to
+    if task_data.priority is not None:
+        update_dict["priority"] = task_data.priority
+    if task_data.status is not None:
+        update_dict["status"] = task_data.status
+    if task_data.due_date is not None:
+        update_dict["due_date"] = task_data.due_date
+    
+    await db.tasks.update_one(
+        {"id": task_id},
+        {"$set": update_dict}
+    )
+    
+    # Notify if assignee changed
+    if task_data.assigned_to and task_data.assigned_to != task.get("assigned_to"):
+        await create_notification(
+            task_data.assigned_to,
+            "Task Reassigned to You",
+            f"{user.name} assigned you a task: '{task.get('title')}'",
+            "task",
+            f"/calendar"
+        )
+    
+    # Get updated task
+    updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    return {"message": "Task updated successfully", "task": updated_task}
+
+@api_router.delete("/tasks/{task_id}")
+async def delete_task(task_id: str, request: Request):
+    """Delete a task"""
+    user = await get_current_user(request)
+    
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Role-based access check
+    if user.role in ["Designer", "PreSales"]:
+        if task.get("assigned_to") != user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    await db.tasks.delete_one({"id": task_id})
+    
+    return {"message": "Task deleted successfully"}
+
+# ============ CALENDAR ENDPOINTS ============
+
+@api_router.get("/calendar-events")
+async def get_calendar_events(
+    request: Request,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    designer_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    event_type: Optional[str] = None,  # "milestone", "task", "all"
+    status: Optional[str] = None
+):
+    """Get calendar events (milestones + tasks) with role-based filtering"""
+    user = await get_current_user(request)
+    
+    events = []
+    now = datetime.now(timezone.utc)
+    
+    # Parse date range
+    start_dt = None
+    end_dt = None
+    if start_date:
+        try:
+            start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            pass
+    if end_date:
+        try:
+            end_dt = datetime.fromisoformat(end_date.replace("Z", "+00:00"))
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            pass
+    
+    # Get all users for name lookups
+    all_users = await db.users.find({}, {"_id": 0, "user_id": 1, "name": 1, "role": 1, "picture": 1}).to_list(1000)
+    users_map = {u["user_id"]: u for u in all_users}
+    
+    # ============ FETCH MILESTONES ============
+    if event_type in [None, "all", "milestone"]:
+        # Build project query based on role
+        project_query = {}
+        
+        if user.role == "Designer":
+            project_query["collaborators"] = user.user_id
+        elif user.role == "PreSales":
+            # PreSales don't see project milestones
+            project_query = None
+        
+        # Apply filters
+        if project_id and project_query is not None:
+            project_query["project_id"] = project_id
+        
+        if designer_id and user.role in ["Admin", "Manager"] and project_query is not None:
+            project_query["collaborators"] = designer_id
+        
+        if project_query is not None:
+            projects = await db.projects.find(project_query, {"_id": 0}).to_list(1000)
+            
+            for project in projects:
+                # Get designer name
+                designer_name = None
+                for collab_id in project.get("collaborators", []):
+                    if collab_id in users_map and users_map[collab_id].get("role") == "Designer":
+                        designer_name = users_map[collab_id].get("name")
+                        break
+                
+                for milestone in project.get("timeline", []):
+                    milestone_date_str = milestone.get("expectedDate") or milestone.get("completedDate") or milestone.get("date")
+                    if not milestone_date_str:
+                        continue
+                    
+                    try:
+                        milestone_date = datetime.fromisoformat(milestone_date_str.replace("Z", "+00:00"))
+                        if milestone_date.tzinfo is None:
+                            milestone_date = milestone_date.replace(tzinfo=timezone.utc)
+                    except Exception:
+                        continue
+                    
+                    # Date range filter
+                    if start_dt and milestone_date < start_dt:
+                        continue
+                    if end_dt and milestone_date > end_dt:
+                        continue
+                    
+                    # Status filter
+                    milestone_status = milestone.get("status", "pending")
+                    if status and status != "all" and milestone_status != status:
+                        continue
+                    
+                    # Determine color based on status
+                    if milestone_status == "completed":
+                        color = "#22C55E"  # Green
+                    elif milestone_status == "delayed":
+                        color = "#EF4444"  # Red
+                    else:
+                        color = "#2563EB"  # Blue (upcoming)
+                    
+                    events.append({
+                        "id": f"milestone_{project['project_id']}_{milestone.get('id', '')}",
+                        "title": milestone.get("title", "Milestone"),
+                        "start": milestone_date_str,
+                        "end": milestone_date_str,
+                        "type": "milestone",
+                        "status": milestone_status,
+                        "color": color,
+                        "project_id": project["project_id"],
+                        "project_name": project.get("project_name"),
+                        "client_name": project.get("client_name"),
+                        "stage": milestone.get("stage_ref") or project.get("stage"),
+                        "designer": designer_name,
+                        "expected_date": milestone.get("expectedDate"),
+                        "completed_date": milestone.get("completedDate")
+                    })
+    
+    # ============ FETCH TASKS ============
+    if event_type in [None, "all", "task"]:
+        task_query = {}
+        
+        # Role-based filtering for tasks
+        if user.role == "Designer":
+            task_query["assigned_to"] = user.user_id
+        elif user.role == "PreSales":
+            task_query["assigned_to"] = user.user_id
+        
+        # Apply filters
+        if project_id:
+            task_query["project_id"] = project_id
+        
+        if designer_id and user.role in ["Admin", "Manager"]:
+            task_query["assigned_to"] = designer_id
+        
+        tasks = await db.tasks.find(task_query, {"_id": 0}).to_list(1000)
+        
+        # Get project names for project-linked tasks
+        project_ids = list(set([t.get("project_id") for t in tasks if t.get("project_id")]))
+        projects_map = {}
+        if project_ids:
+            projects_list = await db.projects.find(
+                {"project_id": {"$in": project_ids}},
+                {"_id": 0, "project_id": 1, "project_name": 1, "client_name": 1}
+            ).to_list(1000)
+            projects_map = {p["project_id"]: p for p in projects_list}
+        
+        for task in tasks:
+            task_date_str = task.get("due_date")
+            if not task_date_str:
+                continue
+            
+            try:
+                task_date = datetime.fromisoformat(task_date_str.replace("Z", "+00:00"))
+                if task_date.tzinfo is None:
+                    task_date = task_date.replace(tzinfo=timezone.utc)
+            except Exception:
+                continue
+            
+            # Date range filter
+            if start_dt and task_date < start_dt:
+                continue
+            if end_dt and task_date > end_dt:
+                continue
+            
+            # Determine task status for filtering and color
+            task_status = task.get("status", "Pending")
+            
+            # Check if overdue
+            is_overdue = False
+            if task_status != "Completed" and task_date < now:
+                is_overdue = True
+            
+            # Status filter
+            if status and status != "all":
+                if status == "overdue" and not is_overdue:
+                    continue
+                elif status != "overdue" and task_status.lower() != status.lower():
+                    continue
+            
+            # Determine color based on status
+            if task_status == "Completed":
+                color = "#22C55E"  # Green
+            elif is_overdue:
+                color = "#EF4444"  # Red (overdue)
+            elif task_status == "In Progress":
+                color = "#F97316"  # Orange
+            else:
+                color = "#EAB308"  # Yellow (pending)
+            
+            # Get assignee name
+            assignee_name = None
+            if task.get("assigned_to") and task["assigned_to"] in users_map:
+                assignee_name = users_map[task["assigned_to"]].get("name")
+            
+            # Get project details
+            project_name = None
+            client_name = None
+            if task.get("project_id") and task["project_id"] in projects_map:
+                project_name = projects_map[task["project_id"]].get("project_name")
+                client_name = projects_map[task["project_id"]].get("client_name")
+            
+            events.append({
+                "id": task["id"],
+                "title": task.get("title", "Task"),
+                "start": task_date_str,
+                "end": task_date_str,
+                "type": "task",
+                "status": "overdue" if is_overdue else task_status.lower(),
+                "color": color,
+                "project_id": task.get("project_id"),
+                "project_name": project_name,
+                "client_name": client_name,
+                "priority": task.get("priority"),
+                "description": task.get("description"),
+                "assigned_to": task.get("assigned_to"),
+                "assignee_name": assignee_name,
+                "is_overdue": is_overdue
+            })
+    
+    # Sort by date
+    events.sort(key=lambda x: x.get("start", ""))
+    
+    return {
+        "events": events,
+        "total": len(events)
+    }
+
+
 # ============ HEALTH CHECK ============
 
 @api_router.get("/")
