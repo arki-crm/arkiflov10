@@ -1089,6 +1089,19 @@ const ProjectDetails = () => {
   const [meetings, setMeetings] = useState([]);
   const [loadingMeetings, setLoadingMeetings] = useState(false);
   const [showMeetingModal, setShowMeetingModal] = useState(false);
+  
+  // Financials state
+  const [financials, setFinancials] = useState(null);
+  const [loadingFinancials, setLoadingFinancials] = useState(false);
+  const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
+  const [editingProjectValue, setEditingProjectValue] = useState(false);
+  const [newProjectValue, setNewProjectValue] = useState('');
+  const [newPayment, setNewPayment] = useState({
+    amount: '',
+    mode: 'Bank',
+    reference: '',
+    date: new Date().toISOString().split('T')[0]
+  });
 
   // PreSales redirect
   useEffect(() => {
