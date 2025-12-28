@@ -1989,7 +1989,7 @@ async def seed_projects(request: Request):
             "stage": "Design Finalization",
             "collaborators": user_ids[:2] if len(user_ids) >= 2 else user_ids,
             "summary": "Complete interior design for a 3BHK apartment with minimalist aesthetics",
-            "timeline": generate_timeline("Design Finalization", (now - timedelta(days=5)).isoformat()),
+            "timeline": generate_project_timeline("Design Finalization", (now - timedelta(days=5)).isoformat()),
             "comments": generate_comments(user_ids[:2] if len(user_ids) >= 2 else user_ids, (now - timedelta(days=5)).isoformat()),
             "updated_at": now.isoformat(),
             "created_at": (now - timedelta(days=5)).isoformat()
