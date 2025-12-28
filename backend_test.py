@@ -2990,41 +2990,51 @@ db.user_sessions.insertOne({{
                                            "api/calendar-events?event_type=meeting", 200,
                                            auth_token=self.admin_token)
         if success:
-            is_array = isinstance(events_data, list)
-            print(f"   Calendar events is array: {is_array}")
-            print(f"   Meeting events count: {len(events_data) if is_array else 'N/A'}")
+            # Check if response has correct structure
+            has_events_key = 'events' in events_data
+            has_total_key = 'total' in events_data
+            print(f"   Has events key: {has_events_key}")
+            print(f"   Has total key: {has_total_key}")
             
-            # Check meeting event structure and colors
-            if is_array and len(events_data) > 0:
-                meeting_events = [e for e in events_data if e.get('type') == 'meeting']
-                print(f"   Actual meeting events: {len(meeting_events)}")
+            if has_events_key:
+                events = events_data['events']
+                is_array = isinstance(events, list)
+                print(f"   Events is array: {is_array}")
+                print(f"   Meeting events count: {len(events) if is_array else 'N/A'}")
                 
-                if meeting_events:
-                    first_meeting = meeting_events[0]
-                    required_fields = ['id', 'title', 'start', 'end', 'type', 'status', 'color']
-                    has_required_fields = all(field in first_meeting for field in required_fields)
+                # Check meeting event structure and colors
+                if is_array and len(events) > 0:
+                    meeting_events = [e for e in events if e.get('type') == 'meeting']
+                    print(f"   Actual meeting events: {len(meeting_events)}")
                     
-                    # Check color coding
-                    status = first_meeting.get('status', '')
-                    color = first_meeting.get('color', '')
-                    expected_colors = {
-                        'Scheduled': '#9333EA',  # Purple
-                        'Completed': '#22C55E',  # Green
-                        'Missed': '#EF4444',     # Red
-                        'Cancelled': '#6B7280'   # Gray
-                    }
-                    color_correct = color == expected_colors.get(status, '')
+                    if meeting_events:
+                        first_meeting = meeting_events[0]
+                        required_fields = ['id', 'title', 'start', 'end', 'type', 'status', 'color']
+                        has_required_fields = all(field in first_meeting for field in required_fields)
+                        
+                        # Check color coding
+                        status = first_meeting.get('status', '')
+                        color = first_meeting.get('color', '')
+                        expected_colors = {
+                            'Scheduled': '#9333EA',  # Purple
+                            'Completed': '#22C55E',  # Green
+                            'Missed': '#EF4444',     # Red
+                            'Cancelled': '#6B7280'   # Gray
+                        }
+                        color_correct = color == expected_colors.get(status, '')
+                        
+                        print(f"   Meeting event structure valid: {has_required_fields}")
+                        print(f"   Meeting status: {status}")
+                        print(f"   Meeting color: {color}")
+                        print(f"   Color coding correct: {color_correct}")
+                        
+                        return success and has_events_key and has_total_key and is_array and has_required_fields and color_correct, events_data
                     
-                    print(f"   Meeting event structure valid: {has_required_fields}")
-                    print(f"   Meeting status: {status}")
-                    print(f"   Meeting color: {color}")
-                    print(f"   Color coding correct: {color_correct}")
-                    
-                    return success and is_array and has_required_fields and color_correct, events_data
+                    return success and has_events_key and has_total_key and is_array, events_data
                 
-                return success and is_array, events_data
+                return success and has_events_key and has_total_key and is_array, events_data
             
-            return success and is_array, events_data
+            return success and has_events_key and has_total_key, events_data
         return success, events_data
 
     def test_meeting_role_based_access(self):
