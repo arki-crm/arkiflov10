@@ -16,6 +16,10 @@ import Projects from './pages/Projects';
 import ProjectDetails from './pages/ProjectDetails';
 import Academy from './pages/Academy';
 import Settings from './pages/Settings';
+import Users from './pages/Users';
+import UserInvite from './pages/UserInvite';
+import UserEdit from './pages/UserEdit';
+import Profile from './pages/Profile';
 
 import './App.css';
 
@@ -50,6 +54,10 @@ const AppRouter = () => {
         <Route path="/projects/:id" element={<ProjectDetails />} />
         <Route path="/academy" element={<Academy />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/users" element={<Users />} />
+        <Route path="/users/invite" element={<UserInvite />} />
+        <Route path="/users/:id" element={<UserEdit />} />
+        <Route path="/profile" element={<Profile />} />
       </Route>
 
       {/* Redirect root to dashboard */}
