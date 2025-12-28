@@ -229,13 +229,20 @@ frontend:
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 3
+  test_sequence: 4
   run_ui: true
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Dashboard API endpoint"
+    - "Admin Dashboard UI"
+    - "Manager Dashboard UI"
+    - "PreSales Dashboard UI"
+    - "Designer Dashboard UI"
+    - "Quick Filters Navigation"
+    - "Milestone Tables"
   stuck_tasks: []
-  test_all: false
+  test_all: true
   test_priority: "high_first"
 
 agent_communication:
@@ -245,3 +252,5 @@ agent_communication:
     message: "✅ COMPREHENSIVE TAT SYSTEM TESTING COMPLETED - All 76 tests passed! TAT implementation is working perfectly: 1) Seed endpoints create proper TAT-based timelines, 2) Timeline structure verified with all required fields (id, title, expectedDate, completedDate, status, stage_ref), 3) Stage updates correctly mark milestones as completed with proper dates, 4) TAT calculation follows defined rules (Lead: BC Call 1 day, BOQ 3 days; Project: cumulative timing), 5) Delay detection logic implemented, 6) System comments generated for stage changes. Backend APIs are fully functional and ready for production."
   - agent: "testing"
     message: "✅ FRONTEND TAT UI TESTING COMPLETED SUCCESSFULLY! Both Project and Lead timeline UIs are working perfectly: 1) Project Timeline: 6 milestone groups, 26 milestones, colored status dots (green/red/gray), Expected/Completed dates in DD/MM/YYYY format, stage change functionality working. 2) Lead Timeline: 7 timeline items, proper TAT display with colored indicators, Expected/Completed dates, lead stage progression working. All TAT requirements met: colored status dots, date labels, delay detection visual indicators. Fixed missing LeadDetails route. UI is production-ready."
+  - agent: "main"
+    message: "Implemented full Dashboard experience with role-based views. Backend: Added /api/dashboard endpoint that returns role-specific KPIs, metrics, delayed milestones, upcoming milestones, stage distributions, and performance data. Frontend: Built Dashboard.jsx with role-based rendering for Admin (8 KPIs, charts, milestone tables, designer/presales performance), Manager (4 KPIs, charts, milestone tables, designer performance), PreSales (6 KPIs specific to leads), Designer (4 KPIs for their projects). Also added Quick Filters, stage distribution charts, milestone tables. Please test the dashboard by logging in and navigating to /dashboard."
