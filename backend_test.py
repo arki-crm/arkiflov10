@@ -866,7 +866,7 @@ db.user_sessions.insertOne({{
     def test_get_available_users_designer(self):
         """Test GET /api/users/available with Designer token (should fail)"""
         return self.run_test("Get Available Users (Designer - Should Fail)", "GET", "api/users/available", 403,
-                           auth_token=self.designer_token)
+                           auth_token=self.pure_designer_token)
 
     def cleanup_test_data(self):
         """Clean up test data from MongoDB"""
