@@ -166,9 +166,9 @@ const PreSales = () => {
     }
   };
 
-  // Navigate to lead detail
+  // Navigate to pre-sales detail (NOT leads)
   const handleLeadClick = (leadId) => {
-    navigate(`/leads/${leadId}`);
+    navigate(`/presales/${leadId}`);
   };
 
   if (user?.role === 'Designer') {
