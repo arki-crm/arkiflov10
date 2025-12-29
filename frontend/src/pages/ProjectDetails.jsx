@@ -472,6 +472,50 @@ const ProjectDetails = () => {
     }
     return false;
   };
+  
+  // Hold/Activate/Deactivate permission checks
+  const canHold = () => {
+    if (!user) return false;
+    return ['Admin', 'Manager', 'DesignManager', 'ProductionManager', 'Designer'].includes(user.role);
+  };
+  
+  const canActivateOrDeactivate = () => {
+    if (!user) return false;
+    return ['Admin', 'Manager', 'DesignManager', 'ProductionManager'].includes(user.role);
+  };
+  
+  // Handle hold status actions
+  const openHoldModal = (action) => {
+    setHoldAction(action);
+    setHoldReason('');
+    setShowHoldModal(true);
+  };
+  
+  const handleHoldStatusUpdate = async () => {
+    if (!holdReason.trim()) {
+      toast.error('Please provide a reason for this action');
+      return;
+    }
+    
+    try {
+      setIsUpdatingHoldStatus(true);
+      await axios.put(`${API}/projects/${id}/hold-status`, {
+        action: holdAction,
+        reason: holdReason.trim()
+      }, { withCredentials: true });
+      
+      toast.success(`Project ${holdAction.toLowerCase()}d successfully`);
+      setShowHoldModal(false);
+      setHoldReason('');
+      setHoldAction(null);
+      await fetchProject();
+    } catch (err) {
+      console.error('Failed to update hold status:', err);
+      toast.error(err.response?.data?.detail || 'Failed to update status');
+    } finally {
+      setIsUpdatingHoldStatus(false);
+    }
+  };
 
   if (loading) {
     return (
