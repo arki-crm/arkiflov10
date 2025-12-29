@@ -342,9 +342,16 @@ const Projects = () => {
                     >
                       <td className="px-4 py-3">
                         <div>
-                          <p className="font-medium text-slate-900 group-hover:text-blue-600 transition-colors">
-                            {project.project_name}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            {project.pid && (
+                              <span className="font-mono text-xs font-bold bg-slate-900 text-white px-1.5 py-0.5 rounded">
+                                {project.pid}
+                              </span>
+                            )}
+                            <p className="font-medium text-slate-900 group-hover:text-blue-600 transition-colors">
+                              {project.project_name}
+                            </p>
+                          </div>
                           <p className="text-xs text-slate-500 mt-0.5">
                             {project.client_name}
                           </p>
