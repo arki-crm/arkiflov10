@@ -6526,7 +6526,7 @@ async def delete_presales_file(presales_id: str, file_id: str, request: Request)
 
 @api_router.post("/presales/{presales_id}/convert-to-lead")
 async def convert_presales_to_lead(presales_id: str, request: Request):
-    """Convert qualified pre-sales lead to regular lead"""
+    """Convert qualified pre-sales lead to regular lead with PID generation"""
     user = await get_current_user(request)
     
     if user.role not in ["Admin", "SalesManager", "PreSales"]:
@@ -6544,37 +6544,53 @@ async def convert_presales_to_lead(presales_id: str, request: Request):
     
     now = datetime.now(timezone.utc)
     
-    # Mark as converted and update stage to BC Call Done (first sales stage)
+    # Generate PID - this is the permanent project identifier
+    pid = await generate_pid()
+    
+    # Prepare collaborator entry for the PreSales user
+    presales_collaborator = {
+        "user_id": presales_lead.get("created_by") or presales_lead.get("assigned_to"),
+        "role": "PreSales",
+        "added_at": now.isoformat(),
+        "added_by": "system",
+        "reason": "Original Pre-Sales creator",
+        "can_edit": False  # View-only collaborator
+    }
+    
+    # System comment for conversion
+    conversion_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": f"Converted from Pre-Sales to Lead. PID assigned: {pid}",
+        "is_system": True,
+        "created_at": now.isoformat()
+    }
+    
+    # Get existing collaborators or initialize empty list
+    existing_collaborators = presales_lead.get("collaborators", [])
+    if not isinstance(existing_collaborators, list):
+        existing_collaborators = []
+    
+    # Mark as converted, assign PID, and update stage to BC Call Done (first sales stage)
     await db.leads.update_one(
         {"lead_id": presales_id},
         {
             "$set": {
                 "is_converted": True,
+                "pid": pid,  # Assign PID at conversion
                 "stage": "BC Call Done",  # Move to sales stages
-                "updated_at": now.isoformat()
+                "updated_at": now.isoformat(),
+                "collaborators": existing_collaborators + [presales_collaborator]
             },
             "$push": {
-                "comments": {
-                    "id": f"comment_{uuid.uuid4().hex[:8]}",
-                    "user_id": user.user_id,
-                    "user_name": user.name,
-                    "role": user.role,
-                    "message": "Converted from Pre-Sales to Lead",
-                    "is_system": True,
-                    "created_at": now.isoformat()
-                },
-                "collaborators": {
-                    "user_id": presales_lead.get("created_by") or presales_lead.get("assigned_to"),
-                    "role": "PreSales",
-                    "added_at": now.isoformat(),
-                    "added_by": "system",
-                    "reason": "Original Pre-Sales creator"
-                }
+                "comments": conversion_comment
             }
         }
     )
     
-    return {"success": True, "lead_id": presales_id}
+    return {"success": True, "lead_id": presales_id, "pid": pid}
 
 @api_router.get("/reports/designers")
 async def get_designers_report(request: Request):
