@@ -807,6 +807,19 @@ EXECUTION_ROLES = ["Admin", "ProductionOpsManager"]
 
 # ============ SIMPLIFIED STAGE FLOW (V1) ============
 
+# PID (Project ID) Generation - Sequential counter
+async def generate_pid():
+    """Generate unique PID in format ARKI-PID-XXXXX"""
+    # Get current counter or create new one
+    counter_doc = await db.counters.find_one_and_update(
+        {"_id": "pid_counter"},
+        {"$inc": {"value": 1}},
+        upsert=True,
+        return_document=True
+    )
+    counter_value = counter_doc.get("value", 1)
+    return f"ARKI-PID-{counter_value:05d}"
+
 # A. Sales Stages (6 stages)
 SALES_STAGES = [
     "BC Call Done",
