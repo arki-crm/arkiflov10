@@ -706,7 +706,7 @@ print("Technician session token: {technician_session_token}");
         # Verify all collections exist by testing endpoints
         collections_tests = [
             ("users", "api/auth/users"),
-            ("presales", "api/presales"),
+            ("presales", "api/presales/create"),
             ("leads", "api/leads"),
             ("projects", "api/projects"),
             ("warranties", "api/warranties"),
