@@ -19,7 +19,8 @@ import {
   Palette,
   ClipboardCheck,
   Crown,
-  Truck
+  Truck,
+  Target
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 
