@@ -10877,6 +10877,182 @@ async def list_technicians(request: Request):
     return technicians
 
 
+# ============ GLOBAL SEARCH ENDPOINT ============
+
+@api_router.get("/global-search")
+async def global_search(q: str, request: Request):
+    """
+    Smart global search across all modules with partial match, contains search,
+    case-insensitive, and multi-field matching.
+    """
+    user = await get_current_user(request)
+    
+    if not q or len(q) < 2:
+        return []
+    
+    # Build regex pattern for partial/contains match (case-insensitive)
+    pattern = {"$regex": q, "$options": "i"}
+    results = []
+    
+    # Search Leads
+    if user.role not in ["Technician"]:
+        lead_query = {"$or": [
+            {"customer_name": pattern},
+            {"customer_phone": pattern},
+            {"customer_email": pattern},
+            {"customer_address": pattern},
+            {"pid": pattern},
+            {"customer_requirements": pattern},
+            {"source": pattern}
+        ]}
+        
+        leads = await db.leads.find(lead_query, {"_id": 0}).limit(10).to_list(10)
+        for lead in leads:
+            results.append({
+                "type": "lead",
+                "id": lead.get("lead_id"),
+                "title": lead.get("customer_name", "Unknown"),
+                "subtitle": f"{lead.get('customer_phone', '')} • {lead.get('source', '')}",
+                "pid": lead.get("pid"),
+                "stage": lead.get("stage")
+            })
+    
+    # Search Pre-Sales
+    if user.role not in ["Technician", "Designer"]:
+        presales_query = {"$or": [
+            {"customer_name": pattern},
+            {"customer_phone": pattern},
+            {"customer_email": pattern},
+            {"customer_address": pattern},
+            {"source": pattern},
+            {"notes": pattern}
+        ]}
+        
+        presales = await db.presales.find(presales_query, {"_id": 0}).limit(10).to_list(10)
+        for ps in presales:
+            results.append({
+                "type": "presales",
+                "id": ps.get("presales_id"),
+                "title": ps.get("customer_name", "Unknown"),
+                "subtitle": f"{ps.get('customer_phone', '')} • {ps.get('status', '')}",
+                "pid": None,
+                "stage": ps.get("status")
+            })
+    
+    # Search Projects
+    if user.role not in ["Technician", "PreSales"]:
+        project_query = {"$or": [
+            {"project_name": pattern},
+            {"client_name": pattern},
+            {"client_phone": pattern},
+            {"client_email": pattern},
+            {"client_address": pattern},
+            {"pid": pattern},
+            {"summary": pattern}
+        ]}
+        
+        projects = await db.projects.find(project_query, {"_id": 0}).limit(10).to_list(10)
+        for proj in projects:
+            results.append({
+                "type": "project",
+                "id": proj.get("project_id"),
+                "title": proj.get("project_name", "Unknown"),
+                "subtitle": f"{proj.get('client_name', '')} • {proj.get('stage', '')}",
+                "pid": proj.get("pid"),
+                "stage": proj.get("stage")
+            })
+    
+    # Search Warranties
+    if user.role not in ["Technician"]:
+        warranty_query = {"$or": [
+            {"pid": pattern},
+            {"project_name": pattern},
+            {"customer_name": pattern},
+            {"customer_phone": pattern},
+            {"customer_email": pattern},
+            {"customer_address": pattern},
+            {"warranty_id": pattern}
+        ]}
+        
+        warranties = await db.warranties.find(warranty_query, {"_id": 0}).limit(5).to_list(5)
+        for warranty in warranties:
+            results.append({
+                "type": "warranty",
+                "id": warranty.get("warranty_id"),
+                "project_id": warranty.get("project_id"),
+                "title": f"Warranty: {warranty.get('customer_name', 'Unknown')}",
+                "subtitle": f"{warranty.get('project_name', '')} • {warranty.get('warranty_status', '')}",
+                "pid": warranty.get("pid"),
+                "stage": warranty.get("warranty_status")
+            })
+    
+    # Search Service Requests
+    sr_query = {"$or": [
+        {"service_request_id": pattern},
+        {"pid": pattern},
+        {"customer_name": pattern},
+        {"customer_phone": pattern},
+        {"customer_email": pattern},
+        {"customer_address": pattern},
+        {"issue_category": pattern},
+        {"issue_description": pattern},
+        {"assigned_technician_name": pattern}
+    ]}
+    
+    # Technicians can only see their assigned requests
+    if user.role == "Technician":
+        sr_query = {"$and": [sr_query, {"assigned_technician_id": user.user_id}]}
+    
+    service_requests = await db.service_requests.find(sr_query, {"_id": 0}).limit(10).to_list(10)
+    for sr in service_requests:
+        results.append({
+            "type": "service_request",
+            "id": sr.get("service_request_id"),
+            "title": f"{sr.get('service_request_id', '')} - {sr.get('customer_name', 'Unknown')}",
+            "subtitle": f"{sr.get('issue_category', '')} • {sr.get('stage', '')}",
+            "pid": sr.get("pid"),
+            "stage": sr.get("stage")
+        })
+    
+    # Search Technicians (only for Admin/Manager)
+    if user.role in ["Admin", "SalesManager", "ProductionOpsManager"]:
+        tech_query = {"role": "Technician", "$or": [
+            {"name": pattern},
+            {"email": pattern},
+            {"phone": pattern}
+        ]}
+        
+        technicians = await db.users.find(tech_query, {"_id": 0, "user_id": 1, "name": 1, "email": 1}).limit(5).to_list(5)
+        for tech in technicians:
+            results.append({
+                "type": "technician",
+                "id": tech.get("user_id"),
+                "title": tech.get("name", "Unknown"),
+                "subtitle": tech.get("email", ""),
+                "pid": None,
+                "stage": None
+            })
+    
+    # Sort results by relevance (exact matches first)
+    def sort_key(item):
+        title = item.get("title", "").lower()
+        pid = (item.get("pid") or "").lower()
+        q_lower = q.lower()
+        
+        # Exact match gets highest priority
+        if title == q_lower or pid == q_lower:
+            return 0
+        # Starts with query
+        if title.startswith(q_lower) or pid.startswith(q_lower):
+            return 1
+        # Contains query
+        return 2
+    
+    results.sort(key=sort_key)
+    
+    return results[:20]  # Limit total results
+
+
 # ============ HEALTH CHECK ============
 
 @api_router.get("/")
