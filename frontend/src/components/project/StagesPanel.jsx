@@ -196,11 +196,6 @@ export const StagesPanel = ({
                       const isSubComplete = completedSubStages.includes(subStage.id);
                       const canComplete = canCompleteSubStage(subStage.id, completedSubStages);
                       const isNextStep = canComplete && canChangeStage;
-                      
-                      // Debug log for first few sub-stages
-                      if (subIndex < 3) {
-                        console.log(`SubStage ${subStage.id}: isComplete=${isSubComplete}, canComplete=${canComplete}, isNextStep=${isNextStep}`);
-                      }
 
                       return (
                         <button
