@@ -303,42 +303,6 @@ STAGE_ORDER = [
     "Handover"
 ]
 
-# Milestone groups mapped to stages
-MILESTONE_GROUPS = {
-    "Design Finalization": [
-        "Site Measurement",
-        "Site Validation",
-        "Design Meeting",
-        "Design Meeting – 2",
-        "Final Design Proposal & Material Selection",
-        "Sign-off KWS Units & Payment",
-        "Kickoff Meeting"
-    ],
-    "Production Preparation": [
-        "Factory Slot Allocation",
-        "JIT Project Delivery Plan",
-        "Non-Modular Dependencies",
-        "Raw Material Procurement"
-    ],
-    "Production": [
-        "Production Kick-start",
-        "Full Order Confirmation",
-        "PIV / Site Readiness"
-    ],
-    "Delivery": [
-        "Modular Order Delivery at Site"
-    ],
-    "Installation": [
-        "Modular Installation",
-        "Non-Modular Dependency Work for Handover"
-    ],
-    "Handover": [
-        "Handover with Snag",
-        "Cleaning",
-        "Handover Without Snag"
-    ]
-}
-
 # ============ DESIGN WORKFLOW SYSTEM (Phase 15) ============
 
 # 9-Step Design Workflow Stages (after booking)
