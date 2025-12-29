@@ -869,6 +869,7 @@ def format_user_response(user_doc):
         "role": user_doc.get("role", "Designer"),
         "phone": user_doc.get("phone"),
         "status": user_doc.get("status", "Active"),
+        "senior_manager_view": user_doc.get("senior_manager_view", False),  # V1 permission toggle
         "created_at": format_dt(user_doc.get("created_at")),
         "updated_at": format_dt(user_doc.get("updated_at")),
         "last_login": format_dt(user_doc.get("last_login"))
