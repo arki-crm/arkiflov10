@@ -934,7 +934,7 @@ const PreSalesDetail = () => {
                 onStatusChange={handleStatusChange}
                 canChange={canEdit()}
                 isUpdating={isUpdatingStatus}
-                onConvertToLead={handleConvertToLead}
+                onConvertToLead={openConvertDialog}
                 canConvert={canConvert() && !isConverting}
               />
             </CardContent>
@@ -956,6 +956,51 @@ const PreSalesDetail = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Convert to Lead Confirmation Dialog */}
+      <AlertDialog open={showConvertDialog} onOpenChange={setShowConvertDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <ArrowRightCircle className="w-5 h-5 text-green-600" />
+              Convert to Lead
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                Are you sure you want to convert <strong className="text-slate-700">{lead?.customer_name}</strong> to the Leads section?
+              </p>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mt-2">
+                <p className="text-amber-700 text-sm">
+                  <strong>⚠️ Important:</strong>
+                </p>
+                <ul className="text-amber-600 text-sm mt-1 list-disc list-inside space-y-1">
+                  <li>This lead will move to the <strong>main Leads section</strong></li>
+                  <li>It will no longer appear in Pre-Sales</li>
+                  <li>All customer details, files, and history will be preserved</li>
+                  <li>You will become a view-only collaborator on the lead</li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isConverting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConvertToLead}
+              disabled={isConverting}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isConverting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Converting...
+                </>
+              ) : (
+                'Convert to Lead'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
