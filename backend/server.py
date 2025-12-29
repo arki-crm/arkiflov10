@@ -1787,6 +1787,13 @@ async def complete_substage(project_id: str, request: Request):
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
+    # Check if project is on Hold - block progression
+    if project.get("hold_status") == "Hold":
+        raise HTTPException(status_code=400, detail="Cannot update milestones while project is on Hold. Please reactivate the project first.")
+    
+    if project.get("hold_status") == "Deactivated":
+        raise HTTPException(status_code=400, detail="Cannot update milestones on a Deactivated project.")
+    
     # Check access
     if user.role == "Designer" and user.user_id not in project.get("collaborators", []):
         raise HTTPException(status_code=403, detail="Access denied")
