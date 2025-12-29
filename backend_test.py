@@ -7411,7 +7411,7 @@ db.user_sessions.insertOne({{
             success, warranty_data = self.run_test("Get Warranty by Project ID", "GET", 
                                                   f"api/warranties/by-project/{project_id}", 200,
                                                   auth_token=self.admin_token)
-            if success and 'warranty_id' in warranty_data:
+            if success and warranty_data and 'warranty_id' in warranty_data:
                 warranty_id = warranty_data['warranty_id']
                 return self.run_test("Get Warranty by ID", "GET", f"api/warranties/{warranty_id}", 200,
                                    auth_token=self.admin_token)
