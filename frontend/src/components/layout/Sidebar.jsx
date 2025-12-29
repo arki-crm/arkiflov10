@@ -118,6 +118,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
         ...commonItems,
         { path: '/projects', label: 'All Projects', icon: FolderKanban },
         { path: '/design-board', label: 'Design Board', icon: Palette },
+        { path: '/academy', label: 'Academy', icon: GraduationCap },
         { path: '/reports', label: 'Reports', icon: BarChart3 },
         ...seniorManagerItems
       ];
