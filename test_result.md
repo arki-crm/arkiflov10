@@ -105,6 +105,81 @@
 user_problem_statement: "Implement TAT (Time-to-Action/Completion) system with automatic expected dates, delay detection, and dynamic milestone timeline behavior for both Leads and Projects"
 
 backend:
+  - task: "PID Generation at Pre-Sales Conversion"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented PID generation system that creates unique Project IDs in format ARKI-PID-XXXXX when converting Pre-Sales leads to Leads"
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: PID generation working correctly. POST /api/presales/{id}/convert-to-lead generates PID in correct format 'ARKI-PID-00002', returns success=true, lead_id, and pid fields. Sequential numbering confirmed."
+
+  - task: "Lead Stage Forward-Only Progression"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented forward-only stage progression for leads with Admin rollback capability. PUT /api/leads/{id}/stage enforces forward movement only"
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: Forward-only progression working correctly. Forward movement (BC Call Done → BOQ Shared) succeeds with 200 status. Backward movement (BOQ Shared → BC Call Done) fails with 400 error and 'forward-only' message. Admin rollback capability confirmed."
+
+  - task: "Project Stage Forward-Only Progression"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented forward-only stage progression for projects with Admin rollback capability. PUT /api/projects/{id}/stage enforces forward movement only"
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: Project forward-only progression working correctly. Forward movement (Design Finalization → Production Preparation) succeeds. Backward movement fails with 400 error and proper 'forward-only' error message. Admin can rollback stages as expected."
+
+  - task: "Lead Collaborator Management"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented lead collaborator endpoints: GET/POST/DELETE /api/leads/{id}/collaborators with proper user details and role-based access"
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: Lead collaborator endpoints working correctly. GET returns array of collaborators with user details (name, email, role). POST adds collaborator with reason field and returns full user details. DELETE removes collaborator successfully. Role-based access enforced."
+
+  - task: "Lead to Project Conversion with Carry-Forward"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented POST /api/leads/{id}/convert endpoint that carries forward PID, comments, files, and collaborators from lead to project"
+      - working: true
+        agent: "testing"
+        comment: "✅ VERIFIED: Lead to project conversion with carry-forward working correctly. PID carried over correctly from lead to project. Comments and collaborators successfully transferred. Project created with same PID as original lead. Full data integrity maintained during conversion."
+
   - task: "TAT Configuration for Leads"
     implemented: true
     working: true
