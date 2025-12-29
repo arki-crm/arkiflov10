@@ -581,6 +581,21 @@ const ProjectDetails = () => {
             >
               {project?.project_name}
             </h1>
+            {/* Hold Status Badge */}
+            {project?.hold_status && project.hold_status !== 'Active' && (
+              <span 
+                className={cn(
+                  "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                  project.hold_status === 'Hold' && 'bg-amber-100 text-amber-700',
+                  project.hold_status === 'Deactivated' && 'bg-red-100 text-red-700'
+                )}
+                data-testid="project-hold-status-badge"
+              >
+                {project.hold_status === 'Hold' && <Pause className="w-3 h-3 mr-1" />}
+                {project.hold_status === 'Deactivated' && <Power className="w-3 h-3 mr-1" />}
+                {project.hold_status}
+              </span>
+            )}
             {user?.role && (
               <span 
                 className={cn(
@@ -599,19 +614,62 @@ const ProjectDetails = () => {
           </p>
         </div>
         
-        {/* Current Stage Badge */}
-        {project?.stage && (
-          <span 
-            className={cn(
-              "inline-flex items-center rounded-full px-3 py-1 text-sm font-medium",
-              STAGE_COLORS[project.stage]?.bg,
-              STAGE_COLORS[project.stage]?.text
+        {/* Right side: Stage Badge + Hold Actions */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+          {/* Hold/Activate/Deactivate Actions */}
+          <div className="flex gap-2 flex-wrap">
+            {project?.hold_status !== 'Hold' && canHold() && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openHoldModal('Hold')}
+                className="text-amber-600 border-amber-300 hover:bg-amber-50"
+                data-testid="hold-btn"
+              >
+                <Pause className="w-3.5 h-3.5 mr-1" />
+                Hold
+              </Button>
             )}
-            data-testid="project-stage-badge"
-          >
-            {project.stage}
-          </span>
-        )}
+            {project?.hold_status === 'Hold' && canActivateOrDeactivate() && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openHoldModal('Activate')}
+                className="text-green-600 border-green-300 hover:bg-green-50"
+                data-testid="activate-btn"
+              >
+                <Play className="w-3.5 h-3.5 mr-1" />
+                Activate
+              </Button>
+            )}
+            {project?.hold_status !== 'Deactivated' && canActivateOrDeactivate() && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openHoldModal('Deactivate')}
+                className="text-red-600 border-red-300 hover:bg-red-50"
+                data-testid="deactivate-btn"
+              >
+                <Power className="w-3.5 h-3.5 mr-1" />
+                Deactivate
+              </Button>
+            )}
+          </div>
+          
+          {/* Current Stage Badge */}
+          {project?.stage && (
+            <span 
+              className={cn(
+                "inline-flex items-center rounded-full px-3 py-1 text-sm font-medium",
+                STAGE_COLORS[project.stage]?.bg,
+                STAGE_COLORS[project.stage]?.text
+              )}
+              data-testid="project-stage-badge"
+            >
+              {project.stage}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Customer Details Section - Visible on all project views */}
