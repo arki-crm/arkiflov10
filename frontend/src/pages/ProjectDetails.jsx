@@ -371,6 +371,68 @@ const ProjectDetails = () => {
     }
   };
 
+  // Update a percentage-based sub-stage (Non-Modular Dependency Works)
+  const handlePercentageUpdate = async (substageId, substageName, groupName, percentage, comment) => {
+    try {
+      setIsUpdatingStage(true);
+      const response = await axios.post(`${API}/projects/${id}/substage/percentage`,
+        { 
+          substage_id: substageId,
+          percentage: percentage,
+          comment: comment
+        },
+        { withCredentials: true }
+      );
+      
+      // Update local state
+      const newPercentageSubStages = response.data.percentage_substages || {};
+      setPercentageSubStages(newPercentageSubStages);
+      
+      // If auto-completed, also update completed substages
+      if (response.data.auto_completed) {
+        const newCompletedSubStages = response.data.completed_substages || [];
+        setCompletedSubStages(newCompletedSubStages);
+        
+        setProject(prev => prev ? {
+          ...prev,
+          completed_substages: newCompletedSubStages,
+          percentage_substages: newPercentageSubStages
+        } : prev);
+        
+        if (response.data.group_complete) {
+          toast.success(`🎉 Milestone "${groupName}" completed!`);
+        } else {
+          toast.success(`✅ "${substageName}" completed at 100%`);
+        }
+      } else {
+        setProject(prev => prev ? {
+          ...prev,
+          percentage_substages: newPercentageSubStages
+        } : prev);
+        
+        toast.success(`📊 Progress updated to ${percentage}%`);
+      }
+      
+      // Refetch to get updated comments
+      const commentsResponse = await axios.get(`${API}/projects/${id}`, {
+        withCredentials: true
+      });
+      if (commentsResponse.data) {
+        setProject(prev => prev ? {
+          ...prev,
+          comments: commentsResponse.data.comments || [],
+          completed_substages: response.data.auto_completed ? response.data.completed_substages : prev.completed_substages,
+          percentage_substages: newPercentageSubStages
+        } : prev);
+      }
+    } catch (err) {
+      console.error('Failed to update percentage:', err);
+      toast.error(err.response?.data?.detail || 'Failed to update progress');
+    } finally {
+      setIsUpdatingStage(false);
+    }
+  };
+
   // Update customer details on project (Admin/SalesManager only)
   const handleUpdateCustomerDetails = async (updatedData) => {
     try {
