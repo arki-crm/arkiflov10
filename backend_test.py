@@ -5382,13 +5382,15 @@ db.user_sessions.insertOne({{
         success, pipeline_data = self.run_test("Validation Pipeline (Admin)", "GET", "api/validation-pipeline", 200,
                                               auth_token=self.admin_token)
         if success:
-            # Verify pipeline structure
-            is_array = isinstance(pipeline_data, list)
+            # API returns an object with pipeline array inside
+            is_dict = isinstance(pipeline_data, dict)
+            pipeline_items = pipeline_data.get('pipeline', []) if is_dict else pipeline_data
+            is_array = isinstance(pipeline_items, list)
             print(f"   Pipeline is array: {is_array}")
-            print(f"   Pipeline items: {len(pipeline_data) if is_array else 'N/A'}")
+            print(f"   Pipeline items: {len(pipeline_items) if is_array else 'N/A'}")
             
-            if is_array and len(pipeline_data) > 0:
-                first_item = pipeline_data[0]
+            if is_array and len(pipeline_items) > 0:
+                first_item = pipeline_items[0]
                 required_fields = ['design_project', 'project', 'designer', 'has_drawings', 'has_sign_off', 'files']
                 has_required_fields = all(field in first_item for field in required_fields)
                 print(f"   Has required fields: {has_required_fields}")
