@@ -624,11 +624,26 @@ const LeadDetails = () => {
     }
   };
 
+  // Update customer details
+  const handleUpdateCustomerDetails = async (updatedData) => {
+    try {
+      await axios.put(`${API}/leads/${id}/customer-details`, updatedData, {
+        withCredentials: true
+      });
+      toast.success('Customer details updated');
+      fetchLead(); // Refresh lead data
+    } catch (err) {
+      console.error('Failed to update customer details:', err);
+      toast.error(err.response?.data?.detail || 'Failed to update customer details');
+      throw err;
+    }
+  };
+
   // Permission checks
   const canChangeStage = () => {
     if (!user || !lead) return false;
     if (user.role === 'Designer') return false;
-    if (user.role === 'Admin' || user.role === 'Manager') return true;
+    if (user.role === 'Admin' || user.role === 'SalesManager') return true;
     if (user.role === 'PreSales') {
       return lead.assigned_to === user.user_id;
     }
@@ -636,11 +651,24 @@ const LeadDetails = () => {
   };
 
   const canAssignDesigner = () => {
-    return user?.role === 'Admin' || user?.role === 'Manager';
+    return user?.role === 'Admin' || user?.role === 'SalesManager';
   };
 
   const canConvert = () => {
-    return user?.role === 'Admin' || user?.role === 'Manager';
+    return user?.role === 'Admin' || user?.role === 'SalesManager';
+  };
+  
+  // Can edit customer details
+  const canEditCustomerDetails = () => {
+    if (!user || !lead) return false;
+    // Admin/SalesManager can always edit
+    if (user.role === 'Admin' || user.role === 'SalesManager') return true;
+    // PreSales can edit their own leads BEFORE qualified
+    if (user.role === 'PreSales') {
+      return lead.assigned_to === user.user_id && lead.status !== 'Qualified';
+    }
+    // Designer cannot edit
+    return false;
   };
 
   if (loading) {
