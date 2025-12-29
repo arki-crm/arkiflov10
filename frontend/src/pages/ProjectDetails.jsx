@@ -321,7 +321,6 @@ const ProjectDetails = () => {
 
   // Complete a sub-stage (new sub-stage progression system)
   const handleSubStageComplete = async (substageId, substageName, groupName) => {
-    console.log('handleSubStageComplete called:', substageId, substageName, groupName);
     try {
       setIsUpdatingStage(true);
       const response = await axios.post(`${API}/projects/${id}/substage/complete`,
@@ -332,9 +331,6 @@ const ProjectDetails = () => {
         },
         { withCredentials: true }
       );
-      
-      console.log('API Response:', response.data);
-      console.log('New completedSubStages:', response.data.completed_substages);
       
       // Update local state FIRST
       const newCompletedSubStages = response.data.completed_substages || [];
@@ -354,9 +350,7 @@ const ProjectDetails = () => {
         toast.success(`✅ "${substageName}" completed`);
       }
       
-      // Refetch to get updated comments (but don't overwrite substages)
-      // We already updated the state, so no need to refetch immediately
-      // Just update comments
+      // Refetch to get updated comments (but preserve our substages)
       const commentsResponse = await axios.get(`${API}/projects/${id}`, {
         withCredentials: true
       });
