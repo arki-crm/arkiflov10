@@ -792,6 +792,14 @@ const LeadDetails = () => {
         </Card>
       )}
 
+      {/* Customer Details Section - Always visible */}
+      <CustomerDetailsSection
+        data={lead}
+        canEdit={canEditCustomerDetails()}
+        onSave={handleUpdateCustomerDetails}
+        isProject={false}
+      />
+
       {/* Three Column Layout */}
       {!lead?.is_converted && (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
