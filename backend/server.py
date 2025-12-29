@@ -6870,7 +6870,7 @@ async def create_measurement_request(design_project_id: str, data: MeasurementRe
     await create_design_notification(
         [data.assigned_to or design_project.get("designer_id")],
         "Measurement Request",
-        f"Site measurement has been requested",
+        "Site measurement has been requested",
         f"/design-board/{design_project_id}"
     )
     
@@ -7066,7 +7066,7 @@ async def schedule_design_meeting(design_project_id: str, data: DesignMeetingCre
 @api_router.put("/design-meetings/{meeting_id}/complete")
 async def complete_design_meeting(meeting_id: str, request: Request):
     """Mark design meeting as complete - 1-click action"""
-    user = await get_current_user(request)
+    await get_current_user(request)  # Auth check
     
     meeting = await db.design_meetings.find_one({"id": meeting_id}, {"_id": 0})
     if not meeting:
@@ -7230,7 +7230,7 @@ async def validate_design_project(design_project_id: str, data: ValidationReques
         await create_design_notification(
             [design_project.get("designer_id")],
             "Validation Approved",
-            f"Production drawings have been approved",
+            "Production drawings have been approved",
             f"/design-board/{design_project_id}"
         )
     elif data.status == "needs_revision":
@@ -7345,7 +7345,6 @@ async def get_design_manager_dashboard(request: Request):
         projects_by_stage[stage] = 0
     
     delayed_projects = []
-    pending_approvals = []
     bottlenecks = {"measurement": 0, "designer": 0, "validation": 0}
     
     for dp in active_projects:
@@ -7466,7 +7465,6 @@ async def get_ceo_dashboard(request: Request):
         raise HTTPException(status_code=403, detail="Access denied")
     
     now = datetime.now(timezone.utc)
-    thirty_days_ago = now - timedelta(days=30)
     
     # === Designer Performance Scores ===
     designers = await db.users.find(
@@ -7542,7 +7540,7 @@ async def get_ceo_dashboard(request: Request):
     for manager in design_managers:
         # Get total design projects under management
         total_projects = await db.design_projects.count_documents({"status": "active"})
-        delayed_projects = await db.design_projects.count_documents({
+        delayed_project_count = await db.design_projects.count_documents({
             "status": "active",
             "current_stage": {"$ne": "Validation & Kickoff"}
         })
