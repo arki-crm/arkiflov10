@@ -142,6 +142,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
     case 'Technician':
       return [
         { path: '/service-requests', label: 'My Requests', icon: Wrench },
+        { path: '/academy', label: 'Academy', icon: GraduationCap },
         ...commonItems
       ];
 
