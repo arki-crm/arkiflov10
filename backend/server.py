@@ -1905,7 +1905,191 @@ async def get_project_substages(project_id: str, request: Request):
         "current_group": current_group["id"] if current_group else None,
         "current_group_name": current_group["name"] if current_group else None,
         "group_progress": group_progress,
-        "milestone_groups": MILESTONE_GROUPS
+        "milestone_groups": MILESTONE_GROUPS,
+        "percentage_substages": project.get("percentage_substages", {})
+    }
+
+@api_router.post("/projects/{project_id}/substage/percentage")
+async def update_percentage_substage(project_id: str, request: Request):
+    """Update a percentage-based sub-stage (Non-Modular Dependency Works)"""
+    user = await get_current_user(request)
+    body = await request.json()
+    
+    substage_id = body.get("substage_id")
+    percentage = body.get("percentage", 0)
+    comment = body.get("comment", "")
+    
+    if not substage_id:
+        raise HTTPException(status_code=400, detail="substage_id is required")
+    
+    if not isinstance(percentage, (int, float)) or percentage < 0 or percentage > 100:
+        raise HTTPException(status_code=400, detail="Percentage must be between 0 and 100")
+    
+    # PreSales cannot access projects
+    if user.role == "PreSales":
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Check access
+    if user.role == "Designer" and user.user_id not in project.get("collaborators", []):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    completed_substages = project.get("completed_substages", [])
+    percentage_substages = project.get("percentage_substages", {})
+    
+    # Validate that this is a percentage-type sub-stage and can be updated
+    all_substages = get_all_substages()
+    substage_info = next((s for s in all_substages if s["id"] == substage_id), None)
+    
+    if not substage_info:
+        raise HTTPException(status_code=400, detail="Invalid sub-stage")
+    
+    # Check if the sub-stage is already fully completed
+    if substage_id in completed_substages:
+        raise HTTPException(status_code=400, detail="Sub-stage already completed. Cannot update.")
+    
+    # Forward-only check: previous sub-stages must be completed
+    substage_ids = [s["id"] for s in all_substages]
+    target_index = substage_ids.index(substage_id)
+    
+    if target_index > 0:
+        prev_substage_id = substage_ids[target_index - 1]
+        if prev_substage_id not in completed_substages:
+            prev_substage = all_substages[target_index - 1]
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Must complete '{prev_substage['name']}' first"
+            )
+    
+    now = datetime.now(timezone.utc)
+    pid = project.get("pid", "N/A")
+    old_percentage = percentage_substages.get(substage_id, 0)
+    
+    # Validate forward-only for percentage (cannot decrease)
+    if percentage < old_percentage:
+        if user.role != "Admin":
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot decrease progress from {old_percentage}% to {percentage}%. Progress is forward-only."
+            )
+    
+    # Update percentage
+    percentage_substages[substage_id] = percentage
+    
+    # Create activity log
+    comment_text = f"📊 {substage_info['name']} progress updated: {old_percentage}% → {percentage}%"
+    if comment:
+        comment_text += f" — {comment}"
+    
+    system_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": comment_text,
+        "is_system": True,
+        "created_at": now.isoformat(),
+        "metadata": {
+            "type": "percentage_update",
+            "pid": pid,
+            "substage_id": substage_id,
+            "substage_name": substage_info["name"],
+            "group_id": substage_info["group_id"],
+            "group_name": substage_info["group_name"],
+            "old_percentage": old_percentage,
+            "new_percentage": percentage
+        }
+    }
+    
+    # Check if 100% - auto-complete the sub-stage
+    auto_completed = False
+    group_complete = False
+    
+    if percentage >= 100:
+        completed_substages.append(substage_id)
+        auto_completed = True
+        
+        # Add completion comment
+        completion_comment = {
+            "id": f"comment_{uuid.uuid4().hex[:8]}",
+            "user_id": "system",
+            "user_name": "System",
+            "role": "System",
+            "message": f"✅ {substage_info['name']} auto-completed at 100%",
+            "is_system": True,
+            "created_at": now.isoformat(),
+            "metadata": {
+                "type": "substage_complete",
+                "pid": pid,
+                "substage_id": substage_id,
+                "auto_completed": True
+            }
+        }
+        
+        # Check if parent group is now complete
+        parent_group = next((g for g in MILESTONE_GROUPS if g["id"] == substage_info["group_id"]), None)
+        if parent_group:
+            group_complete = all(s["id"] in completed_substages for s in parent_group["subStages"])
+        
+        # Update with both comments
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {
+                "$set": {
+                    "percentage_substages": percentage_substages,
+                    "completed_substages": completed_substages,
+                    "updated_at": now.isoformat()
+                },
+                "$push": {"comments": {"$each": [system_comment, completion_comment]}}
+            }
+        )
+        
+        # Add group completion comment if needed
+        if group_complete:
+            group_comment = {
+                "id": f"comment_{uuid.uuid4().hex[:8]}",
+                "user_id": "system",
+                "user_name": "System",
+                "role": "System",
+                "message": f"🎉 Milestone Complete: {parent_group['name']} - All sub-stages completed",
+                "is_system": True,
+                "created_at": now.isoformat(),
+                "metadata": {
+                    "type": "milestone_complete",
+                    "pid": pid,
+                    "group_id": parent_group["id"],
+                    "group_name": parent_group["name"]
+                }
+            }
+            await db.projects.update_one(
+                {"project_id": project_id},
+                {"$push": {"comments": group_comment}}
+            )
+    else:
+        # Just update percentage
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {
+                "$set": {
+                    "percentage_substages": percentage_substages,
+                    "updated_at": now.isoformat()
+                },
+                "$push": {"comments": system_comment}
+            }
+        )
+    
+    return {
+        "success": True,
+        "substage_id": substage_id,
+        "substage_name": substage_info["name"],
+        "percentage": percentage,
+        "auto_completed": auto_completed,
+        "group_complete": group_complete,
+        "completed_substages": completed_substages,
+        "percentage_substages": percentage_substages
     }
 
 # ============ FILES ENDPOINTS ============
