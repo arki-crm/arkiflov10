@@ -95,6 +95,16 @@ const getRoleNavItems = (role) => {
         { path: '/projects', label: 'Projects', icon: FolderKanban }
       ];
 
+    case 'SalesManager':
+      // Sales Manager lands on sales dashboard - ONLY sales-related items
+      return [
+        { path: '/sales-manager', label: 'Sales Dashboard', icon: LayoutDashboard },
+        { path: '/leads', label: 'Leads', icon: Users },
+        { path: '/presales', label: 'Pre-Sales', icon: UserPlus },
+        ...commonItems,
+        { path: '/reports', label: 'Reports', icon: BarChart3 }
+      ];
+
     case 'Designer':
     case 'HybridDesigner':
       return [
