@@ -1579,3 +1579,170 @@ test_plan:
 agent_communication:
     -agent: "testing"
     -message: "✅ PRODUCTION MILESTONE + PERCENTAGE SYSTEM TESTING COMPLETE: All 8 backend tasks tested and verified working correctly. The new Production milestone with 11 sub-stages is fully functional. The percentage-based system for Non-Modular Dependency Works is working as expected with proper forward-only validation (for non-Admin users), auto-completion at 100%, comprehensive activity logging, and robust validation rules. The system correctly handles the complete flow: Design Finalization → Production preparation sub-stages → Percentage-based Non-Modular Dependency → Auto-completion → Next sub-stage unlock. All expected behaviors from the review request have been verified and are working correctly. Success rate: 96.3% (26/27 tests passed - 1 minor test failure due to project creation endpoint method issue, not related to core percentage functionality)."
+
+    -agent: "main"
+    -message: "🔧 NEW FEATURES IMPLEMENTED - Needs Testing:
+    
+    **1. DELIVERY MILESTONE (4 sub-stages)**
+    - dispatch_scheduled → installation_team_scheduled → materials_dispatched → delivery_confirmed
+    - Same forward-only progression system as Design Finalization & Production
+    
+    **2. HANDOVER MILESTONE (8 sub-stages)**  
+    - final_inspection → cleaning → handover_docs → project_handover → csat → review_video_photos → issue_warranty_book → closed
+    - When all 8 sub-stages complete → Project marked as Completed
+    
+    **3. HOLD/ACTIVATE/DEACTIVATE SYSTEM**
+    - New endpoints: PUT /api/leads/{lead_id}/hold-status and PUT /api/projects/{project_id}/hold-status
+    - Actions: Hold, Activate, Deactivate with required reason
+    - Permissions: Admin/Manager can Hold/Activate/Deactivate; Designer can only Hold
+    - Milestone progression blocked when project is on Hold or Deactivated
+    - Activity logging for all status changes
+    - UI implemented on both LeadDetails and ProjectDetails pages
+    - List views (Leads.jsx, Projects.jsx) show hold status badges
+    
+    **Test Focus:**
+    - Delivery milestone sub-stage completion flow
+    - Handover milestone sub-stage completion flow  
+    - Hold/Activate/Deactivate API endpoints for leads and projects
+    - Permission checks (Designer can only Hold, not Activate/Deactivate)
+    - Milestone progression blocking when project is on Hold
+    - Timeline/activity logging for hold status changes"
+
+## New Backend Tasks to Test:
+
+backend:
+  - task: "Delivery milestone 4 sub-stages structure"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Implemented Delivery milestone with 4 sub-stages: dispatch_scheduled, installation_team_scheduled, materials_dispatched, delivery_confirmed. Needs testing."
+
+  - task: "Handover milestone 8 sub-stages structure"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Implemented Handover milestone with 8 sub-stages including CSAT, Review Video/Photos, Issue Warranty Book, and Closed. Needs testing."
+
+  - task: "Project hold-status endpoint"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "PUT /api/projects/{project_id}/hold-status endpoint with Hold/Activate/Deactivate actions, reason validation, and activity logging."
+
+  - task: "Lead hold-status endpoint"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "PUT /api/leads/{lead_id}/hold-status endpoint with Hold/Activate/Deactivate actions, reason validation, and activity logging."
+
+  - task: "Hold status permission checks"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Role-based permissions: Admin/Manager can all actions, Designer can only Hold. Needs testing."
+
+  - task: "Milestone progression blocked when on Hold"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Added hold status checks to substage completion and percentage update endpoints. Returns 400 error when project is on Hold or Deactivated."
+
+  - task: "Hold status activity logging"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Timeline entries created with user name, reason, and timestamp for all hold status changes."
+
+frontend:
+  - task: "Hold/Activate/Deactivate UI on ProjectDetails"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/ProjectDetails.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Added hold status buttons, modal with reason input, and status badge. StagesPanel shows warning when project is on Hold."
+
+  - task: "Hold/Activate/Deactivate UI on LeadDetails"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/LeadDetails.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Added hold status buttons, modal with reason input, and status badge on lead detail page."
+
+  - task: "Hold status indicators in list views"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/pages/Projects.jsx, Leads.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Added hold status badges (Hold/Deactivated) with icons to project and lead list rows."
+
+metadata:
+  created_by: "main_agent"
+  version: "3.0"
+  test_sequence: 2
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Delivery milestone 4 sub-stages"
+    - "Handover milestone 8 sub-stages"
+    - "Hold/Activate/Deactivate system for leads and projects"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
