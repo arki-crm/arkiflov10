@@ -2306,7 +2306,17 @@ def generate_project_timeline(stage: str, created_date: str):
     cumulative_days = 0
     
     for stage_idx, stage_name in enumerate(STAGE_ORDER):
-        milestones = MILESTONE_GROUPS.get(stage_name, [])
+        # Find milestone group for this stage
+        milestone_group = None
+        for group in MILESTONE_GROUPS:
+            if group["name"] == stage_name:
+                milestone_group = group
+                break
+        
+        if not milestone_group:
+            continue
+            
+        milestones = [substage["name"] for substage in milestone_group.get("subStages", [])]
         
         for milestone_idx, milestone_title in enumerate(milestones):
             # Calculate expected date using TAT rules
