@@ -752,6 +752,16 @@ const ProjectDetails = () => {
               Financials
             </TabsTrigger>
           )}
+          {user?.role !== 'PreSales' && (
+            <TabsTrigger 
+              value="warranty" 
+              className="data-[state=active]:bg-white"
+              data-testid="tab-warranty"
+            >
+              <Shield className="w-4 h-4 mr-2" />
+              Warranty & Service
+            </TabsTrigger>
+          )}
         </TabsList>
       </Tabs>
 
