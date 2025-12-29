@@ -2523,20 +2523,28 @@ async def convert_to_project(lead_id: str, request: Request):
         "created_at": now.isoformat()
     })
     
-    # Create project
+    # Create project with ALL customer details carried forward
     new_project = {
         "project_id": project_id,
         "project_name": f"{lead['customer_name']} - Interior Project",
+        # Customer Details (carried forward from lead - persistent)
         "client_name": lead["customer_name"],
         "client_phone": lead["customer_phone"],
+        "client_email": lead.get("customer_email"),
+        "client_address": lead.get("customer_address"),
+        "client_requirements": lead.get("customer_requirements"),
+        "lead_source": lead.get("source"),
+        "budget": lead.get("budget"),
+        # Project Details
         "stage": "Design Finalization",
         "collaborators": [lead["designer_id"]] if lead.get("designer_id") else [],
         "summary": f"Converted from lead {lead_id}",
+        "lead_id": lead_id,  # Reference to original lead
         "timeline": project_timeline,
         "comments": project_comments,
         "files": [],
         "notes": [],
-        "project_value": 0,
+        "project_value": lead.get("budget") or 0,
         "payment_schedule": [
             {
                 "stage": "Design Booking",
