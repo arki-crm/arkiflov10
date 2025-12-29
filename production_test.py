@@ -408,6 +408,77 @@ print("Designer user ID: {designer_user_id}");
             print("⚠️  No test project available for auto-completion test")
             return False, {}
 
+    def test_percentage_endpoint_designer_forward_only_validation(self):
+        """Test percentage endpoint forward-only validation specifically for Designer role"""
+        # Create a new project for Designer test to avoid conflicts
+        success_create, create_response = self.run_test("Create Project for Designer Forward-Only Test", "POST", 
+                                                      "api/projects", 200,
+                                                      data={
+                                                          "project_name": "Designer Forward-Only Test Project",
+                                                          "client_name": "Test Client",
+                                                          "client_phone": "+1-555-0123",
+                                                          "collaborators": [self.designer_user_id]
+                                                      },
+                                                      auth_token=self.admin_token)
+        
+        if success_create and 'project_id' in create_response:
+            designer_project_id = create_response['project_id']
+            
+            # Complete design finalization and first 3 production stages for designer project
+            all_substages = [
+                'site_measurement', 'design_meeting_1', 'design_meeting_2', 'design_meeting_3',
+                'final_design_presentation', 'material_selection', 'payment_collection_50',
+                'production_drawing_prep', 'validation_internal', 'kws_signoff', 'kickoff_meeting',
+                'vendor_mapping', 'factory_slot_allocation', 'jit_delivery_plan'
+            ]
+            
+            for substage in all_substages:
+                self.run_test(f"Complete {substage} for Designer Test", "POST", 
+                            f"api/projects/{designer_project_id}/substage/complete", 200,
+                            data={"substage_id": substage},
+                            auth_token=self.admin_token)
+            
+            # Test Designer percentage access with forward-only validation
+            # First update to 50% as Designer
+            success1, _ = self.run_test("Designer: Update Percentage to 50%", "POST", 
+                                      f"api/projects/{designer_project_id}/substage/percentage", 200,
+                                      data={
+                                          "substage_id": "non_modular_dependency",
+                                          "percentage": 50,
+                                          "comment": "Designer progress update to 50%"
+                                      },
+                                      auth_token=self.designer_token)
+            
+            if success1:
+                # Try to decrease to 30% as Designer (should fail)
+                success2, error_response = self.run_test("Designer: Try to Decrease to 30% (Should Fail)", "POST", 
+                                                       f"api/projects/{designer_project_id}/substage/percentage", 400,
+                                                       data={
+                                                           "substage_id": "non_modular_dependency",
+                                                           "percentage": 30,
+                                                           "comment": "Designer trying to decrease"
+                                                       },
+                                                       auth_token=self.designer_token)
+                
+                if success2:
+                    # Verify error message mentions forward-only
+                    error_detail = error_response.get('detail', '')
+                    mentions_forward_only = ('forward-only' in error_detail.lower() or 
+                                           'cannot decrease' in error_detail.lower() or
+                                           'decrease progress' in error_detail.lower())
+                    
+                    print(f"   Designer 50% update successful: {success1}")
+                    print(f"   Designer 30% decrease properly rejected: {success2}")
+                    print(f"   Error detail: {error_detail}")
+                    print(f"   Mentions forward-only: {mentions_forward_only}")
+                    
+                    return success1 and success2 and mentions_forward_only, error_response
+                return success1 and success2, error_response
+            return success1, {}
+        else:
+            print("⚠️  Failed to create project for designer forward-only test")
+            return False, {}
+
     def test_percentage_endpoint_validation(self):
         """Test percentage endpoint validation rules"""
         if hasattr(self, 'test_production_project_id'):
