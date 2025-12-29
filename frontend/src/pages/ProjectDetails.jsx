@@ -535,6 +535,7 @@ const ProjectDetails = () => {
                 onStageChange={handleStageChange}
                 canChangeStage={canChangeStage()}
                 isUpdating={isUpdatingStage}
+                userRole={user?.role}
               />
             </CardContent>
           </Card>
