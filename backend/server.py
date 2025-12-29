@@ -768,6 +768,7 @@ async def logout(request: Request, response: Response):
 VALID_ROLES = [
     "Admin",               # Full system access, CEO view
     "Manager",             # General manager with broad access
+    "SalesManager",        # Monitors all pre-booking leads, sales performance, funnel analytics
     "PreSales",            # Lead generation, BC calls, site visits
     "Designer",            # Design work only
     "HybridDesigner",      # Designer + Sales (handles BC calls, BOQ, site visits, booking, full design)
@@ -779,18 +780,31 @@ VALID_ROLES = [
 
 # Role categories for permission checks
 DESIGN_ROLES = ["Designer", "HybridDesigner", "DesignManager"]
-SALES_CAPABLE_ROLES = ["Admin", "Manager", "PreSales", "HybridDesigner"]
-MANAGER_ROLES = ["Admin", "Manager", "DesignManager", "ProductionManager", "OperationsLead"]
+SALES_CAPABLE_ROLES = ["Admin", "Manager", "SalesManager", "PreSales", "HybridDesigner"]
+SALES_MANAGER_ROLES = ["Admin", "Manager", "SalesManager"]
+MANAGER_ROLES = ["Admin", "Manager", "DesignManager", "ProductionManager", "OperationsLead", "SalesManager"]
 OPERATIONS_ROLES = ["Admin", "Manager", "OperationsLead", "ProductionManager"]
+
+# Pre-booking stages (sales stages)
+PRE_BOOKING_STAGES = [
+    "New Lead", "BC Call Scheduled", "BC Call Done", "Site Visit Scheduled", 
+    "Site Visit Done", "Tentative BOQ Sent", "Revised BOQ Sent", "BOQ Sent",
+    "Negotiation", "Waiting for Booking"
+]
 
 # Stage-based auto-collaborator mapping (Livspace-style)
 STAGE_COLLABORATOR_ROLES = {
-    # Pre-booking stages - PreSales/HybridDesigner
+    # Pre-booking stages - PreSales/HybridDesigner/SalesManager monitors
     "New Lead": ["PreSales", "HybridDesigner"],
+    "BC Call Scheduled": ["PreSales", "HybridDesigner"],
     "BC Call Done": ["PreSales", "HybridDesigner"],
+    "Site Visit Scheduled": ["PreSales", "HybridDesigner"],
     "Site Visit Done": ["PreSales", "HybridDesigner"],
+    "Tentative BOQ Sent": ["PreSales", "HybridDesigner"],
+    "Revised BOQ Sent": ["PreSales", "HybridDesigner"],
     "BOQ Sent": ["PreSales", "HybridDesigner"],
     "Negotiation": ["PreSales", "HybridDesigner"],
+    "Waiting for Booking": ["PreSales", "HybridDesigner"],
     
     # After Booking - Design Manager joins
     "Booked": ["DesignManager"],
