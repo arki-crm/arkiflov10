@@ -90,6 +90,7 @@ const AppRouter = () => {
         <Route path="/design-manager" element={<DesignManagerDashboard />} />
         <Route path="/validation-pipeline" element={<ValidationPipeline />} />
         <Route path="/operations" element={<OperationsDashboard />} />
+        <Route path="/sales-manager" element={<SalesManagerDashboard />} />
         <Route path="/ceo-dashboard" element={<CEODashboard />} />
       </Route>
 
