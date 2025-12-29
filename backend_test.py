@@ -5409,8 +5409,10 @@ db.user_sessions.insertOne({{
                                               auth_token=self.admin_token)
         # Access the pipeline array from the response dict
         pipeline_items = pipeline_data.get('pipeline', []) if isinstance(pipeline_data, dict) else pipeline_data
+        # Access the pipeline array from the response dict
+        pipeline_items = pipeline_data.get('pipeline', []) if isinstance(pipeline_data, dict) else pipeline_data
         if success and pipeline_items and len(pipeline_items) > 0:
-            design_project_id = pipeline_data[0]['design_project']['id']
+            design_project_id = pipeline_items[0]['design_project']['id']
             
             validation_data = {
                 "status": "approved",
