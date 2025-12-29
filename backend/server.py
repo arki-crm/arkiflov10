@@ -5347,7 +5347,7 @@ async def get_revenue_report(request: Request):
         "total_forecast": round(total_forecast, 2),
         "expected_this_month": round(expected_this_month, 2),
         "total_pending": sum(p["pending"] for p in pending_collections),
-        "total_collected": sum(project.get("payments", []) for project in projects if isinstance(project.get("payments"), list)),
+        "total_collected": sum(sum(p.get("amount", 0) for p in project.get("payments", [])) for project in projects),
         "pending_collections": pending_collections,
         "stage_wise_revenue": stage_wise_revenue,
         "milestone_projection": milestone_projection,
