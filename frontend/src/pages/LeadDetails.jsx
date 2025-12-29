@@ -6,6 +6,8 @@ import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { ScrollArea } from '../components/ui/scroll-area';
+import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,6 +18,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog';
 import { 
   ArrowLeft, 
   Loader2, 
@@ -32,7 +42,10 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
-  Users
+  Users,
+  Pause,
+  Play,
+  Power
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
