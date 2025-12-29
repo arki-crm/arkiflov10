@@ -7873,6 +7873,104 @@ async def get_operations_dashboard(request: Request):
         "upcoming_deliveries": upcoming_deliveries[:10]
     }
 
+# ============ V1 PRODUCTION/OPS MANAGER DASHBOARD ============
+
+@api_router.get("/production-ops/dashboard")
+async def get_production_ops_dashboard(request: Request):
+    """
+    V1 Dashboard for Production/Operations Manager
+    Covers: Validation, Kick-Off, Production, Delivery, Installation, Handover
+    """
+    user = await get_current_user(request)
+    
+    # Allow Admin, ProductionOpsManager, or users with senior_manager_view
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    has_senior_view = user_doc.get("senior_manager_view", False) if user_doc else False
+    
+    if user.role not in ["Admin", "ProductionOpsManager"] and not has_senior_view:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Get projects in execution stages (V1 stages)
+    execution_stages = EXECUTION_STAGES  # ["Validation", "Kick-Off", "Production", "Delivery", "Installation", "Handover"]
+    
+    all_projects = await db.projects.find(
+        {"stage": {"$in": execution_stages}, "status": {"$nin": ["Lost"]}},
+        {"_id": 0}
+    ).to_list(500)
+    
+    # Count by stage
+    projects_by_stage = {stage: 0 for stage in execution_stages}
+    delayed_projects = []
+    upcoming_deliveries = []
+    
+    for project in all_projects:
+        stage = project.get("stage")
+        if stage in projects_by_stage:
+            projects_by_stage[stage] += 1
+        
+        # Check for delays
+        timeline = project.get("timeline", [])
+        for milestone in timeline:
+            if milestone.get("stage_ref") == stage:
+                expected = milestone.get("expectedDate")
+                completed = milestone.get("completedDate")
+                if expected and not completed:
+                    try:
+                        expected_date = datetime.fromisoformat(expected.replace("Z", "+00:00"))
+                        if expected_date < now:
+                            days_delayed = (now - expected_date).days
+                            delayed_projects.append({
+                                "project_id": project.get("project_id"),
+                                "project_name": project.get("project_name"),
+                                "client_name": project.get("client_name"),
+                                "stage": stage,
+                                "days_delayed": days_delayed
+                            })
+                    except:
+                        pass
+    
+    # Get upcoming deliveries (next 7 days)
+    seven_days = (now + timedelta(days=7)).isoformat()
+    for project in all_projects:
+        if project.get("stage") in ["Delivery", "Installation", "Handover"]:
+            timeline = project.get("timeline", [])
+            for milestone in timeline:
+                expected = milestone.get("expectedDate")
+                if expected and not milestone.get("completedDate"):
+                    if expected <= seven_days:
+                        upcoming_deliveries.append({
+                            "project_id": project.get("project_id"),
+                            "project_name": project.get("project_name"),
+                            "client_name": project.get("client_name"),
+                            "stage": project.get("stage"),
+                            "expected_date": expected
+                        })
+    
+    # Due this week
+    week_end = (now + timedelta(days=7)).isoformat()
+    due_this_week = len([p for p in upcoming_deliveries])
+    
+    # Completed this month
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    completed_this_month = await db.projects.count_documents({
+        "stage": "Handover",
+        "updated_at": {"$gte": month_start.isoformat()}
+    })
+    
+    return {
+        "summary": {
+            "total_in_execution": len(all_projects),
+            "delayed_count": len(delayed_projects),
+            "due_this_week": due_this_week,
+            "completed_this_month": completed_this_month
+        },
+        "projects_by_stage": projects_by_stage,
+        "delayed_projects": sorted(delayed_projects, key=lambda x: x["days_delayed"], reverse=True)[:10],
+        "upcoming_deliveries": upcoming_deliveries[:10]
+    }
+
 # ============ SALES MANAGER DASHBOARD ============
 
 @api_router.get("/sales-manager/dashboard")
