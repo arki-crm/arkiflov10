@@ -64,6 +64,7 @@ class UserInvite(BaseModel):
     email: str
     role: str
     phone: Optional[str] = None
+    senior_manager_view: Optional[bool] = False  # V1 permission toggle
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
@@ -71,6 +72,7 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     status: Optional[str] = None
     picture: Optional[str] = None
+    senior_manager_view: Optional[bool] = None  # V1 permission toggle
 
 class ProfileUpdate(BaseModel):
     name: Optional[str] = None
