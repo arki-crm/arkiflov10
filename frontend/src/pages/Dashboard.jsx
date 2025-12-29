@@ -279,7 +279,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Role-based dashboard redirect
+  // Role-based dashboard redirect - each specialized role goes to their dashboard
   useEffect(() => {
     if (user?.role === 'DesignManager') {
       navigate('/design-manager', { replace: true });
@@ -289,11 +289,15 @@ const Dashboard = () => {
       navigate('/validation-pipeline', { replace: true });
       return;
     }
+    if (user?.role === 'OperationsLead') {
+      navigate('/operations', { replace: true });
+      return;
+    }
   }, [user, navigate]);
   
   useEffect(() => {
-    // Don't fetch if redirecting
-    if (user?.role === 'DesignManager' || user?.role === 'ProductionManager') return;
+    // Don't fetch if redirecting to role-specific dashboard
+    if (['DesignManager', 'ProductionManager', 'OperationsLead'].includes(user?.role)) return;
     fetchDashboardData();
   }, [user]);
   
