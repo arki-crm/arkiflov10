@@ -48,7 +48,8 @@ import {
   Trash2,
   Pause,
   Play,
-  Power
+  Power,
+  ChevronDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
