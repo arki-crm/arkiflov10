@@ -69,7 +69,7 @@ export const StagesPanel = ({
   };
 
   const handleSubStageClick = (subStage, groupName) => {
-    if (!canChangeStage || isUpdating) return;
+    if (!canChangeStage || isUpdating || isProgressionBlocked) return;
     if (!canCompleteSubStage(subStage.id, completedSubStages)) return;
     
     // Check if this is a percentage-type sub-stage
