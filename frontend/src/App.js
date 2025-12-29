@@ -70,6 +70,7 @@ const AppRouter = () => {
         <Route path="/presales" element={<PreSales />} />
         <Route path="/presales/:id" element={<PreSalesDetail />} />
         <Route path="/leads" element={<Leads />} />
+        <Route path="/leads/create" element={<CreateLead />} />
         <Route path="/leads/:id" element={<LeadDetails />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/:id" element={<ProjectDetails />} />
