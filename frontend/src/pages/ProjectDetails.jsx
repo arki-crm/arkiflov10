@@ -432,6 +432,14 @@ const ProjectDetails = () => {
         )}
       </div>
 
+      {/* Customer Details Section - Visible on all project views */}
+      <CustomerDetailsSection
+        data={project}
+        canEdit={canEditProjectCustomerDetails()}
+        onSave={handleUpdateCustomerDetails}
+        isProject={true}
+      />
+
       {/* Tab Navigation */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="bg-slate-100 p-1">
