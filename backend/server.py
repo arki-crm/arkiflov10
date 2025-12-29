@@ -235,6 +235,12 @@ class LeadStageUpdate(BaseModel):
 class LeadAssignDesigner(BaseModel):
     designer_id: str
 
+# ============ HOLD/ACTIVATE/DEACTIVATE MODELS ============
+
+class HoldStatusUpdate(BaseModel):
+    action: str  # "Hold", "Activate", "Deactivate"
+    reason: str
+
 # Lead stages
 LEAD_STAGES = [
     "BC Call Done",
