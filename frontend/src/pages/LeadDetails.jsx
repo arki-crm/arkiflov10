@@ -1142,51 +1142,6 @@ const LeadDetails = () => {
           </Card>
         </div>
       )}
-                    data-testid="add-collaborator-btn"
-                  >
-                    <Plus className="w-3 h-3 mr-1" />
-                    Add
-                  </Button>
-                )}
-              </div>
-              
-              {collaborators.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-4">No collaborators added</p>
-              ) : (
-                <div className="space-y-2">
-                  {collaborators.map((collab, idx) => (
-                    <div 
-                      key={collab.user_id || idx}
-                      className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 border border-slate-200"
-                    >
-                      <div className={cn(
-                        "w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white",
-                        getAvatarColor(collab.name || 'U')
-                      )}>
-                        {getInitials(collab.name || 'U')}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-900 truncate">{collab.name || 'Unknown'}</p>
-                        <p className="text-xs text-slate-500">{collab.role || 'Collaborator'}</p>
-                      </div>
-                      {canAddCollaborator() && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 text-slate-400 hover:text-red-500"
-                          onClick={() => handleRemoveCollaborator(collab.user_id)}
-                        >
-                          <X className="w-3 h-3" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       {/* Meeting Modal */}
       <MeetingModal
