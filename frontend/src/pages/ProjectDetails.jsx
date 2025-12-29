@@ -621,47 +621,59 @@ const ProjectDetails = () => {
           </p>
         </div>
         
-        {/* Right side: Stage Badge + Hold Actions */}
+        {/* Right side: Stage Badge + Status Dropdown */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-          {/* Hold/Activate/Deactivate Actions */}
-          <div className="flex gap-2 flex-wrap">
-            {project?.hold_status !== 'Hold' && canHold() && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => openHoldModal('Hold')}
-                className="text-amber-600 border-amber-300 hover:bg-amber-50"
-                data-testid="hold-btn"
-              >
-                <Pause className="w-3.5 h-3.5 mr-1" />
-                Hold
-              </Button>
-            )}
-            {project?.hold_status === 'Hold' && canActivateOrDeactivate() && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => openHoldModal('Activate')}
-                className="text-green-600 border-green-300 hover:bg-green-50"
-                data-testid="activate-btn"
-              >
-                <Play className="w-3.5 h-3.5 mr-1" />
-                Activate
-              </Button>
-            )}
-            {project?.hold_status !== 'Deactivated' && canActivateOrDeactivate() && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => openHoldModal('Deactivate')}
-                className="text-red-600 border-red-300 hover:bg-red-50"
-                data-testid="deactivate-btn"
-              >
-                <Power className="w-3.5 h-3.5 mr-1" />
-                Deactivate
-              </Button>
-            )}
-          </div>
+          {/* Status Dropdown */}
+          {(canHold() || canActivateOrDeactivate()) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-slate-600 border-slate-300 hover:bg-slate-50"
+                  data-testid="status-dropdown-btn"
+                >
+                  Status
+                  <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                {/* Show Hold option if status is Active and user can hold */}
+                {project?.hold_status !== 'Hold' && project?.hold_status !== 'Deactivated' && canHold() && (
+                  <DropdownMenuItem
+                    onClick={() => openHoldModal('Hold')}
+                    className="text-amber-600 cursor-pointer"
+                    data-testid="hold-option"
+                  >
+                    <Pause className="w-4 h-4 mr-2" />
+                    Hold
+                  </DropdownMenuItem>
+                )}
+                {/* Show Activate option if status is Hold or Deactivated */}
+                {(project?.hold_status === 'Hold' || project?.hold_status === 'Deactivated') && canActivateOrDeactivate() && (
+                  <DropdownMenuItem
+                    onClick={() => openHoldModal('Activate')}
+                    className="text-green-600 cursor-pointer"
+                    data-testid="activate-option"
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    Activate
+                  </DropdownMenuItem>
+                )}
+                {/* Show Deactivate option if status is not already Deactivated */}
+                {project?.hold_status !== 'Deactivated' && canActivateOrDeactivate() && (
+                  <DropdownMenuItem
+                    onClick={() => openHoldModal('Deactivate')}
+                    className="text-red-600 cursor-pointer"
+                    data-testid="deactivate-option"
+                  >
+                    <Power className="w-4 h-4 mr-2" />
+                    Deactivate
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
           
           {/* Current Stage Badge */}
           {project?.stage && (
