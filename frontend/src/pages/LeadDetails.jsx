@@ -559,6 +559,15 @@ const LeadDetails = () => {
   const [meetings, setMeetings] = useState([]);
   const [loadingMeetings, setLoadingMeetings] = useState(false);
   const [showMeetingModal, setShowMeetingModal] = useState(false);
+  
+  // Collaborators state
+  const [collaborators, setCollaborators] = useState([]);
+  const [showCollaboratorModal, setShowCollaboratorModal] = useState(false);
+  const [allUsers, setAllUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [addingCollaborator, setAddingCollaborator] = useState(false);
+  const [selectedCollaborator, setSelectedCollaborator] = useState('');
+  const [collaboratorReason, setCollaboratorReason] = useState('');
 
   // Fetch lead
   const fetchLead = async () => {
