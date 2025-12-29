@@ -321,6 +321,7 @@ const ProjectDetails = () => {
 
   // Complete a sub-stage (new sub-stage progression system)
   const handleSubStageComplete = async (substageId, substageName, groupName) => {
+    console.log('handleSubStageComplete called:', substageId, substageName, groupName);
     try {
       setIsUpdatingStage(true);
       const response = await axios.post(`${API}/projects/${id}/substage/complete`,
@@ -332,8 +333,19 @@ const ProjectDetails = () => {
         { withCredentials: true }
       );
       
-      // Update local state
-      setCompletedSubStages(response.data.completed_substages);
+      console.log('API Response:', response.data);
+      console.log('New completedSubStages:', response.data.completed_substages);
+      
+      // Update local state FIRST
+      const newCompletedSubStages = response.data.completed_substages || [];
+      setCompletedSubStages(newCompletedSubStages);
+      
+      // Also update the project state to include the new substages
+      setProject(prev => prev ? {
+        ...prev,
+        completed_substages: newCompletedSubStages,
+        stage: response.data.current_stage || prev.stage
+      } : prev);
       
       // Show success message
       if (response.data.group_complete) {
@@ -342,8 +354,19 @@ const ProjectDetails = () => {
         toast.success(`✅ "${substageName}" completed`);
       }
       
-      // Refetch to get updated comments
-      await fetchProject();
+      // Refetch to get updated comments (but don't overwrite substages)
+      // We already updated the state, so no need to refetch immediately
+      // Just update comments
+      const commentsResponse = await axios.get(`${API}/projects/${id}`, {
+        withCredentials: true
+      });
+      if (commentsResponse.data) {
+        setProject(prev => prev ? {
+          ...prev,
+          comments: commentsResponse.data.comments || [],
+          completed_substages: newCompletedSubStages // Keep our updated substages
+        } : prev);
+      }
     } catch (err) {
       console.error('Failed to complete sub-stage:', err);
       toast.error(err.response?.data?.detail || 'Failed to complete step');
