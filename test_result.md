@@ -1198,3 +1198,39 @@ agent_communication:
 6. Verify timeline/comments carried to Project
 7. Test collaborator add/remove
 8. Test collapsible customer details panel
+
+# UI Corrections - Dec 29, 2025
+
+## Frontend Changes Made
+
+### 1. PID Display (Already in Code - Verified)
+- Leads.jsx: PID badge shown next to customer name in list
+- LeadDetails.jsx: PID badge in header + subtitle
+- Projects.jsx: PID badge next to project name in list
+- ProjectDetails.jsx: PID badge in header + subtitle
+
+### 2. Add Collaborator Button - ADDED
+- **LeadDetails.jsx**: Added "Collaborators" card with:
+  - List of current collaborators
+  - "Add" button (opens modal)
+  - Modal to select user and add reason
+  - Remove collaborator button (X)
+  - Fetches users from /api/users endpoint
+  
+- **ProjectDetails.jsx**: Already has CollaboratorsTab with Add button
+  - Access via "Collaborators" tab
+
+### 3. Timeline Carry-Forward UI - ADDED
+- **CommentsPanel.jsx**: Updated to show lead history divider
+  - Shows "Lead Activity History (Carried Forward)" header
+  - Green divider between lead history and project activity
+  - Detects conversion message to split lead vs project comments
+
+## UI Test Checklist
+1. ✅ PID displayed in Leads list (if lead has PID)
+2. ✅ PID displayed in Lead detail header
+3. ✅ PID displayed in Projects list (if project has PID)
+4. ✅ PID displayed in Project detail header
+5. ✅ Add Collaborator button in Lead detail page
+6. ✅ Add Collaborator button in Project detail (Collaborators tab)
+7. ✅ Lead history divider in Project comments panel
