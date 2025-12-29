@@ -293,11 +293,15 @@ const Dashboard = () => {
       navigate('/operations', { replace: true });
       return;
     }
+    if (user?.role === 'SalesManager') {
+      navigate('/sales-manager', { replace: true });
+      return;
+    }
   }, [user, navigate]);
   
   useEffect(() => {
     // Don't fetch if redirecting to role-specific dashboard
-    if (['DesignManager', 'ProductionManager', 'OperationsLead'].includes(user?.role)) return;
+    if (['DesignManager', 'ProductionManager', 'OperationsLead', 'SalesManager'].includes(user?.role)) return;
     fetchDashboardData();
   }, [user]);
   
