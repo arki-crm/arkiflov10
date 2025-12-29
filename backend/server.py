@@ -764,19 +764,58 @@ async def logout(request: Request, response: Response):
 
 # ============ USER MANAGEMENT ============
 
-# Core roles + Design-specific roles
+# Core roles + Phase 15 Design Workflow roles
 VALID_ROLES = [
-    "Admin", "Manager", "Designer", "PreSales", "Trainee",
-    # Design-specific roles (Phase 15)
+    "Admin",               # Full system access, CEO view
+    "Manager",             # General manager with broad access
+    "PreSales",            # Lead generation, BC calls, site visits
+    "Designer",            # Design work only
     "HybridDesigner",      # Designer + Sales (handles BC calls, BOQ, site visits, booking, full design)
     "DesignManager",       # Arya - monitors all design projects, approvals, reviews
-    "ProductionManager"    # Sharon - validation pipeline, drawings, kick-off, production handover
+    "ProductionManager",   # Sharon - validation pipeline, drawings, kick-off
+    "OperationsLead",      # Post-production operations, delivery coordination
+    "Trainee"              # Limited access, learning role
 ]
 
 # Role categories for permission checks
 DESIGN_ROLES = ["Designer", "HybridDesigner", "DesignManager"]
 SALES_CAPABLE_ROLES = ["Admin", "Manager", "PreSales", "HybridDesigner"]
-MANAGER_ROLES = ["Admin", "Manager", "DesignManager", "ProductionManager"]
+MANAGER_ROLES = ["Admin", "Manager", "DesignManager", "ProductionManager", "OperationsLead"]
+OPERATIONS_ROLES = ["Admin", "Manager", "OperationsLead", "ProductionManager"]
+
+# Stage-based auto-collaborator mapping (Livspace-style)
+STAGE_COLLABORATOR_ROLES = {
+    # Pre-booking stages - PreSales/HybridDesigner
+    "New Lead": ["PreSales", "HybridDesigner"],
+    "BC Call Done": ["PreSales", "HybridDesigner"],
+    "Site Visit Done": ["PreSales", "HybridDesigner"],
+    "BOQ Sent": ["PreSales", "HybridDesigner"],
+    "Negotiation": ["PreSales", "HybridDesigner"],
+    
+    # After Booking - Design Manager joins
+    "Booked": ["DesignManager"],
+    "Measurement Required": ["DesignManager", "Designer"],
+    "Floor Plan Creation": ["DesignManager", "Designer"],
+    "Floor Plan Meeting": ["DesignManager", "Designer"],
+    "First Design Presentation": ["DesignManager", "Designer"],
+    "Corrections & Second Presentation": ["DesignManager", "Designer"],
+    "Material Selection Meeting": ["DesignManager", "Designer"],
+    "Final Design Lock": ["DesignManager", "Designer"],
+    
+    # After Design Lock - Production Manager joins
+    "Production Drawings Preparation": ["DesignManager", "ProductionManager"],
+    "Validation & Kickoff": ["DesignManager", "ProductionManager"],
+    
+    # After Validation - Operations Lead joins
+    "Production": ["ProductionManager", "OperationsLead"],
+    "Quality Check": ["ProductionManager", "OperationsLead"],
+    
+    # Delivery stage - Full operations team
+    "Delivery": ["OperationsLead"],
+    "Installation": ["OperationsLead"],
+    "Handover": ["OperationsLead"],
+    "Completed": []
+}
 
 def format_user_response(user_doc):
     """Format user document for API response"""
