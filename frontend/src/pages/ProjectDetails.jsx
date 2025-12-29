@@ -523,6 +523,8 @@ const ProjectDetails = () => {
                 comments={project?.comments || []}
                 onAddComment={handleAddComment}
                 isSubmitting={isSubmittingComment}
+                showLeadHistory={!!project?.lead_id}
+                leadId={project?.lead_id}
               />
             </CardContent>
           </Card>
