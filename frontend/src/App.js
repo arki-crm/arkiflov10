@@ -35,6 +35,7 @@ import DesignBoard from './pages/DesignBoard';
 import DesignManagerDashboard from './pages/DesignManagerDashboard';
 import ValidationPipeline from './pages/ValidationPipeline';
 import CEODashboard from './pages/CEODashboard';
+import OperationsDashboard from './pages/OperationsDashboard';
 
 import './App.css';
 
