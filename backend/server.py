@@ -404,6 +404,84 @@ class ServiceRequestDelayUpdate(BaseModel):
 class ServiceRequestClosureDate(BaseModel):
     expected_closure_date: str
 
+# ============ ACADEMY MODELS ============
+
+# Default Academy Categories
+DEFAULT_ACADEMY_CATEGORIES = [
+    {"name": "Pre-Sales Training", "description": "Learn the pre-sales process and qualification techniques", "order": 1, "icon": "user-plus"},
+    {"name": "BC (Briefing Call) Training", "description": "Master the briefing call process and client communication", "order": 2, "icon": "phone"},
+    {"name": "Sales Training", "description": "Sales techniques and closing strategies", "order": 3, "icon": "target"},
+    {"name": "Designer Training", "description": "Design principles, tools, and workflow", "order": 4, "icon": "palette"},
+    {"name": "Measurement Training", "description": "Site measurement techniques and best practices", "order": 5, "icon": "ruler"},
+    {"name": "Client Handling Training", "description": "Client communication and relationship management", "order": 6, "icon": "users"},
+    {"name": "Arki Dots Complete Process Guide", "description": "End-to-end process documentation", "order": 7, "icon": "book-open"}
+]
+
+class AcademyCategory(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    category_id: str
+    name: str
+    description: Optional[str] = None
+    icon: str = "folder"  # lucide icon name
+    order: int = 0
+    lesson_count: int = 0
+    created_by: str
+    created_by_name: str
+    created_at: datetime
+    updated_at: datetime
+
+class AcademyCategoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    icon: Optional[str] = "folder"
+    order: Optional[int] = 0
+
+class AcademyLesson(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    lesson_id: str
+    category_id: str
+    title: str
+    description: Optional[str] = None
+    content_type: str  # "video", "pdf", "text", "mixed"
+    # Content fields
+    video_url: Optional[str] = None  # YouTube embed or uploaded file URL
+    video_type: Optional[str] = None  # "youtube", "uploaded"
+    pdf_url: Optional[str] = None
+    text_content: Optional[str] = None  # Rich text/markdown
+    images: List[dict] = []  # [{url, caption}]
+    # Metadata
+    order: int = 0
+    duration_minutes: Optional[int] = None  # Estimated reading/watching time
+    created_by: str
+    created_by_name: str
+    created_at: datetime
+    updated_at: datetime
+
+class AcademyLessonCreate(BaseModel):
+    category_id: str
+    title: str
+    description: Optional[str] = None
+    content_type: str = "text"
+    video_url: Optional[str] = None
+    video_type: Optional[str] = None
+    pdf_url: Optional[str] = None
+    text_content: Optional[str] = None
+    images: Optional[List[dict]] = []
+    order: Optional[int] = 0
+    duration_minutes: Optional[int] = None
+
+class AcademyLessonUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    content_type: Optional[str] = None
+    video_url: Optional[str] = None
+    video_type: Optional[str] = None
+    pdf_url: Optional[str] = None
+    text_content: Optional[str] = None
+    images: Optional[List[dict]] = None
+    order: Optional[int] = None
+    duration_minutes: Optional[int] = None
+
 # Lead stages
 LEAD_STAGES = [
     "BC Call Done",
