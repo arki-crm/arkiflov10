@@ -1281,3 +1281,70 @@ agent_communication:
 5. ✅ Add Collaborator button in Lead detail page
 6. ✅ Add Collaborator button in Project detail (Collaborators tab)
 7. ✅ Lead history divider in Project comments panel
+
+# Sub-Stage Progression System Implementation - Dec 29, 2025
+
+## Summary
+Replaced group-level milestone progression with individual sub-stage progression.
+
+## Backend Changes (server.py)
+
+### New Endpoint: POST /api/projects/{project_id}/substage/complete
+- Completes a single sub-stage
+- Validates forward-only progression
+- Auto-completes parent group when all sub-stages done
+- Logs activity with PID, timestamp, user, sub-stage name, group name
+
+### New Endpoint: GET /api/projects/{project_id}/substages
+- Returns completed sub-stages
+- Returns progress for each milestone group
+
+### Milestone Groups Defined:
+1. **Design Finalization** (11 sub-stages)
+   - Site Measurement
+   - Design Meeting 1 – Layout Discussion
+   - Design Meeting 2 – First Draft of 3D Designs
+   - Design Meeting 3 – Final Draft of 3D Designs
+   - Final Design Presentation
+   - Material Selection
+   - Payment Collection – 50%
+   - Production Drawing Preparation
+   - Validation (Internal Check)
+   - KWS Sign-Off Document Preparation
+   - Kick-Off Meeting
+
+2. **Production** (5 sub-stages)
+3. **Delivery** (3 sub-stages)
+4. **Installation** (5 sub-stages)
+5. **Handover** (4 sub-stages)
+
+## Frontend Changes
+
+### utils.js - New exports:
+- MILESTONE_GROUPS with sub-stages
+- Helper functions: getGroupProgress, canCompleteSubStage, getCurrentSubStage, etc.
+
+### StagesPanel.jsx - Complete rewrite:
+- Expandable milestone groups
+- Individual sub-stage progression
+- Confirmation dialog before each completion
+- Progress bar (4/11) for each group
+- Visual indicators: completed (checkmark), current (blue dot), locked (lock icon)
+- Forward-only: past stages disabled
+
+### ProjectDetails.jsx - Updates:
+- Added completedSubStages state
+- Added handleSubStageComplete handler
+- Updated StagesPanel props
+
+## Test Plan
+1. Open project detail page
+2. Expand "Design Finalization" group
+3. Click first sub-stage "Site Measurement"
+4. Confirm in popup
+5. Verify sub-stage marked complete
+6. Verify next sub-stage now clickable
+7. Verify previous sub-stage disabled
+8. Complete all sub-stages in a group
+9. Verify group auto-completes
+10. Verify activity log entries
