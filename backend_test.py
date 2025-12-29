@@ -8122,6 +8122,26 @@ def main():
         tester.test_technician_cannot_create_service_requests()
         tester.test_service_request_stage_forward_only_validation()
         
+        # Academy Module Tests
+        tester.test_academy_file_upload_valid_video()
+        tester.test_academy_file_upload_invalid_type()
+        tester.test_academy_file_upload_no_auth()
+        tester.test_academy_file_upload_non_admin()
+        tester.test_academy_file_serving_authenticated()
+        tester.test_academy_file_serving_no_auth()
+        tester.test_academy_file_serving_nonexistent()
+        tester.test_global_search_with_query()
+        tester.test_global_search_short_query()
+        tester.test_global_search_no_auth()
+        tester.test_academy_categories_list()
+        tester.test_academy_categories_create_admin()
+        tester.test_academy_categories_create_non_admin()
+        tester.test_academy_seed_admin()
+        tester.test_academy_seed_non_admin()
+        tester.test_academy_lessons_list()
+        tester.test_academy_lessons_create_admin()
+        tester.test_academy_lessons_get_single()
+        
         # Logout test (do this last as it invalidates session)
         tester.test_logout()
         
