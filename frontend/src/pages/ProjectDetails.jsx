@@ -77,6 +77,7 @@ const ProjectDetails = () => {
   
   // Sub-stage progression state
   const [completedSubStages, setCompletedSubStages] = useState([]);
+  const [percentageSubStages, setPercentageSubStages] = useState({});
   
   // Files and Notes state
   const [files, setFiles] = useState([]);
