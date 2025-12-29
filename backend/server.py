@@ -1426,6 +1426,61 @@ async def add_comment(project_id: str, comment: CommentCreate, request: Request)
     
     return new_comment
 
+@api_router.put("/projects/{project_id}/customer-details")
+async def update_project_customer_details(project_id: str, request: Request):
+    """
+    Update customer details on a project.
+    - Only Admin/SalesManager can edit customer details on projects
+    - Designers and others can only view
+    """
+    user = await get_current_user(request)
+    body = await request.json()
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Only Admin and SalesManager can edit project customer details
+    if user.role not in ["Admin", "SalesManager"]:
+        raise HTTPException(status_code=403, detail="Only Admin or Sales Manager can edit customer details on projects")
+    
+    # Build update dict
+    now = datetime.now(timezone.utc)
+    update_dict = {"updated_at": now.isoformat()}
+    
+    allowed_fields = ["client_name", "client_phone", "client_email", 
+                      "client_address", "client_requirements", "lead_source", "budget"]
+    
+    for field in allowed_fields:
+        if field in body:
+            update_dict[field] = body[field]
+    
+    if len(update_dict) > 1:  # More than just updated_at
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {"$set": update_dict}
+        )
+        
+        # Add system comment
+        system_comment = {
+            "id": f"comment_{uuid.uuid4().hex[:8]}",
+            "user_id": "system",
+            "user_name": "System",
+            "role": "System",
+            "message": f"Customer details updated by {user.name}",
+            "is_system": True,
+            "created_at": now.isoformat()
+        }
+        await db.projects.update_one(
+            {"project_id": project_id},
+            {"$push": {"comments": system_comment}}
+        )
+    
+    # Return updated project
+    updated_project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    return updated_project
+
 @api_router.put("/projects/{project_id}/stage")
 async def update_stage(project_id: str, stage_update: StageUpdate, request: Request):
     """Update project stage"""
