@@ -1071,6 +1071,12 @@ async def update_user(user_id: str, update_data: UserUpdate, request: Request):
     if update_data.picture is not None:
         update_dict["picture"] = update_data.picture
     
+    # Only Admin can set senior_manager_view permission
+    if update_data.senior_manager_view is not None:
+        if user.role != "Admin":
+            raise HTTPException(status_code=403, detail="Only Admin can set Senior Manager View permission")
+        update_dict["senior_manager_view"] = update_data.senior_manager_view
+    
     await db.users.update_one(
         {"user_id": user_id},
         {"$set": update_dict}
