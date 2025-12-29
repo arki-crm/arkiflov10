@@ -385,112 +385,137 @@ const DesignBoard = () => {
         </div>
       </div>
 
-      {/* Kanban Task Board */}
+      {/* Kanban Task Board - Clean Notion-like Design */}
       <div className="space-y-4">
         <h2 className="text-lg font-semibold text-slate-800">Task Board</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* To Do Column */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* To Do Column - Gray */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-lg">
-              <Clock className="w-4 h-4 text-slate-500" />
-              <span className="font-medium text-slate-700">To Do</span>
-              <Badge variant="secondary" className="ml-auto">{tasksByStatus['Pending'].length}</Badge>
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-[#F5F5F5] rounded-lg">
+              <div className="w-2 h-2 rounded-full bg-slate-400" />
+              <span className="font-medium text-slate-700 text-sm">To Do</span>
+              <span className="ml-auto text-xs text-slate-500 bg-white px-2 py-0.5 rounded-full">
+                {tasksByStatus['Pending'].length}
+              </span>
             </div>
-            <div className="space-y-2 min-h-[200px]">
+            <div className="space-y-2.5 min-h-[200px]">
               {tasksByStatus['Pending'].map((task) => (
-                <Card key={task.id} className={cn(
-                  'hover:shadow-sm transition-shadow',
-                  task.is_overdue && 'border-red-200 bg-red-50'
-                )}>
-                  <CardContent className="p-3">
-                    <div className="flex items-start gap-2">
-                      <GripVertical className="w-4 h-4 text-slate-300 mt-0.5 cursor-grab" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{task.title}</p>
-                        <p className="text-xs text-slate-500 truncate">{task.project?.project_name}</p>
-                        <div className="flex items-center gap-2 mt-2">
-                          {task.is_overdue && (
-                            <Badge variant="destructive" className="text-xs">
-                              <AlertTriangle className="w-3 h-3 mr-1" />
-                              Overdue
-                            </Badge>
-                          )}
-                          <span className="text-xs text-slate-400">
-                            Due: {formatDate(task.due_date)}
+                <div 
+                  key={task.id} 
+                  className={cn(
+                    'bg-white rounded-lg shadow-sm border border-slate-100 p-3 hover:shadow-md transition-all duration-200 cursor-grab',
+                    task.is_overdue && 'border-l-2 border-l-red-400'
+                  )}
+                >
+                  <div className="flex items-start gap-2">
+                    <GripVertical className="w-4 h-4 text-slate-200 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800 leading-snug">{task.title}</p>
+                      <p className="text-xs text-slate-400 mt-1 truncate">{task.project?.project_name}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        {task.is_overdue && (
+                          <span className="text-xs text-red-500 font-medium flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            Overdue
                           </span>
-                        </div>
-                      </div>
-                    </div>
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      className="w-full mt-2 text-xs"
-                      onClick={() => handleStartTask(task.id)}
-                    >
-                      Start Task
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
-
-          {/* In Progress Column */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 px-3 py-2 bg-blue-100 rounded-lg">
-              <Loader2 className="w-4 h-4 text-blue-600" />
-              <span className="font-medium text-blue-700">In Progress</span>
-              <Badge className="ml-auto bg-blue-600">{tasksByStatus['In Progress'].length}</Badge>
-            </div>
-            <div className="space-y-2 min-h-[200px]">
-              {tasksByStatus['In Progress'].map((task) => (
-                <Card key={task.id} className="border-blue-200 bg-blue-50 hover:shadow-sm transition-shadow">
-                  <CardContent className="p-3">
-                    <div className="flex items-start gap-2">
-                      <GripVertical className="w-4 h-4 text-blue-300 mt-0.5 cursor-grab" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{task.title}</p>
-                        <p className="text-xs text-slate-500 truncate">{task.project?.project_name}</p>
+                        )}
                         <span className="text-xs text-slate-400">
-                          Due: {formatDate(task.due_date)}
+                          {formatDate(task.due_date)}
                         </span>
                       </div>
                     </div>
-                    <Button 
-                      size="sm" 
-                      className="w-full mt-2 text-xs bg-emerald-600 hover:bg-emerald-700"
-                      onClick={() => handleCompleteTask(task.id)}
-                    >
-                      <Check className="w-3 h-3 mr-1" />
-                      Complete
-                    </Button>
-                  </CardContent>
-                </Card>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    className="w-full mt-3 text-xs text-slate-600 hover:bg-slate-50 hover:text-slate-800 h-8"
+                    onClick={() => handleStartTask(task.id)}
+                  >
+                    <ArrowRight className="w-3 h-3 mr-1" />
+                    Start Task
+                  </Button>
+                </div>
               ))}
+              {tasksByStatus['Pending'].length === 0 && (
+                <div className="text-center py-8 text-slate-400 text-sm">
+                  No tasks
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Completed Column */}
+          {/* In Progress Column - Blue (#2563EB) */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2 px-3 py-2 bg-emerald-100 rounded-lg">
-              <Check className="w-4 h-4 text-emerald-600" />
-              <span className="font-medium text-emerald-700">Completed</span>
-              <Badge className="ml-auto bg-emerald-600">{tasksByStatus['Completed'].length}</Badge>
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-[#F5F5F5] rounded-lg">
+              <div className="w-2 h-2 rounded-full bg-[#2563EB]" />
+              <span className="font-medium text-slate-700 text-sm">In Progress</span>
+              <span className="ml-auto text-xs text-white bg-[#2563EB] px-2 py-0.5 rounded-full">
+                {tasksByStatus['In Progress'].length}
+              </span>
             </div>
-            <div className="space-y-2 min-h-[200px] max-h-[400px] overflow-y-auto">
-              {tasksByStatus['Completed'].slice(0, 10).map((task) => (
-                <Card key={task.id} className="border-emerald-200 bg-emerald-50 opacity-75">
-                  <CardContent className="p-3">
-                    <div className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-emerald-500 mt-0.5" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-slate-600 truncate line-through">{task.title}</p>
-                        <p className="text-xs text-slate-400 truncate">{task.project?.project_name}</p>
-                      </div>
+            <div className="space-y-2.5 min-h-[200px]">
+              {tasksByStatus['In Progress'].map((task) => (
+                <div 
+                  key={task.id} 
+                  className="bg-white rounded-lg shadow-sm border border-slate-100 border-l-2 border-l-[#2563EB] p-3 hover:shadow-md transition-all duration-200 cursor-grab"
+                >
+                  <div className="flex items-start gap-2">
+                    <GripVertical className="w-4 h-4 text-slate-200 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800 leading-snug">{task.title}</p>
+                      <p className="text-xs text-slate-400 mt-1 truncate">{task.project?.project_name}</p>
+                      <span className="text-xs text-slate-400 mt-2 inline-block">
+                        {formatDate(task.due_date)}
+                      </span>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    className="w-full mt-3 text-xs bg-[#16A34A] hover:bg-[#15803d] h-8"
+                    onClick={() => handleCompleteTask(task.id)}
+                  >
+                    <Check className="w-3 h-3 mr-1" />
+                    Complete
+                  </Button>
+                </div>
               ))}
+              {tasksByStatus['In Progress'].length === 0 && (
+                <div className="text-center py-8 text-slate-400 text-sm">
+                  No tasks in progress
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Completed Column - Green (#16A34A) */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 px-4 py-2.5 bg-[#F5F5F5] rounded-lg">
+              <div className="w-2 h-2 rounded-full bg-[#16A34A]" />
+              <span className="font-medium text-slate-700 text-sm">Completed</span>
+              <span className="ml-auto text-xs text-white bg-[#16A34A] px-2 py-0.5 rounded-full">
+                {tasksByStatus['Completed'].length}
+              </span>
+            </div>
+            <div className="space-y-2.5 min-h-[200px] max-h-[400px] overflow-y-auto">
+              {tasksByStatus['Completed'].slice(0, 10).map((task) => (
+                <div 
+                  key={task.id} 
+                  className="bg-white rounded-lg shadow-sm border border-slate-100 border-l-2 border-l-[#16A34A] p-3 opacity-70"
+                >
+                  <div className="flex items-start gap-2">
+                    <Check className="w-4 h-4 text-[#16A34A] mt-0.5 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-500 leading-snug line-through">{task.title}</p>
+                      <p className="text-xs text-slate-400 mt-1 truncate">{task.project?.project_name}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {tasksByStatus['Completed'].length === 0 && (
+                <div className="text-center py-8 text-slate-400 text-sm">
+                  No completed tasks
+                </div>
+              )}
             </div>
           </div>
         </div>
