@@ -96,6 +96,9 @@ class Project(BaseModel):
     stage: str  # "Pre 10%", "10-50%", "50-100%", "Completed"
     collaborators: List[str] = []  # List of user_ids
     summary: str
+    # Hold/Activate/Deactivate system
+    hold_status: str = "Active"  # "Active", "Hold", "Deactivated"
+    hold_history: List[dict] = []  # History of status changes with reasons
     updated_at: datetime
     created_at: datetime
 
@@ -196,6 +199,9 @@ class Lead(BaseModel):
     designer_id: Optional[str] = None  # Designer user ID
     is_converted: bool = False
     project_id: Optional[str] = None  # If converted to project
+    # Hold/Activate/Deactivate system
+    hold_status: str = "Active"  # "Active", "Hold", "Deactivated"
+    hold_history: List[dict] = []  # History of status changes with reasons
     timeline: List[dict] = []
     comments: List[dict] = []
     files: List[dict] = []  # Files attached to lead
