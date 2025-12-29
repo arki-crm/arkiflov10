@@ -660,6 +660,21 @@ test_plan:
         comment: "✅ LIVSPACE-STYLE RBAC SYSTEM TESTING COMPLETED! Comprehensive testing of all 9 roles completed with 60/60 tests passed (100% success rate): 1) ✅ USER INVITE: All 9 roles (Admin, Manager, DesignManager, ProductionManager, OperationsLead, Designer, HybridDesigner, PreSales, Trainee) can be successfully assigned via POST /api/users/invite, 2) ✅ ROLE-SPECIFIC DASHBOARD ACCESS: DesignManager dashboard accessible by DesignManager/Admin/Manager only (others denied 403), Validation pipeline accessible by ProductionManager/Admin/Manager only, Operations dashboard accessible by OperationsLead/Admin/Manager only, CEO dashboard accessible by Admin only, 3) ✅ ROLE RESTRICTIONS: DesignManager denied CEO dashboard (403), ProductionManager denied DesignManager dashboard (403), OperationsLead denied validation pipeline (403), Designer denied all manager dashboards (403), 4) ✅ ACTIVITY FEED: Stage changes create system comments with proper structure (id, user_id, user_name, message, is_system, created_at), verified with stage updates generating activity entries, 5) ⚠️ AUTO-COLLABORATOR SYSTEM: Partially working - stage updates trigger auto-collaborator function but current project stages don't match design workflow stages in STAGE_COLLABORATOR_ROLES mapping. System designed for design workflow stages (Booked, Measurement Required, etc.) but current projects use different stages (Design Finalization, Production, etc.). Core RBAC functionality is production-ready and meets all security requirements."
 
 backend:
+  - task: "Pre-Sales Module - CRUD Operations"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+      - working: "NA"
+        agent: "main"
+        comment: "Implemented Pre-Sales module with forward-only status flow, confirmation dialogs, and convert-to-lead functionality. Endpoints: POST /api/presales/create, PUT /api/presales/{lead_id}/status, POST /api/presales/{lead_id}/convert-to-lead, GET /api/presales/{lead_id}. Forward-only progression: New → Contacted → Waiting → Qualified. Admin can skip stages, PreSales cannot. Only Qualified leads can be converted."
+      - working: true
+        agent: "testing"
+        comment: "✅ PRE-SALES MODULE TESTING COMPLETED SUCCESSFULLY! All 12 comprehensive tests passed: 1) ✅ CREATE LEAD: POST /api/presales/create working correctly with proper validation (customer_name and customer_phone required), returns lead with status='New', is_converted=false, assigned_to set, 2) ✅ FORWARD-ONLY STATUS FLOW: Status progression New → Contacted → Waiting → Qualified working perfectly, backward movement correctly denied (400 error), 3) ✅ DROPPED STATUS: Can set 'Dropped' from any status as required, 4) ✅ ADMIN PRIVILEGES: Admin can skip stages (New → Qualified directly), PreSales cannot skip stages (400 error with proper message), 5) ✅ CONVERT TO LEAD: Only Qualified leads can be converted (400 error for non-qualified), conversion sets is_converted=true and stage='BC Call Done', adds PreSales as collaborator, 6) ✅ ROLE-BASED ACCESS: PreSales can only access/modify their own leads (403 for others), Admin/SalesManager have full access, Designer access denied (403), 7) ✅ VALIDATION: Missing required fields properly rejected (400 errors), 8) ✅ GET LEAD DETAILS: Returns complete lead structure with comments, files, customer details. All requirements from review request fully implemented and tested."
+
   - task: "Reports & Analytics API - Revenue Report"
     implemented: true
     working: true
