@@ -991,6 +991,7 @@ async def invite_user(invite_data: UserInvite, request: Request):
         "role": invite_data.role,
         "phone": invite_data.phone,
         "status": "Active",
+        "senior_manager_view": invite_data.senior_manager_view or False,  # V1 permission
         "initials": initials,
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
