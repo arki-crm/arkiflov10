@@ -123,10 +123,29 @@ db.user_sessions.insertOne({{
   created_at: new Date()
 }});
 
+// Create a test project for sub-stage testing
+db.projects.insertOne({{
+  project_id: "proj_substage_test",
+  project_name: "Sub-Stage Test Project",
+  client_name: "Test Client",
+  client_phone: "+1234567890",
+  stage: "Design Finalization",
+  collaborators: [],
+  comments: [],
+  timeline: [],
+  files: [],
+  notes: [],
+  created_by: "{admin_user_id}",
+  created_at: new Date(),
+  updated_at: new Date(),
+  completed_substages: []
+}});
+
 print("Admin session token: {admin_session_token}");
 print("Designer session token: {designer_session_token}");
 print("Admin user ID: {admin_user_id}");
 print("Designer user ID: {designer_user_id}");
+print("Test project created: proj_substage_test");
 '''
         
         try:
@@ -135,7 +154,7 @@ print("Designer user ID: {designer_user_id}");
                                   capture_output=True, text=True, timeout=30)
             
             if result.returncode == 0:
-                print("✅ Test users and sessions created successfully")
+                print("✅ Test users, sessions, and project created successfully")
                 self.admin_token = admin_session_token
                 self.designer_token = designer_session_token
                 self.admin_user_id = admin_user_id
