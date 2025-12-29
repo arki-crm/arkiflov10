@@ -107,7 +107,7 @@ const DelayReport = () => {
         <Card className="border-slate-200">
           <CardContent className="p-4">
             <p className="text-xs text-slate-500 uppercase">Total Delays</p>
-            <p className="text-2xl font-bold text-red-600">{summary.total_delays || 0}</p>
+            <p className="text-2xl font-bold text-red-600">{data?.total_delays || 0}</p>
           </CardContent>
         </Card>
 
@@ -120,23 +120,27 @@ const DelayReport = () => {
 
         <Card className="border-slate-200">
           <CardContent className="p-4">
-            <p className="text-xs text-slate-500 uppercase">Total Delay Days</p>
-            <p className="text-2xl font-bold text-slate-900">{summary.total_delay_days || 0}</p>
+            <p className="text-xs text-slate-500 uppercase">Most Common Stage</p>
+            <p className="text-lg font-bold text-slate-900 truncate">
+              {data?.stage_analysis?.[0]?.stage || '-'}
+            </p>
           </CardContent>
         </Card>
 
         <Card className="border-slate-200">
           <CardContent className="p-4">
-            <p className="text-xs text-slate-500 uppercase">Avg Delay</p>
-            <p className="text-2xl font-bold text-blue-600">{summary.avg_delay_days || 0} days</p>
+            <p className="text-xs text-slate-500 uppercase">Avg Stage Delay</p>
+            <p className="text-2xl font-bold text-blue-600">
+              {data?.stage_analysis?.[0]?.avg_delay_days || 0} days
+            </p>
           </CardContent>
         </Card>
 
         <Card className="border-slate-200">
           <CardContent className="p-4">
-            <p className="text-xs text-slate-500 uppercase">Most Delayed Stage</p>
-            <p className="text-lg font-bold text-purple-600 truncate">
-              {summary.most_delayed_stage || '-'}
+            <p className="text-xs text-slate-500 uppercase">Top Delayed Projects</p>
+            <p className="text-2xl font-bold text-purple-600">
+              {data?.top_delayed_projects?.length || 0}
             </p>
           </CardContent>
         </Card>
