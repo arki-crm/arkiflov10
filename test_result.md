@@ -1003,3 +1003,47 @@ agent_communication:
     message: "✅ PHASE 15A DESIGN WORKFLOW FRONTEND UI TESTING COMPLETED SUCCESSFULLY! Comprehensive verification of all 4 design workflow pages and sidebar navigation completed: 1) ✅ Design Board (/design-board): Kanban UI with proper color scheme (To Do/Gray, In Progress/Blue #2563EB, Completed/Green #16A34A), project cards with stage indicators, quick action buttons, meeting/upload modals, 2) ✅ Design Manager Dashboard (/design-manager): Summary cards, Projects by Stage chart, Bottleneck Analysis, Designer Workload, Delayed Projects list, 3) ✅ Validation Pipeline (/validation-pipeline): Stats cards, pipeline items with designer info, file status, validation modal, 4) ✅ CEO Dashboard (/ceo-dashboard): Project Health overview, Designer Performance Scores, Manager/Validation performance cards, Delay Attribution, Workload Distribution, 5) ✅ Sidebar Navigation: All 4 new items properly configured with correct icons and role-based access. All components meet design requirements (Notion/Trello-like styling, proper colors, authentication, API integration). Production-ready implementation. Testing limitation: Full UI flow requires manual verification with valid Google OAuth session."
   - agent: "testing"
     message: "✅ LIVSPACE-STYLE RBAC SYSTEM TESTING COMPLETED! Comprehensive testing of Role-Based Access Control system completed with 60/60 tests passed (100% success rate). All 9 roles working correctly: Admin, Manager, DesignManager, ProductionManager, OperationsLead, Designer, HybridDesigner, PreSales, Trainee. Key findings: 1) ✅ USER INVITE: All 9 roles can be successfully assigned via POST /api/users/invite, 2) ✅ ROLE-SPECIFIC DASHBOARD ACCESS: DesignManager dashboard (DesignManager/Admin/Manager only), Validation pipeline (ProductionManager/Admin/Manager only), Operations dashboard (OperationsLead/Admin/Manager only), CEO dashboard (Admin only), 3) ✅ ROLE RESTRICTIONS: Proper 403 denials for unauthorized access, 4) ✅ ACTIVITY FEED: Stage changes create system comments with proper structure, 5) ⚠️ AUTO-COLLABORATOR SYSTEM: Partially working - function exists but current project stages don't match design workflow stages in STAGE_COLLABORATOR_ROLES mapping. Core RBAC functionality is production-ready and meets all security requirements."
+
+# Pre-Sales Module Implementation - Dec 29, 2025
+
+## Changes Made
+
+### Backend Changes (server.py)
+1. **Added POST /api/presales/create endpoint** - Creates new pre-sales leads with:
+   - Customer name, phone (required)
+   - Email, address, requirements, source, budget (optional)
+   - Status starts as "New"
+   - Auto-assigned to creator
+
+2. **Enhanced PUT /api/presales/{presales_id}/status** - Forward-only progression:
+   - Status order: New → Contacted → Waiting → Qualified
+   - Cannot move backward (400 error)
+   - Dropped can be set from any status
+   - Only Admin can reactivate dropped leads
+   - Admin/SalesManager can skip stages
+
+### Frontend Changes
+1. **App.js** - Added route `/presales/create` for CreatePreSalesLead page
+
+2. **PreSalesDetail.jsx** - Major enhancements:
+   - Forward-only status panel with visual progression
+   - Numbered step indicators (1-4)
+   - Past stages shown with checkmarks and strikethrough
+   - Confirmation dialog before any status change
+   - Warning about forward-only progression
+   - Separate "Mark as Dropped" section
+   - Convert to Lead confirmation dialog with clear warnings
+
+## Test Plan
+1. Create new lead from Pre-Sales page
+2. Navigate to detail page
+3. Test forward-only status progression with confirmation dialogs
+4. Test backward movement (should fail)
+5. Test "Convert to Lead" with confirmation
+6. Verify converted lead appears in main Leads section
+7. Verify files and comments carry over
+
+## API Endpoints to Test
+- POST /api/presales/create
+- PUT /api/presales/{lead_id}/status (forward-only validation)
+- POST /api/presales/{lead_id}/convert-to-lead
