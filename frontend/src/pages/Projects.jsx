@@ -361,6 +361,21 @@ const Projects = () => {
                             <p className="font-medium text-slate-900 group-hover:text-blue-600 transition-colors">
                               {project.project_name}
                             </p>
+                            {/* Hold Status Badge */}
+                            {project.hold_status && project.hold_status !== 'Active' && (
+                              <span 
+                                className={cn(
+                                  "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                                  project.hold_status === 'Hold' && 'bg-amber-100 text-amber-700',
+                                  project.hold_status === 'Deactivated' && 'bg-red-100 text-red-700'
+                                )}
+                                data-testid={`hold-status-${project.project_id}`}
+                              >
+                                {project.hold_status === 'Hold' && <Pause className="w-2.5 h-2.5 mr-0.5" />}
+                                {project.hold_status === 'Deactivated' && <Power className="w-2.5 h-2.5 mr-0.5" />}
+                                {project.hold_status}
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-slate-500 mt-0.5">
                             {project.client_name}
