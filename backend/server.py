@@ -11418,6 +11418,131 @@ async def seed_academy_categories(request: Request):
     }
 
 
+# ============ ACADEMY FILE UPLOAD ENDPOINTS ============
+
+@api_router.post("/academy/upload")
+async def upload_academy_file(request: Request, file: UploadFile = File(...)):
+    """
+    Upload a file (video, PDF, image) for Academy lessons.
+    Only Admin/Manager roles can upload.
+    Files are stored locally and served to authenticated users only.
+    """
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
+        raise HTTPException(status_code=403, detail="Only Admin and Managers can upload files")
+    
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+    
+    # Get file extension
+    file_ext = Path(file.filename).suffix.lower()
+    
+    # Determine file type and validate extension
+    if file_ext in ALLOWED_VIDEO_EXTENSIONS:
+        file_type = "video"
+    elif file_ext in ALLOWED_PDF_EXTENSIONS:
+        file_type = "pdf"
+    elif file_ext in ALLOWED_IMAGE_EXTENSIONS:
+        file_type = "image"
+    else:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"File type not allowed. Allowed: videos ({', '.join(ALLOWED_VIDEO_EXTENSIONS)}), PDFs (.pdf), images ({', '.join(ALLOWED_IMAGE_EXTENSIONS)})"
+        )
+    
+    # Generate unique filename
+    unique_id = uuid.uuid4().hex[:12]
+    safe_filename = f"{unique_id}{file_ext}"
+    file_path = UPLOADS_DIR / safe_filename
+    
+    # Check file size (for videos, enforce limit)
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB")
+    
+    # Save file
+    async with aiofiles.open(file_path, 'wb') as out_file:
+        await out_file.write(content)
+    
+    # Return the URL to access the file
+    file_url = f"/api/academy/files/{safe_filename}"
+    
+    return {
+        "success": True,
+        "file_url": file_url,
+        "file_type": file_type,
+        "file_name": file.filename,
+        "file_size": len(content),
+        "uploaded_by": user.name
+    }
+
+
+@api_router.get("/academy/files/{filename}")
+async def serve_academy_file(filename: str, request: Request):
+    """
+    Serve Academy files to authenticated users only.
+    This ensures internal training content is not publicly accessible.
+    """
+    # Authenticate user
+    user = await get_current_user(request)
+    
+    # Validate filename (prevent directory traversal)
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    file_path = UPLOADS_DIR / filename
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Determine content type based on extension
+    ext = Path(filename).suffix.lower()
+    content_types = {
+        ".mp4": "video/mp4",
+        ".mov": "video/quicktime",
+        ".avi": "video/x-msvideo",
+        ".webm": "video/webm",
+        ".pdf": "application/pdf",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp"
+    }
+    
+    content_type = content_types.get(ext, "application/octet-stream")
+    
+    return FileResponse(
+        path=file_path,
+        media_type=content_type,
+        filename=filename
+    )
+
+
+@api_router.delete("/academy/files/{filename}")
+async def delete_academy_file(filename: str, request: Request):
+    """Delete an Academy file (Admin/Manager only)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
+        raise HTTPException(status_code=403, detail="Only Admin and Managers can delete files")
+    
+    # Validate filename
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    
+    file_path = UPLOADS_DIR / filename
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Delete the file
+    file_path.unlink()
+    
+    return {"success": True, "message": "File deleted"}
+
+
 # ============ HEALTH CHECK ============
 
 @api_router.get("/")
