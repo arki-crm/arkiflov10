@@ -981,6 +981,21 @@ const LeadDetails = () => {
             >
               {lead?.customer_name}
             </h1>
+            {/* Hold Status Badge */}
+            {lead?.hold_status && lead.hold_status !== 'Active' && (
+              <span 
+                className={cn(
+                  "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                  lead.hold_status === 'Hold' && 'bg-amber-100 text-amber-700',
+                  lead.hold_status === 'Deactivated' && 'bg-red-100 text-red-700'
+                )}
+                data-testid="lead-hold-status-badge"
+              >
+                {lead.hold_status === 'Hold' && <Pause className="w-3 h-3 mr-1" />}
+                {lead.hold_status === 'Deactivated' && <Power className="w-3 h-3 mr-1" />}
+                {lead.hold_status}
+              </span>
+            )}
             {user?.role && (
               <span 
                 className={cn(
@@ -999,30 +1014,73 @@ const LeadDetails = () => {
           </p>
         </div>
         
-        <div className="flex items-center gap-2">
-          {lead?.status && (
-            <span 
-              className={cn(
-                "inline-flex items-center rounded-full px-3 py-1 text-sm font-medium",
-                STATUS_STYLES[lead.status]
-              )}
-              data-testid="lead-status-badge"
-            >
-              {lead.status}
-            </span>
-          )}
-          {lead?.stage && (
-            <span 
-              className={cn(
-                "inline-flex items-center rounded-full px-3 py-1 text-sm font-medium",
-                STAGE_COLORS[lead.stage]?.bg,
-                STAGE_COLORS[lead.stage]?.text
-              )}
-              data-testid="lead-stage-badge"
-            >
-              {lead.stage}
-            </span>
-          )}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+          {/* Hold/Activate/Deactivate Actions */}
+          <div className="flex gap-2 flex-wrap">
+            {lead?.hold_status !== 'Hold' && canHold() && !lead?.is_converted && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openHoldModal('Hold')}
+                className="text-amber-600 border-amber-300 hover:bg-amber-50"
+                data-testid="hold-btn"
+              >
+                <Pause className="w-3.5 h-3.5 mr-1" />
+                Hold
+              </Button>
+            )}
+            {lead?.hold_status === 'Hold' && canActivateOrDeactivate() && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openHoldModal('Activate')}
+                className="text-green-600 border-green-300 hover:bg-green-50"
+                data-testid="activate-btn"
+              >
+                <Play className="w-3.5 h-3.5 mr-1" />
+                Activate
+              </Button>
+            )}
+            {lead?.hold_status !== 'Deactivated' && canActivateOrDeactivate() && !lead?.is_converted && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openHoldModal('Deactivate')}
+                className="text-red-600 border-red-300 hover:bg-red-50"
+                data-testid="deactivate-btn"
+              >
+                <Power className="w-3.5 h-3.5 mr-1" />
+                Deactivate
+              </Button>
+            )}
+          </div>
+          
+          {/* Status and Stage Badges */}
+          <div className="flex items-center gap-2">
+            {lead?.status && (
+              <span 
+                className={cn(
+                  "inline-flex items-center rounded-full px-3 py-1 text-sm font-medium",
+                  STATUS_STYLES[lead.status]
+                )}
+                data-testid="lead-status-badge"
+              >
+                {lead.status}
+              </span>
+            )}
+            {lead?.stage && (
+              <span 
+                className={cn(
+                  "inline-flex items-center rounded-full px-3 py-1 text-sm font-medium",
+                  STAGE_COLORS[lead.stage]?.bg,
+                  STAGE_COLORS[lead.stage]?.text
+                )}
+                data-testid="lead-stage-badge"
+              >
+                {lead.stage}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
