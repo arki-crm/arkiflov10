@@ -496,6 +496,7 @@ def main():
         tester.test_complete_production_substages_sequence()
         tester.test_percentage_endpoint_basic_functionality()
         tester.test_percentage_endpoint_forward_only_validation()
+        tester.test_percentage_endpoint_designer_forward_only_validation()
         tester.test_percentage_endpoint_auto_completion()
         tester.test_percentage_endpoint_validation()
         
