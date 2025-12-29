@@ -6177,6 +6177,63 @@ async def get_leads_report(request: Request):
 
 # ============ PRE-SALES DETAIL APIS ============
 
+@api_router.post("/presales/create")
+async def create_presales_lead(request: Request):
+    """Create a new pre-sales lead"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "SalesManager", "PreSales"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    body = await request.json()
+    
+    # Validate required fields
+    customer_name = body.get("customer_name", "").strip()
+    customer_phone = body.get("customer_phone", "").strip()
+    
+    if not customer_name:
+        raise HTTPException(status_code=400, detail="Customer name is required")
+    if not customer_phone:
+        raise HTTPException(status_code=400, detail="Phone number is required")
+    
+    now = datetime.now(timezone.utc)
+    lead_id = f"lead_{uuid.uuid4().hex[:8]}"
+    
+    new_lead = {
+        "lead_id": lead_id,
+        "customer_name": customer_name,
+        "customer_phone": customer_phone,
+        "customer_email": body.get("customer_email", ""),
+        "customer_address": body.get("customer_address", ""),
+        "customer_requirements": body.get("customer_requirements", ""),
+        "source": body.get("source", "Others"),
+        "budget": body.get("budget"),
+        "status": "New",  # Pre-sales always start as New
+        "stage": "New",
+        "assigned_to": user.user_id,  # Assigned to creator
+        "created_by": user.user_id,
+        "is_converted": False,
+        "comments": [{
+            "id": f"comment_{uuid.uuid4().hex[:8]}",
+            "user_id": "system",
+            "user_name": "System",
+            "role": "System",
+            "message": f"Lead created by {user.name}",
+            "is_system": True,
+            "created_at": now.isoformat()
+        }],
+        "files": [],
+        "collaborators": [],
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    await db.leads.insert_one(new_lead)
+    
+    # Remove _id before returning
+    new_lead.pop("_id", None)
+    return new_lead
+
 @api_router.get("/presales/{presales_id}")
 async def get_presales_detail(presales_id: str, request: Request):
     """Get pre-sales lead detail"""
