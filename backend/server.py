@@ -2247,6 +2247,73 @@ async def add_lead_comment(lead_id: str, comment: CommentCreate, request: Reques
     
     return new_comment
 
+@api_router.put("/leads/{lead_id}/customer-details")
+async def update_lead_customer_details(lead_id: str, request: Request):
+    """
+    Update customer details on a lead.
+    - PreSales can edit only BEFORE lead is Qualified
+    - Admin/SalesManager can edit anytime
+    - Designer can only view (cannot edit)
+    """
+    user = await get_current_user(request)
+    body = await request.json()
+    
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Role-based edit permissions
+    is_qualified = lead.get("status") == "Qualified"
+    
+    if user.role == "Designer":
+        raise HTTPException(status_code=403, detail="Designers cannot edit customer details")
+    
+    if user.role == "PreSales":
+        # PreSales can only edit their own leads and only before qualified
+        if lead.get("assigned_to") != user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied - not your lead")
+        if is_qualified:
+            raise HTTPException(status_code=403, detail="Cannot edit customer details after lead is qualified")
+    
+    if user.role not in ["Admin", "SalesManager", "PreSales"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Build update dict
+    update_dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    
+    allowed_fields = ["customer_name", "customer_phone", "customer_email", 
+                      "customer_address", "customer_requirements", "source", "budget"]
+    
+    for field in allowed_fields:
+        if field in body:
+            update_dict[field] = body[field]
+    
+    if len(update_dict) > 1:  # More than just updated_at
+        await db.leads.update_one(
+            {"lead_id": lead_id},
+            {"$set": update_dict}
+        )
+        
+        # Add system comment
+        system_comment = {
+            "id": f"comment_{uuid.uuid4().hex[:8]}",
+            "user_id": "system",
+            "user_name": "System",
+            "role": "System",
+            "message": f"Customer details updated by {user.name}",
+            "is_system": True,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.leads.update_one(
+            {"lead_id": lead_id},
+            {"$push": {"comments": system_comment}}
+        )
+    
+    # Return updated lead
+    updated_lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    return updated_lead
+
 @api_router.put("/leads/{lead_id}/stage")
 async def update_lead_stage(lead_id: str, stage_update: LeadStageUpdate, request: Request):
     """Update lead stage"""
