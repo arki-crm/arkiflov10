@@ -3323,6 +3323,111 @@ async def convert_to_project(lead_id: str, request: Request):
         "lead_id": lead_id
     }
 
+# ============ HOLD/ACTIVATE/DEACTIVATE SYSTEM FOR LEADS ============
+
+@api_router.put("/leads/{lead_id}/hold-status")
+async def update_lead_hold_status(lead_id: str, status_update: HoldStatusUpdate, request: Request):
+    """Update lead hold status (Hold/Activate/Deactivate)"""
+    user = await get_current_user(request)
+    
+    # Permission check
+    action = status_update.action
+    allowed_actions = ["Hold", "Activate", "Deactivate"]
+    
+    if action not in allowed_actions:
+        raise HTTPException(status_code=400, detail=f"Invalid action. Must be one of: {allowed_actions}")
+    
+    # Role-based permissions:
+    # - Admin, Manager can Hold/Activate/Deactivate
+    # - Designer can only Hold
+    if user.role not in ["Admin", "Manager", "SalesManager", "Designer"]:
+        raise HTTPException(status_code=403, detail="You don't have permission to change lead status")
+    
+    if user.role == "Designer" and action != "Hold":
+        raise HTTPException(status_code=403, detail="Designers can only place leads on Hold")
+    
+    # Validate reason
+    reason = status_update.reason.strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="Reason is required for this action")
+    
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    current_hold_status = lead.get("hold_status", "Active")
+    
+    # Validate state transitions
+    if action == "Hold" and current_hold_status == "Hold":
+        raise HTTPException(status_code=400, detail="Lead is already on Hold")
+    
+    if action == "Activate":
+        if current_hold_status == "Active":
+            raise HTTPException(status_code=400, detail="Lead is already Active")
+    
+    if action == "Deactivate" and current_hold_status == "Deactivated":
+        raise HTTPException(status_code=400, detail="Lead is already Deactivated")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Determine new status
+    new_status = action if action in ["Hold", "Deactivated"] else "Active"
+    if action == "Deactivate":
+        new_status = "Deactivated"
+    
+    # Create history entry
+    history_entry = {
+        "id": f"hold_{uuid.uuid4().hex[:8]}",
+        "action": action,
+        "previous_status": current_hold_status,
+        "new_status": new_status,
+        "reason": reason,
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "timestamp": now.isoformat()
+    }
+    
+    # Create activity log comment
+    pid_str = f" (PID: {lead.get('pid')})" if lead.get('pid') else ""
+    action_messages = {
+        "Hold": f"Lead placed on HOLD{pid_str} by {user.name} – Reason: {reason}",
+        "Activate": f"Lead Activated again{pid_str} by {user.name} – Reason: {reason}",
+        "Deactivate": f"Lead Deactivated{pid_str} by {user.name} – Reason: {reason}"
+    }
+    
+    comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": action_messages[action],
+        "is_system": True,
+        "type": "hold_status_change",
+        "created_at": now.isoformat()
+    }
+    
+    await db.leads.update_one(
+        {"lead_id": lead_id},
+        {
+            "$set": {
+                "hold_status": new_status,
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "hold_history": history_entry,
+                "comments": comment
+            }
+        }
+    )
+    
+    return {
+        "message": f"Lead {action.lower()}d successfully",
+        "lead_id": lead_id,
+        "hold_status": new_status,
+        "history_entry": history_entry
+    }
+
 @api_router.post("/leads/seed")
 async def seed_leads(request: Request):
     """Seed sample leads for testing"""
