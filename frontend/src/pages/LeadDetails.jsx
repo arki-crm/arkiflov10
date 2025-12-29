@@ -517,7 +517,7 @@ const LeadStagesPanel = ({
               Update Stage
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to update the stage to <strong className="text-blue-600">"{confirmDialog.targetStage}"</strong>?
+              Are you sure you want to update the stage to <strong className="text-blue-600">&quot;{confirmDialog.targetStage}&quot;</strong>?
               <br /><br />
               <span className="text-amber-600 text-sm">
                 ⚠️ This action cannot be undone. Stage progression is forward-only.
