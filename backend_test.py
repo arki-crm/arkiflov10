@@ -5507,8 +5507,10 @@ db.user_sessions.insertOne({{
         """Test POST /api/validation-pipeline/{design_project_id}/send-to-production with Designer token (should fail)"""
         success, pipeline_data = self.run_test("Get Pipeline for Designer Production Test", "GET", "api/validation-pipeline", 200,
                                               auth_token=self.admin_token)
-        if success and pipeline_data and len(pipeline_data) > 0:
-            design_project_id = pipeline_data[0]['design_project']['id']
+        # Access the pipeline array from the response dict
+        pipeline_items = pipeline_data.get('pipeline', []) if isinstance(pipeline_data, dict) else pipeline_data
+        if success and pipeline_items and len(pipeline_items) > 0:
+            design_project_id = pipeline_items[0]['design_project']['id']
             
             return self.run_test("Send to Production (Designer - Should Fail)", "POST", 
                                f"api/validation-pipeline/{design_project_id}/send-to-production", 403,
