@@ -627,6 +627,87 @@ const LeadDetails = () => {
     }
   };
 
+  // Fetch collaborators
+  const fetchCollaborators = async () => {
+    try {
+      const response = await axios.get(`${API}/leads/${id}/collaborators`, {
+        withCredentials: true
+      });
+      setCollaborators(response.data.collaborators || []);
+    } catch (err) {
+      console.error('Failed to fetch collaborators:', err);
+    }
+  };
+
+  // Fetch all users for collaborator selection
+  const fetchAllUsers = async () => {
+    try {
+      setLoadingUsers(true);
+      const response = await axios.get(`${API}/users`, {
+        withCredentials: true
+      });
+      setAllUsers(response.data || []);
+    } catch (err) {
+      console.error('Failed to fetch users:', err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  // Add collaborator
+  const handleAddCollaborator = async () => {
+    if (!selectedCollaborator) {
+      toast.error('Please select a user');
+      return;
+    }
+    
+    try {
+      setAddingCollaborator(true);
+      await axios.post(`${API}/leads/${id}/collaborators`, 
+        { 
+          user_id: selectedCollaborator,
+          reason: collaboratorReason || 'Added as collaborator'
+        },
+        { withCredentials: true }
+      );
+      toast.success('Collaborator added');
+      setShowCollaboratorModal(false);
+      setSelectedCollaborator('');
+      setCollaboratorReason('');
+      fetchCollaborators();
+      fetchLead(); // Refresh to get updated comments
+    } catch (err) {
+      console.error('Failed to add collaborator:', err);
+      toast.error(err.response?.data?.detail || 'Failed to add collaborator');
+    } finally {
+      setAddingCollaborator(false);
+    }
+  };
+
+  // Remove collaborator
+  const handleRemoveCollaborator = async (collaboratorUserId) => {
+    try {
+      await axios.delete(`${API}/leads/${id}/collaborators/${collaboratorUserId}`, {
+        withCredentials: true
+      });
+      toast.success('Collaborator removed');
+      fetchCollaborators();
+      fetchLead();
+    } catch (err) {
+      console.error('Failed to remove collaborator:', err);
+      toast.error(err.response?.data?.detail || 'Failed to remove collaborator');
+    }
+  };
+
+  // Can add collaborator
+  const canAddCollaborator = () => {
+    if (!user || !lead) return false;
+    // Admin, SalesManager can always add
+    if (user.role === 'Admin' || user.role === 'SalesManager' || user.role === 'Manager') return true;
+    // Lead owner/designer can add
+    return lead.assigned_to === user.user_id || lead.designer_id === user.user_id;
+  };
+
   // Add comment
   const handleAddComment = async (message) => {
     try {
