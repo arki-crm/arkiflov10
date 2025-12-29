@@ -10,7 +10,9 @@ import {
   FolderKanban, 
   ChevronRight,
   Loader2,
-  FileX2
+  FileX2,
+  Pause,
+  Power
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -26,6 +28,14 @@ const STAGE_FILTERS = [
   { key: 'Delivery', label: 'Delivery' },
   { key: 'Installation', label: 'Installation' },
   { key: 'Handover', label: 'Handover' }
+];
+
+// Hold status filter tabs
+const HOLD_STATUS_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'Active', label: 'Active' },
+  { key: 'Hold', label: 'On Hold' },
+  { key: 'Deactivated', label: 'Deactivated' }
 ];
 
 // Stage badge styles
