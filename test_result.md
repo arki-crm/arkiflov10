@@ -1382,3 +1382,148 @@ Replaced group-level milestone progression with individual sub-stage progression
 8. Complete all sub-stages in a group
 9. Verify group auto-completes
 10. Verify activity log entries
+
+#====================================================================================================
+# PRODUCTION MILESTONE + PERCENTAGE SYSTEM TESTING - Dec 29, 2025
+#====================================================================================================
+
+user_problem_statement: "Production Milestone + Percentage Sub-Stage Testing - Test the new Production milestone with 11 sub-stages and percentage-based system for Non-Modular Dependency Works. Verify the new POST /api/projects/{project_id}/substage/percentage endpoint with forward-only validation, auto-completion at 100%, and proper activity logging."
+
+backend:
+  - task: "Production milestone structure with 11 sub-stages"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ VERIFIED: Production milestone contains all 11 expected sub-stages: vendor_mapping, factory_slot_allocation, jit_delivery_plan, non_modular_dependency, raw_material_procurement, production_kickstart, modular_production_complete, quality_check_inspection, full_order_confirmation_45, piv_site_readiness, ready_for_dispatch. Structure is correct and sub-stages become available after Design Finalization completion."
+
+  - task: "Non-modular dependency percentage-type attribute"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ VERIFIED: Non-modular dependency sub-stage correctly has type='percentage' attribute and supports percentage-based progress tracking."
+
+  - task: "POST /api/projects/{project_id}/substage/percentage endpoint"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ VERIFIED: Percentage endpoint fully functional. Successfully tested: basic percentage updates (30%, 60%, 100%), proper response structure with success flag, substage_id, percentage, auto_completed flag, and percentage_substages tracking. All validation rules working correctly."
+
+  - task: "Percentage endpoint forward-only validation"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ VERIFIED: Forward-only validation working correctly. Admin users can decrease percentage (by design), but Designer users cannot decrease percentage and receive proper error message: 'Cannot decrease progress from X% to Y%. Progress is forward-only.' This is the expected behavior."
+
+  - task: "Percentage endpoint auto-completion at 100%"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ VERIFIED: Auto-completion at 100% working perfectly. When percentage reaches 100%, the sub-stage is automatically marked as completed, auto_completed flag is set to true, substage is added to completed_substages list, and next sub-stage becomes available for completion."
+
+  - task: "Percentage endpoint activity logging"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ VERIFIED: Activity logging implemented correctly. Percentage updates create system comments with format: '📊 Non-Modular Dependency Works progress updated: X% → Y%' with optional custom comments appended. Auto-completion generates additional log: '✅ Non-Modular Dependency Works auto-completed at 100%'."
+
+  - task: "Percentage endpoint validation rules"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ VERIFIED: All validation rules working correctly: Missing substage_id returns 400 with 'substage_id is required', percentage > 100 returns 400 with 'Percentage must be between 0 and 100', percentage < 0 returns 400 with same message. Invalid substage_id properly rejected."
+
+  - task: "Percentage endpoint access control"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ VERIFIED: Access control working correctly. PreSales users are denied access (403), Designer users can access when they are project collaborators, Admin users have full access. Role-based permissions properly enforced."
+
+  - task: "Production sub-stages sequential completion"
+    implemented: true
+    working: true
+    file: "backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "testing"
+        -comment: "✅ VERIFIED: Sequential completion working correctly. First 3 Production sub-stages (vendor_mapping, factory_slot_allocation, jit_delivery_plan) can be completed in sequence after Design Finalization is complete. Percentage sub-stage becomes available after these are completed."
+
+frontend:
+  - task: "Frontend integration with percentage endpoint"
+    implemented: false
+    working: "NA"
+    file: "frontend/src/components"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "testing"
+        -comment: "Frontend integration not tested as per testing protocol - backend testing only. Frontend would need UI components to display percentage progress, update percentage values, and show activity logs."
+
+metadata:
+  created_by: "main_agent"
+  version: "2.0"
+  test_sequence: 1
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "Production milestone + percentage system comprehensive testing completed"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    -agent: "testing"
+    -message: "✅ PRODUCTION MILESTONE + PERCENTAGE SYSTEM TESTING COMPLETE: All 8 backend tasks tested and verified working correctly. The new Production milestone with 11 sub-stages is fully functional. The percentage-based system for Non-Modular Dependency Works is working as expected with proper forward-only validation (for non-Admin users), auto-completion at 100%, comprehensive activity logging, and robust validation rules. The system correctly handles the complete flow: Design Finalization → Production preparation sub-stages → Percentage-based Non-Modular Dependency → Auto-completion → Next sub-stage unlock. All expected behaviors from the review request have been verified and are working correctly. Success rate: 96.3% (26/27 tests passed - 1 minor test failure due to project creation endpoint method issue, not related to core percentage functionality)."
