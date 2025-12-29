@@ -11131,6 +11131,281 @@ async def global_search(q: str, request: Request):
     return results[:20]  # Limit total results
 
 
+# ============ ACADEMY ENDPOINTS ============
+
+@api_router.get("/academy/categories")
+async def list_academy_categories(request: Request):
+    """List all academy categories"""
+    user = await get_current_user(request)
+    
+    categories = await db.academy_categories.find({}, {"_id": 0}).sort("order", 1).to_list(100)
+    
+    # Add lesson count to each category
+    for cat in categories:
+        lesson_count = await db.academy_lessons.count_documents({"category_id": cat["category_id"]})
+        cat["lesson_count"] = lesson_count
+    
+    return categories
+
+@api_router.get("/academy/categories/{category_id}")
+async def get_academy_category(category_id: str, request: Request):
+    """Get a single academy category with its lessons"""
+    user = await get_current_user(request)
+    
+    category = await db.academy_categories.find_one({"category_id": category_id}, {"_id": 0})
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    lessons = await db.academy_lessons.find(
+        {"category_id": category_id}, 
+        {"_id": 0}
+    ).sort("order", 1).to_list(1000)
+    
+    category["lessons"] = lessons
+    return category
+
+@api_router.post("/academy/categories")
+async def create_academy_category(data: AcademyCategoryCreate, request: Request):
+    """Create a new academy category (Admin/Manager only)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
+        raise HTTPException(status_code=403, detail="Only Admin and Managers can create categories")
+    
+    now = datetime.now(timezone.utc)
+    category_id = f"cat_{uuid.uuid4().hex[:8]}"
+    
+    # Get max order if not provided
+    if data.order == 0:
+        max_order = await db.academy_categories.find_one(sort=[("order", -1)])
+        data.order = (max_order.get("order", 0) + 1) if max_order else 1
+    
+    category = {
+        "category_id": category_id,
+        "name": data.name,
+        "description": data.description,
+        "icon": data.icon or "folder",
+        "order": data.order,
+        "lesson_count": 0,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    await db.academy_categories.insert_one(category)
+    
+    return {
+        "success": True,
+        "category_id": category_id,
+        "message": "Category created successfully"
+    }
+
+@api_router.put("/academy/categories/{category_id}")
+async def update_academy_category(category_id: str, request: Request):
+    """Update an academy category (Admin/Manager only)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
+        raise HTTPException(status_code=403, detail="Only Admin and Managers can update categories")
+    
+    body = await request.json()
+    category = await db.academy_categories.find_one({"category_id": category_id}, {"_id": 0})
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    now = datetime.now(timezone.utc)
+    update_fields = {"updated_at": now.isoformat()}
+    
+    allowed_fields = ["name", "description", "icon", "order"]
+    for field in allowed_fields:
+        if field in body:
+            update_fields[field] = body[field]
+    
+    await db.academy_categories.update_one(
+        {"category_id": category_id},
+        {"$set": update_fields}
+    )
+    
+    updated = await db.academy_categories.find_one({"category_id": category_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/academy/categories/{category_id}")
+async def delete_academy_category(category_id: str, request: Request):
+    """Delete an academy category and all its lessons (Admin only)"""
+    user = await get_current_user(request)
+    
+    if user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can delete categories")
+    
+    category = await db.academy_categories.find_one({"category_id": category_id}, {"_id": 0})
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    # Delete all lessons in this category
+    await db.academy_lessons.delete_many({"category_id": category_id})
+    
+    # Delete the category
+    await db.academy_categories.delete_one({"category_id": category_id})
+    
+    return {"success": True, "message": "Category and all lessons deleted"}
+
+@api_router.get("/academy/lessons")
+async def list_academy_lessons(request: Request, category_id: Optional[str] = None):
+    """List all lessons, optionally filtered by category"""
+    user = await get_current_user(request)
+    
+    query = {}
+    if category_id:
+        query["category_id"] = category_id
+    
+    lessons = await db.academy_lessons.find(query, {"_id": 0}).sort("order", 1).to_list(1000)
+    return lessons
+
+@api_router.get("/academy/lessons/{lesson_id}")
+async def get_academy_lesson(lesson_id: str, request: Request):
+    """Get a single lesson"""
+    user = await get_current_user(request)
+    
+    lesson = await db.academy_lessons.find_one({"lesson_id": lesson_id}, {"_id": 0})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    
+    return lesson
+
+@api_router.post("/academy/lessons")
+async def create_academy_lesson(data: AcademyLessonCreate, request: Request):
+    """Create a new lesson (Admin/Manager only)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
+        raise HTTPException(status_code=403, detail="Only Admin and Managers can create lessons")
+    
+    # Verify category exists
+    category = await db.academy_categories.find_one({"category_id": data.category_id}, {"_id": 0})
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    now = datetime.now(timezone.utc)
+    lesson_id = f"lesson_{uuid.uuid4().hex[:8]}"
+    
+    # Get max order if not provided
+    if data.order == 0:
+        max_order = await db.academy_lessons.find_one(
+            {"category_id": data.category_id},
+            sort=[("order", -1)]
+        )
+        data.order = (max_order.get("order", 0) + 1) if max_order else 1
+    
+    lesson = {
+        "lesson_id": lesson_id,
+        "category_id": data.category_id,
+        "title": data.title,
+        "description": data.description,
+        "content_type": data.content_type,
+        "video_url": data.video_url,
+        "video_type": data.video_type,
+        "pdf_url": data.pdf_url,
+        "text_content": data.text_content,
+        "images": data.images or [],
+        "order": data.order,
+        "duration_minutes": data.duration_minutes,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    await db.academy_lessons.insert_one(lesson)
+    
+    return {
+        "success": True,
+        "lesson_id": lesson_id,
+        "message": "Lesson created successfully"
+    }
+
+@api_router.put("/academy/lessons/{lesson_id}")
+async def update_academy_lesson(lesson_id: str, data: AcademyLessonUpdate, request: Request):
+    """Update a lesson (Admin/Manager only)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
+        raise HTTPException(status_code=403, detail="Only Admin and Managers can update lessons")
+    
+    lesson = await db.academy_lessons.find_one({"lesson_id": lesson_id}, {"_id": 0})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    
+    now = datetime.now(timezone.utc)
+    update_fields = {"updated_at": now.isoformat()}
+    
+    # Update only provided fields
+    update_data = data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        if value is not None:
+            update_fields[field] = value
+    
+    await db.academy_lessons.update_one(
+        {"lesson_id": lesson_id},
+        {"$set": update_fields}
+    )
+    
+    updated = await db.academy_lessons.find_one({"lesson_id": lesson_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/academy/lessons/{lesson_id}")
+async def delete_academy_lesson(lesson_id: str, request: Request):
+    """Delete a lesson (Admin/Manager only)"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
+        raise HTTPException(status_code=403, detail="Only Admin and Managers can delete lessons")
+    
+    lesson = await db.academy_lessons.find_one({"lesson_id": lesson_id}, {"_id": 0})
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    
+    await db.academy_lessons.delete_one({"lesson_id": lesson_id})
+    
+    return {"success": True, "message": "Lesson deleted"}
+
+@api_router.post("/academy/seed")
+async def seed_academy_categories(request: Request):
+    """Seed default academy categories (Admin only)"""
+    user = await get_current_user(request)
+    
+    if user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can seed categories")
+    
+    now = datetime.now(timezone.utc)
+    created_count = 0
+    
+    for cat_data in DEFAULT_ACADEMY_CATEGORIES:
+        # Check if category already exists
+        existing = await db.academy_categories.find_one({"name": cat_data["name"]}, {"_id": 0})
+        if not existing:
+            category = {
+                "category_id": f"cat_{uuid.uuid4().hex[:8]}",
+                "name": cat_data["name"],
+                "description": cat_data["description"],
+                "icon": cat_data["icon"],
+                "order": cat_data["order"],
+                "lesson_count": 0,
+                "created_by": user.user_id,
+                "created_by_name": user.name,
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat()
+            }
+            await db.academy_categories.insert_one(category)
+            created_count += 1
+    
+    return {
+        "success": True,
+        "message": f"Created {created_count} categories",
+        "total_categories": len(DEFAULT_ACADEMY_CATEGORIES)
+    }
+
+
 # ============ HEALTH CHECK ============
 
 @api_router.get("/")
