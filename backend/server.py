@@ -6175,6 +6175,304 @@ async def get_leads_report(request: Request):
         "presales_performance": presales_list
     }
 
+# ============ PRE-SALES DETAIL APIS ============
+
+@api_router.get("/presales/{presales_id}")
+async def get_presales_detail(presales_id: str, request: Request):
+    """Get pre-sales lead detail"""
+    user = await get_current_user(request)
+    
+    # Find in leads collection (pre-sales leads are stored in leads)
+    presales_lead = await db.leads.find_one(
+        {"lead_id": presales_id},
+        {"_id": 0}
+    )
+    
+    if not presales_lead:
+        raise HTTPException(status_code=404, detail="Pre-sales lead not found")
+    
+    # Permission check - PreSales can only see their own leads
+    if user.role == "PreSales":
+        if presales_lead.get("assigned_to") != user.user_id and presales_lead.get("created_by") != user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif user.role not in ["Admin", "SalesManager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return presales_lead
+
+@api_router.put("/presales/{presales_id}/status")
+async def update_presales_status(presales_id: str, request: Request):
+    """Update pre-sales lead status"""
+    user = await get_current_user(request)
+    body = await request.json()
+    new_status = body.get("status")
+    
+    if new_status not in ["New", "Contacted", "Waiting", "Qualified", "Dropped"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    
+    presales_lead = await db.leads.find_one({"lead_id": presales_id}, {"_id": 0})
+    if not presales_lead:
+        raise HTTPException(status_code=404, detail="Pre-sales lead not found")
+    
+    # Permission check
+    if user.role == "PreSales":
+        if presales_lead.get("assigned_to") != user.user_id and presales_lead.get("created_by") != user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif user.role not in ["Admin", "SalesManager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    old_status = presales_lead.get("status")
+    now = datetime.now(timezone.utc)
+    
+    # Add system comment for status change
+    system_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": f"Status changed: {old_status} → {new_status}",
+        "is_system": True,
+        "created_at": now.isoformat()
+    }
+    
+    await db.leads.update_one(
+        {"lead_id": presales_id},
+        {
+            "$set": {"status": new_status, "updated_at": now.isoformat()},
+            "$push": {"comments": system_comment}
+        }
+    )
+    
+    return {"success": True, "status": new_status}
+
+@api_router.put("/presales/{presales_id}/customer-details")
+async def update_presales_customer_details(presales_id: str, request: Request):
+    """Update pre-sales customer details"""
+    user = await get_current_user(request)
+    body = await request.json()
+    
+    presales_lead = await db.leads.find_one({"lead_id": presales_id}, {"_id": 0})
+    if not presales_lead:
+        raise HTTPException(status_code=404, detail="Pre-sales lead not found")
+    
+    # Permission check
+    if user.role == "PreSales":
+        if presales_lead.get("assigned_to") != user.user_id and presales_lead.get("created_by") != user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif user.role not in ["Admin", "SalesManager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    now = datetime.now(timezone.utc)
+    update_dict = {"updated_at": now.isoformat()}
+    
+    allowed_fields = ["customer_name", "customer_phone", "customer_email", 
+                      "customer_address", "customer_requirements", "source", "budget"]
+    
+    for field in allowed_fields:
+        if field in body:
+            update_dict[field] = body[field]
+    
+    await db.leads.update_one(
+        {"lead_id": presales_id},
+        {"$set": update_dict}
+    )
+    
+    # Add system comment
+    system_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": "system",
+        "user_name": "System",
+        "role": "System",
+        "message": f"Customer details updated by {user.name}",
+        "is_system": True,
+        "created_at": now.isoformat()
+    }
+    await db.leads.update_one(
+        {"lead_id": presales_id},
+        {"$push": {"comments": system_comment}}
+    )
+    
+    updated = await db.leads.find_one({"lead_id": presales_id}, {"_id": 0})
+    return updated
+
+@api_router.post("/presales/{presales_id}/comments")
+async def add_presales_comment(presales_id: str, request: Request):
+    """Add comment to pre-sales lead"""
+    user = await get_current_user(request)
+    body = await request.json()
+    message = body.get("message")
+    
+    if not message:
+        raise HTTPException(status_code=400, detail="Message required")
+    
+    presales_lead = await db.leads.find_one({"lead_id": presales_id}, {"_id": 0})
+    if not presales_lead:
+        raise HTTPException(status_code=404, detail="Pre-sales lead not found")
+    
+    now = datetime.now(timezone.utc)
+    new_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": message,
+        "is_system": False,
+        "created_at": now.isoformat()
+    }
+    
+    await db.leads.update_one(
+        {"lead_id": presales_id},
+        {
+            "$push": {"comments": new_comment},
+            "$set": {"updated_at": now.isoformat()}
+        }
+    )
+    
+    return new_comment
+
+@api_router.post("/presales/{presales_id}/files")
+async def upload_presales_files(presales_id: str, request: Request):
+    """Upload files to pre-sales lead"""
+    user = await get_current_user(request)
+    
+    presales_lead = await db.leads.find_one({"lead_id": presales_id}, {"_id": 0})
+    if not presales_lead:
+        raise HTTPException(status_code=404, detail="Pre-sales lead not found")
+    
+    # Permission check
+    if user.role == "PreSales":
+        if presales_lead.get("assigned_to") != user.user_id and presales_lead.get("created_by") != user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif user.role not in ["Admin", "SalesManager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    now = datetime.now(timezone.utc)
+    
+    # For now, create placeholder file entries
+    # In production, integrate with file storage service
+    form = await request.form()
+    files = form.getlist("files")
+    
+    new_files = []
+    for file in files:
+        file_entry = {
+            "id": f"file_{uuid.uuid4().hex[:8]}",
+            "name": file.filename,
+            "size": 0,  # Would get from actual file
+            "type": file.content_type,
+            "uploaded_by": user.user_id,
+            "uploaded_by_name": user.name,
+            "url": f"/files/{presales_id}/{file.filename}",  # Placeholder URL
+            "created_at": now.isoformat()
+        }
+        new_files.append(file_entry)
+    
+    if new_files:
+        await db.leads.update_one(
+            {"lead_id": presales_id},
+            {
+                "$push": {"files": {"$each": new_files}},
+                "$set": {"updated_at": now.isoformat()}
+            }
+        )
+        
+        # Add system comment
+        system_comment = {
+            "id": f"comment_{uuid.uuid4().hex[:8]}",
+            "user_id": "system",
+            "user_name": "System",
+            "role": "System",
+            "message": f"{user.name} uploaded {len(new_files)} file(s)",
+            "is_system": True,
+            "created_at": now.isoformat()
+        }
+        await db.leads.update_one(
+            {"lead_id": presales_id},
+            {"$push": {"comments": system_comment}}
+        )
+    
+    return {"success": True, "files": new_files}
+
+@api_router.delete("/presales/{presales_id}/files/{file_id}")
+async def delete_presales_file(presales_id: str, file_id: str, request: Request):
+    """Delete file from pre-sales lead"""
+    user = await get_current_user(request)
+    
+    presales_lead = await db.leads.find_one({"lead_id": presales_id}, {"_id": 0})
+    if not presales_lead:
+        raise HTTPException(status_code=404, detail="Pre-sales lead not found")
+    
+    # Permission check
+    if user.role == "PreSales":
+        if presales_lead.get("assigned_to") != user.user_id and presales_lead.get("created_by") != user.user_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif user.role not in ["Admin", "SalesManager"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.leads.update_one(
+        {"lead_id": presales_id},
+        {
+            "$pull": {"files": {"id": file_id}},
+            "$set": {"updated_at": now.isoformat()}
+        }
+    )
+    
+    return {"success": True}
+
+@api_router.post("/presales/{presales_id}/convert-to-lead")
+async def convert_presales_to_lead(presales_id: str, request: Request):
+    """Convert qualified pre-sales lead to regular lead"""
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "SalesManager", "PreSales"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    presales_lead = await db.leads.find_one({"lead_id": presales_id}, {"_id": 0})
+    if not presales_lead:
+        raise HTTPException(status_code=404, detail="Pre-sales lead not found")
+    
+    if presales_lead.get("status") != "Qualified":
+        raise HTTPException(status_code=400, detail="Only qualified leads can be converted")
+    
+    if presales_lead.get("is_converted"):
+        raise HTTPException(status_code=400, detail="Already converted to lead")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Mark as converted and update stage to BC Call Done (first sales stage)
+    await db.leads.update_one(
+        {"lead_id": presales_id},
+        {
+            "$set": {
+                "is_converted": True,
+                "stage": "BC Call Done",  # Move to sales stages
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "comments": {
+                    "id": f"comment_{uuid.uuid4().hex[:8]}",
+                    "user_id": user.user_id,
+                    "user_name": user.name,
+                    "role": user.role,
+                    "message": "Converted from Pre-Sales to Lead",
+                    "is_system": True,
+                    "created_at": now.isoformat()
+                },
+                "collaborators": {
+                    "user_id": presales_lead.get("created_by") or presales_lead.get("assigned_to"),
+                    "role": "PreSales",
+                    "added_at": now.isoformat(),
+                    "added_by": "system",
+                    "reason": "Original Pre-Sales creator"
+                }
+            }
+        }
+    )
+    
+    return {"success": True, "lead_id": presales_id}
+
 @api_router.get("/reports/designers")
 async def get_designers_report(request: Request):
     """Designer Performance Report - Designer sees own, Admin/Manager sees all"""
