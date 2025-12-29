@@ -5690,6 +5690,294 @@ db.user_sessions.insertOne({{
             return success and is_array, projects_data
         return success, projects_data
 
+    # ============ NEW FEATURES TESTS (DELIVERY, HANDOVER, HOLD/ACTIVATE/DEACTIVATE) ============
+
+    def test_delivery_milestone_4_substages(self):
+        """Test Delivery milestone 4-step workflow: dispatch_scheduled, installation_team_scheduled, materials_dispatched, delivery_confirmed"""
+        # First get a project to test with
+        success, projects_data = self.run_test("Get Projects for Delivery Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Test completing delivery sub-stages in order
+            delivery_substages = [
+                "dispatch_scheduled",
+                "installation_team_scheduled", 
+                "materials_dispatched",
+                "delivery_confirmed"
+            ]
+            
+            all_success = True
+            for i, substage_id in enumerate(delivery_substages):
+                success, response = self.run_test(f"Complete Delivery Sub-stage {i+1}: {substage_id}", "POST",
+                                                f"api/projects/{project_id}/substage/complete", 200,
+                                                data={"substage_id": substage_id},
+                                                auth_token=self.admin_token)
+                if not success:
+                    all_success = False
+                    break
+                    
+                # Verify response structure
+                if success:
+                    has_success = response.get('success') == True
+                    has_substage_id = response.get('substage_id') == substage_id
+                    has_group_name = response.get('group_name') == "Delivery"
+                    print(f"   Sub-stage {substage_id}: Success={has_success}, ID={has_substage_id}, Group={has_group_name}")
+                    
+                    # Check if all 4 sub-stages complete the Delivery milestone
+                    if i == 3:  # Last sub-stage
+                        group_complete = response.get('group_complete', False)
+                        print(f"   Delivery milestone auto-completed: {group_complete}")
+                        all_success = all_success and group_complete
+            
+            return all_success, {}
+        else:
+            print("⚠️  No projects found for delivery milestone test")
+            return False, {}
+
+    def test_handover_milestone_8_substages(self):
+        """Test Handover milestone 8-step workflow: final_inspection, cleaning, handover_docs, project_handover, csat, review_video_photos, issue_warranty_book, closed"""
+        # First get a project to test with
+        success, projects_data = self.run_test("Get Projects for Handover Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Test completing handover sub-stages in order
+            handover_substages = [
+                "final_inspection",
+                "cleaning",
+                "handover_docs",
+                "project_handover",
+                "csat",
+                "review_video_photos",
+                "issue_warranty_book",
+                "closed"
+            ]
+            
+            all_success = True
+            for i, substage_id in enumerate(handover_substages):
+                success, response = self.run_test(f"Complete Handover Sub-stage {i+1}: {substage_id}", "POST",
+                                                f"api/projects/{project_id}/substage/complete", 200,
+                                                data={"substage_id": substage_id},
+                                                auth_token=self.admin_token)
+                if not success:
+                    all_success = False
+                    break
+                    
+                # Verify response structure
+                if success:
+                    has_success = response.get('success') == True
+                    has_substage_id = response.get('substage_id') == substage_id
+                    has_group_name = response.get('group_name') == "Handover"
+                    print(f"   Sub-stage {substage_id}: Success={has_success}, ID={has_substage_id}, Group={has_group_name}")
+                    
+                    # Check if all 8 sub-stages mark project as Completed
+                    if i == 7:  # Last sub-stage (closed)
+                        group_complete = response.get('group_complete', False)
+                        print(f"   Project marked as Completed: {group_complete}")
+                        all_success = all_success and group_complete
+            
+            return all_success, {}
+        else:
+            print("⚠️  No projects found for handover milestone test")
+            return False, {}
+
+    def test_project_hold_status_admin(self):
+        """Test PUT /api/projects/{project_id}/hold-status with Admin permissions"""
+        # First get a project to test with
+        success, projects_data = self.run_test("Get Projects for Hold Status Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Test Hold action
+            success1, hold_response = self.run_test("Hold Project (Admin)", "PUT",
+                                                   f"api/projects/{project_id}/hold-status", 200,
+                                                   data={"action": "Hold", "reason": "Testing hold functionality"},
+                                                   auth_token=self.admin_token)
+            
+            # Test Activate action
+            success2, activate_response = self.run_test("Activate Project (Admin)", "PUT",
+                                                       f"api/projects/{project_id}/hold-status", 200,
+                                                       data={"action": "Activate", "reason": "Testing activate functionality"},
+                                                       auth_token=self.admin_token)
+            
+            # Test Deactivate action
+            success3, deactivate_response = self.run_test("Deactivate Project (Admin)", "PUT",
+                                                         f"api/projects/{project_id}/hold-status", 200,
+                                                         data={"action": "Deactivate", "reason": "Testing deactivate functionality"},
+                                                         auth_token=self.admin_token)
+            
+            return success1 and success2 and success3, {}
+        else:
+            print("⚠️  No projects found for hold status test")
+            return False, {}
+
+    def test_project_hold_status_designer_restricted(self):
+        """Test Designer can only Hold projects, not Activate/Deactivate"""
+        # First get a project to test with
+        success, projects_data = self.run_test("Get Projects for Designer Hold Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Test Hold action (should work for Designer)
+            success1, _ = self.run_test("Hold Project (Designer - Should Work)", "PUT",
+                                      f"api/projects/{project_id}/hold-status", 200,
+                                      data={"action": "Hold", "reason": "Designer testing hold"},
+                                      auth_token=self.designer_token)
+            
+            # Test Activate action (should fail for Designer)
+            success2, _ = self.run_test("Activate Project (Designer - Should Fail)", "PUT",
+                                      f"api/projects/{project_id}/hold-status", 403,
+                                      data={"action": "Activate", "reason": "Designer testing activate"},
+                                      auth_token=self.designer_token)
+            
+            # Test Deactivate action (should fail for Designer)
+            success3, _ = self.run_test("Deactivate Project (Designer - Should Fail)", "PUT",
+                                      f"api/projects/{project_id}/hold-status", 403,
+                                      data={"action": "Deactivate", "reason": "Designer testing deactivate"},
+                                      auth_token=self.designer_token)
+            
+            return success1 and success2 and success3, {}
+        else:
+            print("⚠️  No projects found for designer hold status test")
+            return False, {}
+
+    def test_project_hold_status_validation(self):
+        """Test hold status validation - empty reason should fail"""
+        # First get a project to test with
+        success, projects_data = self.run_test("Get Projects for Hold Validation Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Test with empty reason (should fail with 400)
+            success1, _ = self.run_test("Hold Project with Empty Reason (Should Fail)", "PUT",
+                                      f"api/projects/{project_id}/hold-status", 400,
+                                      data={"action": "Hold", "reason": ""},
+                                      auth_token=self.admin_token)
+            
+            # Test with missing reason (should fail with 400)
+            success2, _ = self.run_test("Hold Project with Missing Reason (Should Fail)", "PUT",
+                                      f"api/projects/{project_id}/hold-status", 400,
+                                      data={"action": "Hold"},
+                                      auth_token=self.admin_token)
+            
+            return success1 and success2, {}
+        else:
+            print("⚠️  No projects found for hold validation test")
+            return False, {}
+
+    def test_lead_hold_status_admin(self):
+        """Test PUT /api/leads/{lead_id}/hold-status with Admin permissions"""
+        # First get a lead to test with
+        success, leads_data = self.run_test("Get Leads for Hold Status Test", "GET", "api/leads", 200,
+                                          auth_token=self.admin_token)
+        if success and leads_data and len(leads_data) > 0:
+            lead_id = leads_data[0]['lead_id']
+            
+            # Test Hold action
+            success1, _ = self.run_test("Hold Lead (Admin)", "PUT",
+                                      f"api/leads/{lead_id}/hold-status", 200,
+                                      data={"action": "Hold", "reason": "Testing lead hold functionality"},
+                                      auth_token=self.admin_token)
+            
+            # Test Activate action
+            success2, _ = self.run_test("Activate Lead (Admin)", "PUT",
+                                      f"api/leads/{lead_id}/hold-status", 200,
+                                      data={"action": "Activate", "reason": "Testing lead activate functionality"},
+                                      auth_token=self.admin_token)
+            
+            # Test Deactivate action
+            success3, _ = self.run_test("Deactivate Lead (Admin)", "PUT",
+                                      f"api/leads/{lead_id}/hold-status", 200,
+                                      data={"action": "Deactivate", "reason": "Testing lead deactivate functionality"},
+                                      auth_token=self.admin_token)
+            
+            return success1 and success2 and success3, {}
+        else:
+            print("⚠️  No leads found for hold status test")
+            return False, {}
+
+    def test_milestone_progression_blocking_when_on_hold(self):
+        """Test that milestone progression is blocked when project is on Hold"""
+        # First get a project to test with
+        success, projects_data = self.run_test("Get Projects for Hold Blocking Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Put project on Hold
+            success1, _ = self.run_test("Hold Project for Blocking Test", "PUT",
+                                      f"api/projects/{project_id}/hold-status", 200,
+                                      data={"action": "Hold", "reason": "Testing milestone blocking"},
+                                      auth_token=self.admin_token)
+            
+            if success1:
+                # Try to complete a sub-stage (should fail with 400)
+                success2, _ = self.run_test("Complete Sub-stage on Hold Project (Should Fail)", "POST",
+                                          f"api/projects/{project_id}/substage/complete", 400,
+                                          data={"substage_id": "site_measurement"},
+                                          auth_token=self.admin_token)
+                
+                # Activate project again for cleanup
+                self.run_test("Activate Project for Cleanup", "PUT",
+                            f"api/projects/{project_id}/hold-status", 200,
+                            data={"action": "Activate", "reason": "Cleanup after test"},
+                            auth_token=self.admin_token)
+                
+                return success1 and success2, {}
+            
+            return success1, {}
+        else:
+            print("⚠️  No projects found for hold blocking test")
+            return False, {}
+
+    def test_activity_logging_for_hold_status(self):
+        """Test that hold status changes create timeline entries"""
+        # First get a project to test with
+        success, projects_data = self.run_test("Get Projects for Activity Logging Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Hold project and check for activity logging
+            success1, hold_response = self.run_test("Hold Project for Activity Test", "PUT",
+                                                   f"api/projects/{project_id}/hold-status", 200,
+                                                   data={"action": "Hold", "reason": "Testing activity logging"},
+                                                   auth_token=self.admin_token)
+            
+            if success1:
+                # Get project details to check for timeline/activity entries
+                success2, project_data = self.run_test("Get Project After Hold for Activity Check", "GET",
+                                                     f"api/projects/{project_id}", 200,
+                                                     auth_token=self.admin_token)
+                
+                if success2:
+                    # Check if comments or activity entries were created
+                    comments = project_data.get('comments', [])
+                    activity = project_data.get('activity', [])
+                    
+                    # Look for hold-related entries
+                    hold_comment_found = any('Hold' in comment.get('message', '') for comment in comments)
+                    hold_activity_found = any('Hold' in entry.get('message', '') for entry in activity)
+                    
+                    print(f"   Hold comment found: {hold_comment_found}")
+                    print(f"   Hold activity found: {hold_activity_found}")
+                    
+                    activity_logged = hold_comment_found or hold_activity_found
+                    return success1 and success2 and activity_logged, {}
+                
+                return success1 and success2, {}
+            
+            return success1, {}
+        else:
+            print("⚠️  No projects found for activity logging test")
+            return False, {}
+
     # ============ PRODUCTION MILESTONE + PERCENTAGE SYSTEM TESTS ============
 
     def test_production_milestone_structure(self):
