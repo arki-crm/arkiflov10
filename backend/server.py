@@ -241,6 +241,169 @@ class HoldStatusUpdate(BaseModel):
     action: str  # "Hold", "Activate", "Deactivate"
     reason: str
 
+# ============ WARRANTY & SERVICE REQUEST MODELS ============
+
+class Warranty(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    warranty_id: str
+    pid: str
+    project_id: str
+    project_name: str
+    customer_name: str
+    customer_address: Optional[str] = None
+    customer_phone: str
+    customer_email: Optional[str] = None
+    handover_date: str
+    warranty_start_date: str
+    warranty_end_date: str  # handover_date + 10 years
+    warranty_status: str = "Active"  # Active, Expired, Voided
+    warranty_book_url: Optional[str] = None
+    vendor_warranty_files: List[dict] = []  # [{name, url, uploaded_at}]
+    materials_list: List[str] = []
+    modules_list: List[str] = []
+    service_requests: List[str] = []  # List of service_request_ids
+    notes: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+class WarrantyCreate(BaseModel):
+    warranty_book_url: Optional[str] = None
+    vendor_warranty_files: Optional[List[dict]] = []
+    materials_list: Optional[List[str]] = []
+    modules_list: Optional[List[str]] = []
+    notes: Optional[str] = None
+
+# Service Request Stages (9 steps - forward-only)
+SERVICE_REQUEST_STAGES = [
+    "New",
+    "Assigned to Technician",
+    "Technician Visit Scheduled",
+    "Technician Visited",
+    "Spare Parts Required",
+    "Waiting for Spares",
+    "Work In Progress",
+    "Completed",
+    "Closed"
+]
+
+# Service Request Issue Categories
+SERVICE_ISSUE_CATEGORIES = [
+    "Hardware Issue",
+    "Fitting Issue",
+    "Surface Damage",
+    "Hinge/Drawer Problem",
+    "Water Damage",
+    "Electrical Issue",
+    "Door Alignment",
+    "Soft-close Issue",
+    "General Maintenance",
+    "Other"
+]
+
+# Delay Reasons
+SERVICE_DELAY_REASONS = [
+    "Customer not available",
+    "Spare not received",
+    "Workmanship not available",
+    "Technician not available",
+    "Vendor delay",
+    "Factory delay",
+    "Revisit required",
+    "Complex repair",
+    "Weather issue",
+    "Other"
+]
+
+# Delay Owners
+SERVICE_DELAY_OWNERS = [
+    "Technician",
+    "Vendor",
+    "Company",
+    "Customer"
+]
+
+class ServiceRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    service_request_id: str
+    pid: Optional[str] = None  # Can be null for unlinked requests
+    warranty_id: Optional[str] = None
+    project_id: Optional[str] = None
+    project_name: Optional[str] = None
+    # Customer info
+    customer_name: str
+    customer_phone: str
+    customer_email: Optional[str] = None
+    customer_address: Optional[str] = None
+    # Issue details
+    issue_category: str
+    issue_description: str
+    issue_images: List[dict] = []  # [{url, uploaded_at, uploaded_by}]
+    priority: str = "Medium"  # High, Medium, Low
+    warranty_status: str = "Unknown"  # Active, Expired, Unknown
+    # Workflow
+    stage: str = "New"
+    assigned_technician_id: Optional[str] = None
+    assigned_technician_name: Optional[str] = None
+    # SLA tracking
+    sla_visit_by: str  # Auto-generated: created_at + 72 hours
+    actual_visit_date: Optional[str] = None
+    expected_closure_date: Optional[str] = None  # Set by technician after inspection
+    actual_closure_date: Optional[str] = None
+    # Delay tracking
+    delay_count: int = 0
+    delays: List[dict] = []  # [{reason, owner, notes, new_expected_date, logged_by, logged_at}]
+    last_delay_reason: Optional[str] = None
+    last_delay_owner: Optional[str] = None
+    # Work details
+    before_photos: List[dict] = []
+    after_photos: List[dict] = []
+    technician_notes: List[dict] = []
+    spare_parts: List[dict] = []  # [{name, status, ordered_at, received_at}]
+    # Activity
+    timeline: List[dict] = []
+    comments: List[dict] = []
+    # Source
+    source: str = "Internal"  # Internal, Google Form
+    # Timestamps
+    created_by: Optional[str] = None
+    created_by_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+class ServiceRequestCreate(BaseModel):
+    pid: Optional[str] = None
+    customer_name: str
+    customer_phone: str
+    customer_email: Optional[str] = None
+    customer_address: Optional[str] = None
+    issue_category: str
+    issue_description: str
+    issue_images: Optional[List[dict]] = []
+    priority: Optional[str] = "Medium"
+
+class ServiceRequestFromGoogleForm(BaseModel):
+    name: str
+    phone: str
+    pid: Optional[str] = None
+    issue_description: str
+    image_urls: Optional[List[str]] = []
+
+class ServiceRequestStageUpdate(BaseModel):
+    stage: str
+    notes: Optional[str] = None
+
+class ServiceRequestAssignTechnician(BaseModel):
+    technician_id: str
+
+class ServiceRequestDelayUpdate(BaseModel):
+    delay_reason: str
+    delay_owner: str
+    new_expected_date: str
+    notes: Optional[str] = None
+
+class ServiceRequestClosureDate(BaseModel):
+    expected_closure_date: str
+
 # Lead stages
 LEAD_STAGES = [
     "BC Call Done",
