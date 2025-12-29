@@ -1661,11 +1661,17 @@ MILESTONE_GROUPS = [
         "id": "production",
         "name": "Production",
         "subStages": [
-            {"id": "production_start", "name": "Production Started", "order": 1},
-            {"id": "quality_check_1", "name": "Quality Check – Phase 1", "order": 2},
-            {"id": "production_midpoint", "name": "Production Midpoint Review", "order": 3},
-            {"id": "quality_check_2", "name": "Quality Check – Phase 2", "order": 4},
-            {"id": "production_complete", "name": "Production Completed", "order": 5}
+            {"id": "vendor_mapping", "name": "Vendor Mapping", "order": 1},
+            {"id": "factory_slot_allocation", "name": "Factory Slot Allocation", "order": 2},
+            {"id": "jit_delivery_plan", "name": "JIT / Project Delivery Plan (By Operations Lead)", "order": 3},
+            {"id": "non_modular_dependency", "name": "Non-Modular Dependency Works", "order": 4, "type": "percentage"},
+            {"id": "raw_material_procurement", "name": "Raw Material Procurement – Modular", "order": 5},
+            {"id": "production_kickstart", "name": "Production Kick-Start", "order": 6},
+            {"id": "modular_production_complete", "name": "Modular Production Completed (Factory)", "order": 7},
+            {"id": "quality_check_inspection", "name": "Quality Check & Inspection", "order": 8},
+            {"id": "full_order_confirmation_45", "name": "Full Order Confirmation — 45% Payment Collection", "order": 9},
+            {"id": "piv_site_readiness", "name": "PIV / Site Readiness Check", "order": 10},
+            {"id": "ready_for_dispatch", "name": "Ready For Dispatch", "order": 11}
         ]
     },
     {
