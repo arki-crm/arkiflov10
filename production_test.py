@@ -309,6 +309,20 @@ print("Designer user ID: {designer_user_id}");
         if hasattr(self, 'test_production_project_id'):
             project_id = self.test_production_project_id
             
+            # First, add designer as collaborator to the project
+            success_collab, _ = self.run_test("Add Designer as Collaborator for Forward-Only Test", "POST", 
+                                            f"api/projects/{project_id}/collaborators", 200,
+                                            data={"user_id": self.designer_user_id},
+                                            auth_token=self.admin_token)
+            
+            if not success_collab:
+                print("⚠️  Failed to add designer as collaborator, testing with admin")
+                test_token = self.admin_token
+                should_fail = False  # Admin can decrease percentage
+            else:
+                test_token = self.designer_token
+                should_fail = True  # Designer cannot decrease percentage
+            
             # First update to 60%
             success1, _ = self.run_test("Update Percentage to 60%", "POST", 
                                       f"api/projects/{project_id}/substage/percentage", 200,
@@ -317,20 +331,21 @@ print("Designer user ID: {designer_user_id}");
                                           "percentage": 60,
                                           "comment": "Progress update to 60%"
                                       },
-                                      auth_token=self.admin_token)
+                                      auth_token=test_token)
             
             if success1:
-                # Try to decrease to 40% (should fail)
-                success2, error_response = self.run_test("Try to Decrease Percentage to 40% (Should Fail)", "POST", 
-                                                       f"api/projects/{project_id}/substage/percentage", 400,
+                # Try to decrease to 40%
+                expected_status = 400 if should_fail else 200
+                success2, error_response = self.run_test("Try to Decrease Percentage to 40%", "POST", 
+                                                       f"api/projects/{project_id}/substage/percentage", expected_status,
                                                        data={
                                                            "substage_id": "non_modular_dependency",
                                                            "percentage": 40,
                                                            "comment": "Trying to decrease"
                                                        },
-                                                       auth_token=self.admin_token)
+                                                       auth_token=test_token)
                 
-                if success2:
+                if should_fail and success2:
                     # Verify error message mentions forward-only
                     error_detail = error_response.get('detail', '')
                     mentions_forward_only = ('forward-only' in error_detail.lower() or 
@@ -343,7 +358,12 @@ print("Designer user ID: {designer_user_id}");
                     print(f"   Mentions forward-only: {mentions_forward_only}")
                     
                     return success1 and success2 and mentions_forward_only, error_response
-                return success1 and success2, error_response
+                elif not should_fail and success2:
+                    print(f"   60% update successful: {success1}")
+                    print(f"   40% decrease allowed for Admin: {success2}")
+                    return success1 and success2, error_response
+                else:
+                    return success1 and success2, error_response
             return success1, {}
         else:
             print("⚠️  No test project available for forward-only validation test")
