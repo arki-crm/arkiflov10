@@ -712,7 +712,6 @@ print("Technician session token: {technician_session_token}");
         # Verify all collections exist by testing endpoints
         collections_tests = [
             ("users", "api/auth/users"),
-            ("presales", "api/presales/lead_39737617"),
             ("leads", "api/leads"),
             ("projects", "api/projects"),
             ("warranties", "api/warranties"),
@@ -732,6 +731,17 @@ print("Technician session token: {technician_session_token}");
                 print(f"   ❌ Collection {collection_name} test failed")
             else:
                 print(f"   ✅ Collection {collection_name} accessible")
+        
+        # Test presales collection separately if we have a lead ID
+        if hasattr(self, 'integration_lead_id') and self.integration_lead_id:
+            success, _ = self.run_test("Verify presales collection", "GET", 
+                                     f"api/presales/{self.integration_lead_id}", 200, 
+                                     auth_token=self.admin_token)
+            if not success:
+                all_collections_exist = False
+                print(f"   ❌ Collection presales test failed")
+            else:
+                print(f"   ✅ Collection presales accessible")
         
         # Check PID consistency
         if hasattr(self, 'integration_pid') and self.integration_pid:
