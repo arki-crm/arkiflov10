@@ -71,6 +71,12 @@ const Sidebar = () => {
       roles: ['Admin', 'Manager', 'Designer']
     },
     { 
+      path: '/reports', 
+      label: 'Reports', 
+      icon: BarChart3,
+      roles: ['Admin', 'Manager', 'PreSales', 'Designer']
+    },
+    { 
       path: '/users', 
       label: 'Users', 
       icon: UserCog,
