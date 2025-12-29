@@ -14,7 +14,8 @@ import {
   UserCog,
   User,
   Calendar,
-  CalendarDays
+  CalendarDays,
+  BarChart3
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 
