@@ -764,71 +764,92 @@ async def logout(request: Request, response: Response):
 
 # ============ USER MANAGEMENT ============
 
-# Core roles + Phase 15 Design Workflow roles
+# ============ V1 SIMPLIFIED RBAC SYSTEM ============
+
+# 6 Core Roles ONLY (V1 Foundation)
 VALID_ROLES = [
-    "Admin",               # Full system access, CEO view
-    "Manager",             # General manager with broad access
-    "SalesManager",        # Monitors all pre-booking leads, sales performance, funnel analytics
-    "PreSales",            # Lead generation, BC calls, site visits
-    "Designer",            # Design work only
-    "HybridDesigner",      # Designer + Sales (handles BC calls, BOQ, site visits, booking, full design)
-    "DesignManager",       # Arya - monitors all design projects, approvals, reviews
-    "ProductionManager",   # Sharon - validation pipeline, drawings, kick-off
-    "OperationsLead",      # Post-production operations, delivery coordination
-    "Trainee"              # Limited access, learning role
+    "Admin",                  # Full system access, user management, all dashboards
+    "PreSales",               # Lead creation, qualification, handover
+    "SalesManager",           # All leads not booked, funnel view, reassign leads, sales pipeline
+    "Designer",               # Assigned leads/projects, sales stages, design Kanban, meetings, files
+    "DesignManager",          # All designers' tasks, delays, drawings, meetings, bottlenecks
+    "ProductionOpsManager"    # Validation, kick-off, production, delivery, installation, handover
 ]
 
 # Role categories for permission checks
-DESIGN_ROLES = ["Designer", "HybridDesigner", "DesignManager"]
-SALES_CAPABLE_ROLES = ["Admin", "Manager", "SalesManager", "PreSales", "HybridDesigner"]
-SALES_MANAGER_ROLES = ["Admin", "Manager", "SalesManager"]
-MANAGER_ROLES = ["Admin", "Manager", "DesignManager", "ProductionManager", "OperationsLead", "SalesManager"]
-OPERATIONS_ROLES = ["Admin", "Manager", "OperationsLead", "ProductionManager"]
+DESIGN_ROLES = ["Designer", "DesignManager"]
+SALES_ROLES = ["PreSales", "SalesManager", "Designer"]  # Designer handles sales stages too
+MANAGER_ROLES = ["Admin", "SalesManager", "DesignManager", "ProductionOpsManager"]
+EXECUTION_ROLES = ["Admin", "ProductionOpsManager"]
 
-# Pre-booking stages (sales stages)
-PRE_BOOKING_STAGES = [
-    "New Lead", "BC Call Scheduled", "BC Call Done", "Site Visit Scheduled", 
-    "Site Visit Done", "Tentative BOQ Sent", "Revised BOQ Sent", "BOQ Sent",
-    "Negotiation", "Waiting for Booking"
+# ============ SIMPLIFIED STAGE FLOW (V1) ============
+
+# A. Sales Stages (6 stages)
+SALES_STAGES = [
+    "BC Call Done",
+    "Quotation Shared",
+    "Revised Quotation", 
+    "Site Visit",
+    "Waiting for Booking",
+    "Booking Completed"
 ]
 
-# Stage-based auto-collaborator mapping (Livspace-style)
+# B. Design Stages (7 stages)
+DESIGN_STAGES = [
+    "Measurement Completed",
+    "Floor Plan Ready",
+    "Design Stage 1 Completed",
+    "Design Stage 2 Completed",
+    "Material Selection Completed",
+    "Design Lock",
+    "Drawings Completed"
+]
+
+# C. Execution Stages (6 stages)
+EXECUTION_STAGES = [
+    "Validation",
+    "Kick-Off",
+    "Production",
+    "Delivery",
+    "Installation",
+    "Handover"
+]
+
+# All stages combined (19 total for V1)
+ALL_PROJECT_STAGES = SALES_STAGES + DESIGN_STAGES + EXECUTION_STAGES
+
+# Pre-booking stages (for Sales Manager)
+PRE_BOOKING_STAGES = SALES_STAGES[:-1]  # All except "Booking Completed"
+
+# ============ AUTO-COLLABORATOR SYSTEM (V1) ============
+
 STAGE_COLLABORATOR_ROLES = {
-    # Pre-booking stages - PreSales/HybridDesigner/SalesManager monitors
-    "New Lead": ["PreSales", "HybridDesigner"],
-    "BC Call Scheduled": ["PreSales", "HybridDesigner"],
-    "BC Call Done": ["PreSales", "HybridDesigner"],
-    "Site Visit Scheduled": ["PreSales", "HybridDesigner"],
-    "Site Visit Done": ["PreSales", "HybridDesigner"],
-    "Tentative BOQ Sent": ["PreSales", "HybridDesigner"],
-    "Revised BOQ Sent": ["PreSales", "HybridDesigner"],
-    "BOQ Sent": ["PreSales", "HybridDesigner"],
-    "Negotiation": ["PreSales", "HybridDesigner"],
-    "Waiting for Booking": ["PreSales", "HybridDesigner"],
+    # Sales Stages - PreSales + Designer (assigned)
+    "BC Call Done": ["PreSales"],
+    "Quotation Shared": ["PreSales"],
+    "Revised Quotation": ["PreSales"],
+    "Site Visit": ["PreSales"],
+    "Waiting for Booking": ["PreSales"],
     
     # After Booking - Design Manager joins
-    "Booked": ["DesignManager"],
-    "Measurement Required": ["DesignManager", "Designer"],
-    "Floor Plan Creation": ["DesignManager", "Designer"],
-    "Floor Plan Meeting": ["DesignManager", "Designer"],
-    "First Design Presentation": ["DesignManager", "Designer"],
-    "Corrections & Second Presentation": ["DesignManager", "Designer"],
-    "Material Selection Meeting": ["DesignManager", "Designer"],
-    "Final Design Lock": ["DesignManager", "Designer"],
+    "Booking Completed": ["DesignManager"],
     
-    # After Design Lock - Production Manager joins
-    "Production Drawings Preparation": ["DesignManager", "ProductionManager"],
-    "Validation & Kickoff": ["DesignManager", "ProductionManager"],
+    # Design Stages - DesignManager + Designer
+    "Measurement Completed": ["DesignManager"],
+    "Floor Plan Ready": ["DesignManager"],
+    "Design Stage 1 Completed": ["DesignManager"],
+    "Design Stage 2 Completed": ["DesignManager"],
+    "Material Selection Completed": ["DesignManager"],
+    "Design Lock": ["DesignManager", "ProductionOpsManager"],
+    "Drawings Completed": ["DesignManager", "ProductionOpsManager"],
     
-    # After Validation - Operations Lead joins
-    "Production": ["ProductionManager", "OperationsLead"],
-    "Quality Check": ["ProductionManager", "OperationsLead"],
-    
-    # Delivery stage - Full operations team
-    "Delivery": ["OperationsLead"],
-    "Installation": ["OperationsLead"],
-    "Handover": ["OperationsLead"],
-    "Completed": []
+    # Execution Stages - ProductionOpsManager
+    "Validation": ["ProductionOpsManager"],
+    "Kick-Off": ["ProductionOpsManager"],
+    "Production": ["ProductionOpsManager"],
+    "Delivery": ["ProductionOpsManager"],
+    "Installation": ["ProductionOpsManager"],
+    "Handover": ["ProductionOpsManager"]
 }
 
 def format_user_response(user_doc):
