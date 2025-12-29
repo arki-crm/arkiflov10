@@ -1148,6 +1148,285 @@ db.user_sessions.insertOne({{
             print("⚠️  No leads found for TAT calculation test")
             return False, {}
 
+    # ============ PID SYSTEM + FORWARD-ONLY STAGES + COLLABORATOR TESTS ============
+
+    def test_pid_generation_at_conversion(self):
+        """Test POST /api/presales/{presales_id}/convert-to-lead generates PID in format ARKI-PID-XXXXX"""
+        # First create a pre-sales lead
+        lead_data = {
+            "customer_name": "Alice Johnson",
+            "customer_phone": "+1-555-0199",
+            "customer_email": "alice.johnson@example.com",
+            "customer_address": "456 Oak St, City, State",
+            "customer_requirements": "Contemporary living room design",
+            "source": "Referral",
+            "budget": 75000
+        }
+        
+        success, presales_response = self.run_test("Create Pre-Sales for PID Test", "POST", "api/presales/create", 200,
+                                                 data=lead_data, auth_token=self.admin_token)
+        if success and 'lead_id' in presales_response:
+            presales_id = presales_response['lead_id']
+            
+            # Update to Qualified status first
+            success2, _ = self.run_test("Update Pre-Sales to Qualified", "PUT", f"api/presales/{presales_id}/status", 200,
+                                      data={"status": "Qualified"}, auth_token=self.admin_token)
+            
+            if success2:
+                # Convert to lead and check PID generation
+                success3, convert_response = self.run_test("Convert Pre-Sales to Lead (PID Generation)", "POST", 
+                                                         f"api/presales/{presales_id}/convert-to-lead", 200,
+                                                         auth_token=self.admin_token)
+                if success3:
+                    # Verify response structure
+                    has_success = convert_response.get('success') == True
+                    has_lead_id = 'lead_id' in convert_response
+                    has_pid = 'pid' in convert_response
+                    
+                    # Verify PID format ARKI-PID-XXXXX
+                    pid = convert_response.get('pid', '')
+                    pid_format_correct = pid.startswith('ARKI-PID-') and len(pid) == 14 and pid[9:].isdigit()
+                    
+                    print(f"   Success flag: {has_success}")
+                    print(f"   Lead ID present: {has_lead_id}")
+                    print(f"   PID present: {has_pid}")
+                    print(f"   PID value: {pid}")
+                    print(f"   PID format correct: {pid_format_correct}")
+                    
+                    # Store for further tests
+                    if has_lead_id:
+                        self.test_lead_with_pid = convert_response['lead_id']
+                        self.test_pid = pid
+                    
+                    return (success3 and has_success and has_lead_id and has_pid and pid_format_correct), convert_response
+                return success3, {}
+            return success2, {}
+        return success, {}
+
+    def test_lead_stage_forward_only_progression(self):
+        """Test PUT /api/leads/{lead_id}/stage - Forward progression works, backward fails"""
+        if hasattr(self, 'test_lead_with_pid'):
+            lead_id = self.test_lead_with_pid
+            
+            # Test forward progression: BC Call Done → BOQ Shared (should succeed)
+            success1, forward_response = self.run_test("Lead Stage Forward (BC Call Done → BOQ Shared)", "PUT", 
+                                                     f"api/leads/{lead_id}/stage", 200,
+                                                     data={"stage": "BOQ Shared"}, auth_token=self.admin_token)
+            
+            if success1:
+                # Test backward progression: BOQ Shared → BC Call Done (should FAIL with 400)
+                success2, backward_response = self.run_test("Lead Stage Backward (BOQ Shared → BC Call Done - Should Fail)", "PUT", 
+                                                          f"api/leads/{lead_id}/stage", 400,
+                                                          data={"stage": "BC Call Done"}, auth_token=self.admin_token)
+                
+                # Verify error message mentions forward-only
+                error_message = backward_response.get('detail', '') if isinstance(backward_response, dict) else str(backward_response)
+                has_forward_only_message = 'forward-only' in error_message.lower()
+                
+                print(f"   Forward progression success: {success1}")
+                print(f"   Backward progression blocked: {success2}")
+                print(f"   Error message mentions forward-only: {has_forward_only_message}")
+                print(f"   Error message: {error_message}")
+                
+                return success1 and success2 and has_forward_only_message, {}
+            return success1, {}
+        else:
+            print("⚠️  No test lead with PID available for stage progression test")
+            return True, {}
+
+    def test_lead_stage_admin_rollback(self):
+        """Test Admin can rollback lead stages (exception to forward-only rule)"""
+        if hasattr(self, 'test_lead_with_pid'):
+            lead_id = self.test_lead_with_pid
+            
+            # Admin should be able to rollback: BOQ Shared → BC Call Done
+            success, rollback_response = self.run_test("Admin Lead Stage Rollback (BOQ Shared → BC Call Done)", "PUT", 
+                                                     f"api/leads/{lead_id}/stage", 200,
+                                                     data={"stage": "BC Call Done"}, auth_token=self.admin_token)
+            
+            if success:
+                # Verify system comment mentions admin rollback
+                has_system_comment = 'system_comment' in rollback_response
+                if has_system_comment:
+                    comment_message = rollback_response['system_comment'].get('message', '')
+                    has_rollback_mention = 'rollback' in comment_message.lower() or 'admin' in comment_message.lower()
+                    print(f"   Admin rollback success: {success}")
+                    print(f"   System comment present: {has_system_comment}")
+                    print(f"   Comment mentions rollback/admin: {has_rollback_mention}")
+                    print(f"   Comment message: {comment_message}")
+                    return success and has_system_comment, rollback_response
+                else:
+                    print(f"   Admin rollback success: {success}")
+                    return success, rollback_response
+            return success, {}
+        else:
+            print("⚠️  No test lead with PID available for admin rollback test")
+            return True, {}
+
+    def test_project_stage_forward_only_progression(self):
+        """Test PUT /api/projects/{project_id}/stage - Forward progression works, backward fails"""
+        # Get a project for testing
+        success, projects_data = self.run_test("Get Projects for Forward-Only Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            current_stage = projects_data[0].get('stage', 'Design Finalization')
+            
+            # Test forward progression: Design Finalization → Production Preparation (should succeed)
+            if current_stage == 'Design Finalization':
+                success1, forward_response = self.run_test("Project Stage Forward (Design Finalization → Production Preparation)", "PUT", 
+                                                         f"api/projects/{project_id}/stage", 200,
+                                                         data={"stage": "Production Preparation"}, auth_token=self.admin_token)
+                
+                if success1:
+                    # Test backward progression: Production Preparation → Design Finalization (should FAIL with 400)
+                    success2, backward_response = self.run_test("Project Stage Backward (Production Preparation → Design Finalization - Should Fail)", "PUT", 
+                                                              f"api/projects/{project_id}/stage", 400,
+                                                              data={"stage": "Design Finalization"}, auth_token=self.admin_token)
+                    
+                    # Verify error message mentions forward-only
+                    error_message = backward_response.get('detail', '') if isinstance(backward_response, dict) else str(backward_response)
+                    has_forward_only_message = 'forward-only' in error_message.lower()
+                    
+                    print(f"   Forward progression success: {success1}")
+                    print(f"   Backward progression blocked: {success2}")
+                    print(f"   Error message mentions forward-only: {has_forward_only_message}")
+                    print(f"   Error message: {error_message}")
+                    
+                    return success1 and success2 and has_forward_only_message, {}
+                return success1, {}
+            else:
+                print(f"⚠️  Project not in Design Finalization stage (current: {current_stage})")
+                return True, {}
+        else:
+            print("⚠️  No projects found for forward-only test")
+            return False, {}
+
+    def test_lead_collaborators_endpoints(self):
+        """Test Lead Collaborator endpoints: GET/POST/DELETE /api/leads/{lead_id}/collaborators"""
+        if hasattr(self, 'test_lead_with_pid'):
+            lead_id = self.test_lead_with_pid
+            
+            # Test GET /api/leads/{lead_id}/collaborators - List collaborators
+            success1, collaborators_list = self.run_test("Get Lead Collaborators", "GET", 
+                                                        f"api/leads/{lead_id}/collaborators", 200,
+                                                        auth_token=self.admin_token)
+            
+            if success1:
+                is_array = isinstance(collaborators_list, list)
+                print(f"   Collaborators list is array: {is_array}")
+                print(f"   Initial collaborators count: {len(collaborators_list) if is_array else 'N/A'}")
+                
+                # Test POST /api/leads/{lead_id}/collaborators - Add collaborator
+                collaborator_data = {
+                    "user_id": self.designer_user_id,
+                    "reason": "Added for design review"
+                }
+                
+                success2, add_response = self.run_test("Add Lead Collaborator", "POST", 
+                                                      f"api/leads/{lead_id}/collaborators", 200,
+                                                      data=collaborator_data, auth_token=self.admin_token)
+                
+                if success2:
+                    # Verify response has collaborator details (name, email, role)
+                    has_user_id = add_response.get('user_id') == self.designer_user_id
+                    has_name = 'name' in add_response
+                    has_email = 'email' in add_response
+                    has_role = 'role' in add_response
+                    
+                    print(f"   Add collaborator success: {success2}")
+                    print(f"   User ID correct: {has_user_id}")
+                    print(f"   Has name: {has_name}")
+                    print(f"   Has email: {has_email}")
+                    print(f"   Has role: {has_role}")
+                    
+                    # Test DELETE /api/leads/{lead_id}/collaborators/{user_id} - Remove collaborator
+                    success3, remove_response = self.run_test("Remove Lead Collaborator", "DELETE", 
+                                                            f"api/leads/{lead_id}/collaborators/{self.designer_user_id}", 200,
+                                                            auth_token=self.admin_token)
+                    
+                    print(f"   Remove collaborator success: {success3}")
+                    
+                    return (success1 and is_array and success2 and has_user_id and has_name and 
+                           has_email and has_role and success3), {}
+                return success1 and is_array and success2, {}
+            return success1, {}
+        else:
+            print("⚠️  No test lead with PID available for collaborator test")
+            return True, {}
+
+    def test_lead_to_project_conversion_with_carry_forward(self):
+        """Test POST /api/leads/{lead_id}/convert - Should carry PID, comments, files, collaborators"""
+        if hasattr(self, 'test_lead_with_pid'):
+            lead_id = self.test_lead_with_pid
+            
+            # First add some data to the lead (comment, collaborator)
+            # Add comment
+            comment_data = {"message": "Test comment for carry-forward"}
+            success_comment, _ = self.run_test("Add Comment to Lead for Conversion", "POST", 
+                                             f"api/leads/{lead_id}/comments", 200,
+                                             data=comment_data, auth_token=self.admin_token)
+            
+            # Add collaborator
+            collaborator_data = {"user_id": self.designer_user_id, "reason": "For conversion test"}
+            success_collab, _ = self.run_test("Add Collaborator to Lead for Conversion", "POST", 
+                                            f"api/leads/{lead_id}/collaborators", 200,
+                                            data=collaborator_data, auth_token=self.admin_token)
+            
+            # Progress lead to Booking Completed
+            success_stage, _ = self.run_test("Progress Lead to Booking Completed", "PUT", 
+                                           f"api/leads/{lead_id}/stage", 200,
+                                           data={"stage": "Booking Completed"}, auth_token=self.admin_token)
+            
+            if success_stage:
+                # Convert lead to project
+                success_convert, convert_response = self.run_test("Convert Lead to Project (Carry-Forward)", "POST", 
+                                                                f"api/leads/{lead_id}/convert", 200,
+                                                                auth_token=self.admin_token)
+                
+                if success_convert and 'project_id' in convert_response:
+                    project_id = convert_response['project_id']
+                    
+                    # Verify PID carried over
+                    has_pid = 'pid' in convert_response
+                    pid_carried = convert_response.get('pid') == getattr(self, 'test_pid', '')
+                    
+                    print(f"   Conversion success: {success_convert}")
+                    print(f"   PID present in response: {has_pid}")
+                    print(f"   PID carried over correctly: {pid_carried}")
+                    print(f"   Original PID: {getattr(self, 'test_pid', 'N/A')}")
+                    print(f"   Project PID: {convert_response.get('pid', 'N/A')}")
+                    
+                    # Get project details to verify carry-forward
+                    success_project, project_data = self.run_test("Get Converted Project Details", "GET", 
+                                                                 f"api/projects/{project_id}", 200,
+                                                                 auth_token=self.admin_token)
+                    
+                    if success_project:
+                        # Check if comments were carried over
+                        project_comments = project_data.get('comments', [])
+                        has_carried_comments = len(project_comments) > 0
+                        
+                        # Check if collaborators were carried over
+                        project_collaborators = project_data.get('collaborators', [])
+                        has_carried_collaborators = len(project_collaborators) > 0
+                        designer_in_collaborators = any(c.get('user_id') == self.designer_user_id for c in project_collaborators)
+                        
+                        print(f"   Project comments count: {len(project_comments)}")
+                        print(f"   Project collaborators count: {len(project_collaborators)}")
+                        print(f"   Comments carried over: {has_carried_comments}")
+                        print(f"   Collaborators carried over: {has_carried_collaborators}")
+                        print(f"   Designer in collaborators: {designer_in_collaborators}")
+                        
+                        return (success_convert and has_pid and pid_carried and success_project and 
+                               has_carried_comments and has_carried_collaborators and designer_in_collaborators), convert_response
+                    return success_convert and has_pid and pid_carried, convert_response
+                return success_convert, {}
+            return success_stage, {}
+        else:
+            print("⚠️  No test lead with PID available for conversion test")
+            return True, {}
+
     # ============ PRE-SALES MODULE TESTS ============
 
     def test_create_presales_lead_admin(self):
