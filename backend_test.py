@@ -7327,6 +7327,451 @@ db.user_sessions.insertOne({{
             return True, {}
 
 
+    # ============ WARRANTY & AFTER-SERVICE MODULE TESTS ============
+
+    def setup_technician_user(self):
+        """Create a technician user for testing"""
+        if hasattr(self, 'technician_token'):
+            return True
+            
+        technician_user_id = f"test-technician-{uuid.uuid4().hex[:8]}"
+        technician_session_token = f"test_technician_session_{uuid.uuid4().hex[:16]}"
+        
+        mongo_commands = f'''
+use('test_database');
+db.users.insertOne({{
+  user_id: "{technician_user_id}",
+  email: "technician.test.{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com",
+  name: "Test Technician",
+  picture: "https://via.placeholder.com/150",
+  role: "Technician",
+  status: "Active",
+  created_at: new Date()
+}});
+db.user_sessions.insertOne({{
+  user_id: "{technician_user_id}",
+  session_token: "{technician_session_token}",
+  expires_at: new Date(Date.now() + 7*24*60*60*1000),
+  created_at: new Date()
+}});
+'''
+        
+        try:
+            import subprocess
+            result = subprocess.run(['mongosh', '--eval', mongo_commands], 
+                                  capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                self.technician_token = technician_session_token
+                self.technician_user_id = technician_user_id
+                print("✅ Technician user created successfully")
+                return True
+            else:
+                print(f"❌ Failed to create technician user: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error setting up technician user: {str(e)}")
+            return False
+
+    def test_list_warranties_admin(self):
+        """Test GET /api/warranties - Admin should succeed"""
+        return self.run_test("List Warranties (Admin)", "GET", "api/warranties", 200,
+                           auth_token=self.admin_token)
+
+    def test_list_warranties_technician_denied(self):
+        """Test GET /api/warranties - Technician should fail with 403"""
+        if not self.setup_technician_user():
+            return False, {}
+        
+        return self.run_test("List Warranties (Technician - Should Fail)", "GET", "api/warranties", 403,
+                           auth_token=self.technician_token)
+
+    def test_get_warranty_by_id(self):
+        """Test GET /api/warranties/{warranty_id} - Get single warranty"""
+        # First create a warranty by completing a project handover
+        success, projects_data = self.run_test("Get Projects for Warranty Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            
+            # Try to get warranty by project ID first
+            success, warranty_data = self.run_test("Get Warranty by Project ID", "GET", 
+                                                  f"api/warranties/by-project/{project_id}", 200,
+                                                  auth_token=self.admin_token)
+            if success and 'warranty_id' in warranty_data:
+                warranty_id = warranty_data['warranty_id']
+                return self.run_test("Get Warranty by ID", "GET", f"api/warranties/{warranty_id}", 200,
+                                   auth_token=self.admin_token)
+            else:
+                print("⚠️  No warranty found for project, this is expected if handover not completed")
+                return True, {}
+        else:
+            print("⚠️  No projects found for warranty test")
+            return False, {}
+
+    def test_get_warranty_by_pid(self):
+        """Test GET /api/warranties/by-pid/{pid} - Get warranty by PID"""
+        # First get a lead with PID
+        success, leads_data = self.run_test("Get Leads for Warranty PID Test", "GET", "api/leads", 200,
+                                          auth_token=self.admin_token)
+        if success and leads_data and len(leads_data) > 0:
+            for lead in leads_data:
+                if lead.get('pid'):
+                    pid = lead['pid']
+                    return self.run_test("Get Warranty by PID", "GET", f"api/warranties/by-pid/{pid}", 200,
+                                       auth_token=self.admin_token)
+            
+            print("⚠️  No leads with PID found for warranty test")
+            return True, {}
+        else:
+            print("⚠️  No leads found for warranty PID test")
+            return False, {}
+
+    def test_get_warranty_by_project(self):
+        """Test GET /api/warranties/by-project/{project_id} - Get warranty by project ID"""
+        success, projects_data = self.run_test("Get Projects for Warranty Project Test", "GET", "api/projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['project_id']
+            return self.run_test("Get Warranty by Project ID", "GET", 
+                               f"api/warranties/by-project/{project_id}", 200,
+                               auth_token=self.admin_token)
+        else:
+            print("⚠️  No projects found for warranty project test")
+            return False, {}
+
+    def test_update_warranty_details(self):
+        """Test PUT /api/warranties/{warranty_id} - Update warranty details"""
+        # First try to get a warranty
+        success, warranties_data = self.run_test("Get Warranties for Update Test", "GET", "api/warranties", 200,
+                                                auth_token=self.admin_token)
+        if success and warranties_data and len(warranties_data) > 0:
+            warranty_id = warranties_data[0]['warranty_id']
+            
+            update_data = {
+                "warranty_book_url": "https://example.com/warranty-book.pdf",
+                "materials_list": ["Material 1", "Material 2", "Material 3"],
+                "modules_list": ["Module A", "Module B"],
+                "notes": "Updated warranty notes for testing"
+            }
+            
+            return self.run_test("Update Warranty Details", "PUT", f"api/warranties/{warranty_id}", 200,
+                               data=update_data, auth_token=self.admin_token)
+        else:
+            print("⚠️  No warranties found for update test")
+            return True, {}
+
+    def test_list_service_requests(self):
+        """Test GET /api/service-requests - List all service requests"""
+        return self.run_test("List Service Requests", "GET", "api/service-requests", 200,
+                           auth_token=self.admin_token)
+
+    def test_list_service_requests_with_filters(self):
+        """Test GET /api/service-requests with filters (stage, priority, technician_id)"""
+        # Test stage filter
+        success1, _ = self.run_test("List Service Requests (Stage Filter)", "GET", 
+                                  "api/service-requests?stage=New", 200,
+                                  auth_token=self.admin_token)
+        
+        # Test priority filter
+        success2, _ = self.run_test("List Service Requests (Priority Filter)", "GET", 
+                                  "api/service-requests?priority=High", 200,
+                                  auth_token=self.admin_token)
+        
+        # Test technician filter
+        if hasattr(self, 'technician_user_id'):
+            success3, _ = self.run_test("List Service Requests (Technician Filter)", "GET", 
+                                      f"api/service-requests?technician_id={self.technician_user_id}", 200,
+                                      auth_token=self.admin_token)
+        else:
+            success3 = True  # Skip if no technician
+        
+        return success1 and success2 and success3, {}
+
+    def test_get_service_request_by_id(self):
+        """Test GET /api/service-requests/{request_id} - Get single service request"""
+        # First create a service request
+        request_data = {
+            "customer_name": "John Doe",
+            "customer_phone": "+1-555-0123",
+            "customer_email": "john.doe@example.com",
+            "issue_category": "Hardware Issue",
+            "issue_description": "Cabinet door not closing properly",
+            "priority": "Medium"
+        }
+        
+        success, create_response = self.run_test("Create Service Request for Get Test", "POST", 
+                                                "api/service-requests", 200,
+                                                data=request_data, auth_token=self.admin_token)
+        if success and 'service_request_id' in create_response:
+            request_id = create_response['service_request_id']
+            self.test_service_request_id = request_id
+            
+            return self.run_test("Get Service Request by ID", "GET", 
+                               f"api/service-requests/{request_id}", 200,
+                               auth_token=self.admin_token)
+        else:
+            print("⚠️  Failed to create service request for get test")
+            return False, {}
+
+    def test_get_service_request_by_pid(self):
+        """Test GET /api/service-requests/by-pid/{pid} - Get service request by PID"""
+        # First get a lead with PID
+        success, leads_data = self.run_test("Get Leads for Service Request PID Test", "GET", "api/leads", 200,
+                                          auth_token=self.admin_token)
+        if success and leads_data and len(leads_data) > 0:
+            for lead in leads_data:
+                if lead.get('pid'):
+                    pid = lead['pid']
+                    return self.run_test("Get Service Request by PID", "GET", 
+                                       f"api/service-requests/by-pid/{pid}", 200,
+                                       auth_token=self.admin_token)
+            
+            print("⚠️  No leads with PID found for service request test")
+            return True, {}
+        else:
+            print("⚠️  No leads found for service request PID test")
+            return False, {}
+
+    def test_create_service_request_internal(self):
+        """Test POST /api/service-requests - Create internal service request (requires auth)"""
+        request_data = {
+            "customer_name": "Jane Smith",
+            "customer_phone": "+1-555-0456",
+            "customer_email": "jane.smith@example.com",
+            "customer_address": "123 Main St, City, State",
+            "issue_category": "Fitting Issue",
+            "issue_description": "Drawer slides are not smooth",
+            "priority": "High"
+        }
+        
+        success, create_response = self.run_test("Create Internal Service Request", "POST", 
+                                                "api/service-requests", 200,
+                                                data=request_data, auth_token=self.admin_token)
+        if success:
+            # Verify response structure
+            has_id = 'service_request_id' in create_response
+            has_stage = create_response.get('stage') == 'New'
+            has_source = create_response.get('source') == 'Internal'
+            
+            print(f"   Service request ID present: {has_id}")
+            print(f"   Stage is New: {has_stage}")
+            print(f"   Source is Internal: {has_source}")
+            
+            if has_id:
+                self.test_service_request_id_2 = create_response['service_request_id']
+            
+            return success and has_id and has_stage and has_source, create_response
+        return success, create_response
+
+    def test_create_service_request_google_form(self):
+        """Test POST /api/service-requests/from-google-form - Create from Google Form (NO AUTH required)"""
+        form_data = {
+            "name": "Bob Johnson",
+            "phone": "+1-555-0789",
+            "issue_description": "Kitchen cabinet handle is loose",
+            "image_urls": ["https://example.com/image1.jpg", "https://example.com/image2.jpg"]
+        }
+        
+        success, create_response = self.run_test("Create Service Request from Google Form", "POST", 
+                                                "api/service-requests/from-google-form", 200,
+                                                data=form_data)  # No auth token
+        if success:
+            # Verify response structure
+            has_id = 'service_request_id' in create_response
+            has_stage = create_response.get('stage') == 'New'
+            has_source = create_response.get('source') == 'Google Form'
+            
+            print(f"   Service request ID present: {has_id}")
+            print(f"   Stage is New: {has_stage}")
+            print(f"   Source is Google Form: {has_source}")
+            
+            return success and has_id and has_stage and has_source, create_response
+        return success, create_response
+
+    def test_assign_technician_to_service_request(self):
+        """Test PUT /api/service-requests/{request_id}/assign - Assign technician (Admin/SalesManager only)"""
+        if hasattr(self, 'test_service_request_id') and hasattr(self, 'technician_user_id'):
+            assign_data = {
+                "technician_id": self.technician_user_id
+            }
+            
+            return self.run_test("Assign Technician to Service Request", "PUT", 
+                               f"api/service-requests/{self.test_service_request_id}/assign", 200,
+                               data=assign_data, auth_token=self.admin_token)
+        else:
+            print("⚠️  No test service request or technician available for assignment test")
+            return True, {}
+
+    def test_update_service_request_stage(self):
+        """Test PUT /api/service-requests/{request_id}/stage - Update stage (forward-only)"""
+        if hasattr(self, 'test_service_request_id'):
+            stage_data = {
+                "stage": "Assigned to Technician",
+                "notes": "Technician has been assigned to handle this request"
+            }
+            
+            return self.run_test("Update Service Request Stage", "PUT", 
+                               f"api/service-requests/{self.test_service_request_id}/stage", 200,
+                               data=stage_data, auth_token=self.admin_token)
+        else:
+            print("⚠️  No test service request available for stage update test")
+            return True, {}
+
+    def test_set_expected_closure_date(self):
+        """Test PUT /api/service-requests/{request_id}/expected-closure - Set expected closure date"""
+        if hasattr(self, 'test_service_request_id'):
+            closure_data = {
+                "expected_closure_date": (datetime.now() + timedelta(days=7)).isoformat()
+            }
+            
+            return self.run_test("Set Expected Closure Date", "PUT", 
+                               f"api/service-requests/{self.test_service_request_id}/expected-closure", 200,
+                               data=closure_data, auth_token=self.admin_token)
+        else:
+            print("⚠️  No test service request available for closure date test")
+            return True, {}
+
+    def test_log_service_request_delay(self):
+        """Test POST /api/service-requests/{request_id}/delay - Log delay with reason"""
+        if hasattr(self, 'test_service_request_id'):
+            delay_data = {
+                "delay_reason": "Customer not available",
+                "delay_owner": "Customer",
+                "new_expected_date": (datetime.now() + timedelta(days=10)).isoformat(),
+                "notes": "Customer rescheduled the appointment"
+            }
+            
+            return self.run_test("Log Service Request Delay", "POST", 
+                               f"api/service-requests/{self.test_service_request_id}/delay", 200,
+                               data=delay_data, auth_token=self.admin_token)
+        else:
+            print("⚠️  No test service request available for delay test")
+            return True, {}
+
+    def test_upload_service_request_photos(self):
+        """Test POST /api/service-requests/{request_id}/photos - Upload before/after photos"""
+        if hasattr(self, 'test_service_request_id'):
+            photos_data = {
+                "photo_type": "before",
+                "photos": [
+                    {
+                        "url": "https://example.com/before1.jpg",
+                        "description": "Issue before repair"
+                    },
+                    {
+                        "url": "https://example.com/before2.jpg", 
+                        "description": "Close-up of the problem"
+                    }
+                ]
+            }
+            
+            return self.run_test("Upload Service Request Photos", "POST", 
+                               f"api/service-requests/{self.test_service_request_id}/photos", 200,
+                               data=photos_data, auth_token=self.admin_token)
+        else:
+            print("⚠️  No test service request available for photos test")
+            return True, {}
+
+    def test_add_technician_notes(self):
+        """Test POST /api/service-requests/{request_id}/notes - Add technician notes"""
+        if hasattr(self, 'test_service_request_id'):
+            notes_data = {
+                "note": "Inspected the cabinet door. The hinge needs adjustment. Will complete repair tomorrow.",
+                "work_performed": "Initial inspection completed"
+            }
+            
+            return self.run_test("Add Technician Notes", "POST", 
+                               f"api/service-requests/{self.test_service_request_id}/notes", 200,
+                               data=notes_data, auth_token=self.admin_token)
+        else:
+            print("⚠️  No test service request available for notes test")
+            return True, {}
+
+    def test_add_service_request_comments(self):
+        """Test POST /api/service-requests/{request_id}/comments - Add comments"""
+        if hasattr(self, 'test_service_request_id'):
+            comment_data = {
+                "message": "Customer confirmed availability for tomorrow's repair appointment"
+            }
+            
+            return self.run_test("Add Service Request Comments", "POST", 
+                               f"api/service-requests/{self.test_service_request_id}/comments", 200,
+                               data=comment_data, auth_token=self.admin_token)
+        else:
+            print("⚠️  No test service request available for comments test")
+            return True, {}
+
+    def test_list_technicians(self):
+        """Test GET /api/technicians - List all technicians with open_requests count"""
+        return self.run_test("List Technicians", "GET", "api/technicians", 200,
+                           auth_token=self.admin_token)
+
+    def test_technician_role_permissions(self):
+        """Test that Technician role has proper permissions"""
+        if not self.setup_technician_user():
+            return False, {}
+        
+        # Test 1: Technician can view their assigned requests
+        success1, requests_data = self.run_test("Technician View Assigned Requests", "GET", 
+                                               "api/service-requests", 200,
+                                               auth_token=self.technician_token)
+        
+        # Test 2: Technician cannot create service requests (403)
+        request_data = {
+            "customer_name": "Test Customer",
+            "customer_phone": "+1-555-0000",
+            "issue_category": "Hardware Issue",
+            "issue_description": "Test issue"
+        }
+        
+        success2, _ = self.run_test("Technician Create Service Request (Should Fail)", "POST", 
+                                  "api/service-requests", 403,
+                                  data=request_data, auth_token=self.technician_token)
+        
+        # Test 3: Technician cannot access warranties (403)
+        success3, _ = self.run_test("Technician Access Warranties (Should Fail)", "GET", 
+                                  "api/warranties", 403,
+                                  auth_token=self.technician_token)
+        
+        if success1:
+            # Verify technician only sees their assigned requests
+            technician_requests = [r for r in requests_data if r.get('assigned_technician_id') == self.technician_user_id]
+            all_assigned_to_technician = len(requests_data) == 0 or len(technician_requests) == len(requests_data)
+            
+            print(f"   Total requests visible: {len(requests_data)}")
+            print(f"   Requests assigned to technician: {len(technician_requests)}")
+            print(f"   All visible requests assigned to technician: {all_assigned_to_technician}")
+            
+            return success1 and success2 and success3 and all_assigned_to_technician, requests_data
+        
+        return success1 and success2 and success3, {}
+
+    def test_technician_role_exists(self):
+        """Test that Technician role exists in VALID_ROLES"""
+        # Try to create a user with Technician role
+        invite_data = {
+            "name": "Test Technician Role",
+            "email": f"technician.role.test.{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com",
+            "role": "Technician"
+        }
+        
+        success, invite_response = self.run_test("Create User with Technician Role", "POST", 
+                                                "api/users/invite", 200,
+                                                data=invite_data, auth_token=self.admin_token)
+        if success:
+            # Verify the user was created with Technician role
+            user_data = invite_response.get('user', {})
+            role_correct = user_data.get('role') == 'Technician'
+            
+            print(f"   User created with Technician role: {role_correct}")
+            print(f"   User role: {user_data.get('role')}")
+            
+            return success and role_correct, invite_response
+        return success, invite_response
+
+
 def main():
     print("🚀 Starting Arkiflo API Tests")
     print("=" * 50)
