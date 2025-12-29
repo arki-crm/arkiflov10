@@ -4706,6 +4706,461 @@ print("Test data cleaned up");
         except Exception as e:
             print(f"⚠️  Cleanup error: {str(e)}")
 
+    def setup_design_workflow_users(self):
+        """Create Design Manager and Production Manager test users"""
+        print("\n🔧 Setting up Design Workflow test users...")
+        
+        # Create Design Manager user
+        design_manager_user_id = f"test-design-manager-{uuid.uuid4().hex[:8]}"
+        design_manager_session_token = f"test_design_manager_session_{uuid.uuid4().hex[:16]}"
+        
+        # Create Production Manager user  
+        production_manager_user_id = f"test-production-manager-{uuid.uuid4().hex[:8]}"
+        production_manager_session_token = f"test_production_manager_session_{uuid.uuid4().hex[:16]}"
+        
+        # Create HybridDesigner user
+        hybrid_designer_user_id = f"test-hybrid-designer-{uuid.uuid4().hex[:8]}"
+        hybrid_designer_session_token = f"test_hybrid_designer_session_{uuid.uuid4().hex[:16]}"
+        
+        # MongoDB commands to create test data
+        mongo_commands = f'''
+use('test_database');
+
+// Create Design Manager user
+db.users.insertOne({{
+  user_id: "{design_manager_user_id}",
+  email: "design.manager.test.{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com",
+  name: "Test Design Manager",
+  picture: "https://via.placeholder.com/150",
+  role: "DesignManager",
+  status: "Active",
+  created_at: new Date()
+}});
+
+// Create Production Manager user
+db.users.insertOne({{
+  user_id: "{production_manager_user_id}",
+  email: "production.manager.test.{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com",
+  name: "Test Production Manager", 
+  picture: "https://via.placeholder.com/150",
+  role: "ProductionManager",
+  status: "Active",
+  created_at: new Date()
+}});
+
+// Create HybridDesigner user
+db.users.insertOne({{
+  user_id: "{hybrid_designer_user_id}",
+  email: "hybrid.designer.test.{datetime.now().strftime('%Y%m%d%H%M%S')}@example.com",
+  name: "Test Hybrid Designer", 
+  picture: "https://via.placeholder.com/150",
+  role: "HybridDesigner",
+  status: "Active",
+  created_at: new Date()
+}});
+
+// Create Design Manager session
+db.user_sessions.insertOne({{
+  user_id: "{design_manager_user_id}",
+  session_token: "{design_manager_session_token}",
+  expires_at: new Date(Date.now() + 7*24*60*60*1000),
+  created_at: new Date()
+}});
+
+// Create Production Manager session
+db.user_sessions.insertOne({{
+  user_id: "{production_manager_user_id}",
+  session_token: "{production_manager_session_token}",
+  expires_at: new Date(Date.now() + 7*24*60*60*1000),
+  created_at: new Date()
+}});
+
+// Create HybridDesigner session
+db.user_sessions.insertOne({{
+  user_id: "{hybrid_designer_user_id}",
+  session_token: "{hybrid_designer_session_token}",
+  expires_at: new Date(Date.now() + 7*24*60*60*1000),
+  created_at: new Date()
+}});
+
+print("Design Manager session token: {design_manager_session_token}");
+print("Production Manager session token: {production_manager_session_token}");
+print("HybridDesigner session token: {hybrid_designer_session_token}");
+print("Design Manager user ID: {design_manager_user_id}");
+print("Production Manager user ID: {production_manager_user_id}");
+print("HybridDesigner user ID: {hybrid_designer_user_id}");
+'''
+        
+        try:
+            import subprocess
+            result = subprocess.run(['mongosh', '--eval', mongo_commands], 
+                                  capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                print("✅ Design Workflow test users and sessions created successfully")
+                self.design_manager_token = design_manager_session_token
+                self.production_manager_token = production_manager_session_token
+                self.hybrid_designer_token = hybrid_designer_session_token
+                self.design_manager_user_id = design_manager_user_id
+                self.production_manager_user_id = production_manager_user_id
+                self.hybrid_designer_user_id = hybrid_designer_user_id
+                return True
+            else:
+                print(f"❌ Failed to create design workflow test users: {result.stderr}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Error setting up design workflow test users: {str(e)}")
+            return False
+
+    # ============ DESIGN WORKFLOW TESTS ============
+
+    def test_seed_design_workflow(self):
+        """Test POST /api/design-workflow/seed - Seed design workflow data"""
+        return self.run_test("Seed Design Workflow Data", "POST", "api/design-workflow/seed", 200,
+                           auth_token=self.admin_token)
+
+    def test_user_invite_with_design_roles(self):
+        """Test POST /api/users/invite - Test creating users with DesignManager, ProductionManager, HybridDesigner roles"""
+        # Test DesignManager role
+        success1, _ = self.run_test("Invite DesignManager User", "POST", "api/users/invite", 200,
+                                   data={
+                                       "name": "Test Design Manager Invite",
+                                       "email": f"dm.invite.{uuid.uuid4().hex[:8]}@example.com",
+                                       "role": "DesignManager",
+                                       "phone": "+1234567890"
+                                   },
+                                   auth_token=self.admin_token)
+        
+        # Test ProductionManager role
+        success2, _ = self.run_test("Invite ProductionManager User", "POST", "api/users/invite", 200,
+                                   data={
+                                       "name": "Test Production Manager Invite",
+                                       "email": f"pm.invite.{uuid.uuid4().hex[:8]}@example.com",
+                                       "role": "ProductionManager",
+                                       "phone": "+1234567891"
+                                   },
+                                   auth_token=self.admin_token)
+        
+        # Test HybridDesigner role
+        success3, _ = self.run_test("Invite HybridDesigner User", "POST", "api/users/invite", 200,
+                                   data={
+                                       "name": "Test Hybrid Designer Invite",
+                                       "email": f"hd.invite.{uuid.uuid4().hex[:8]}@example.com",
+                                       "role": "HybridDesigner",
+                                       "phone": "+1234567892"
+                                   },
+                                   auth_token=self.admin_token)
+        
+        return success1 and success2 and success3, {}
+
+    def test_user_update_with_design_roles(self):
+        """Test PUT /api/users/{user_id} - Test changing user role to DesignManager, ProductionManager"""
+        # Update designer to DesignManager
+        success1, _ = self.run_test("Update User to DesignManager", "PUT", 
+                                   f"api/users/{self.designer_user_id}", 200,
+                                   data={"role": "DesignManager"},
+                                   auth_token=self.admin_token)
+        
+        # Update back to Designer
+        success2, _ = self.run_test("Update User back to Designer", "PUT", 
+                                   f"api/users/{self.designer_user_id}", 200,
+                                   data={"role": "Designer"},
+                                   auth_token=self.admin_token)
+        
+        # Update to ProductionManager
+        success3, _ = self.run_test("Update User to ProductionManager", "PUT", 
+                                   f"api/users/{self.designer_user_id}", 200,
+                                   data={"role": "ProductionManager"},
+                                   auth_token=self.admin_token)
+        
+        # Update back to Designer
+        success4, _ = self.run_test("Update User back to Designer (2)", "PUT", 
+                                   f"api/users/{self.designer_user_id}", 200,
+                                   data={"role": "Designer"},
+                                   auth_token=self.admin_token)
+        
+        return success1 and success2 and success3 and success4, {}
+
+    def test_design_manager_dashboard_access(self):
+        """Test GET /api/design-manager/dashboard - Should allow DesignManager role"""
+        # DesignManager should have access
+        success1, _ = self.run_test("Design Manager Dashboard (DesignManager)", "GET", 
+                                   "api/design-manager/dashboard", 200,
+                                   auth_token=self.design_manager_token)
+        
+        # Admin should have access
+        success2, _ = self.run_test("Design Manager Dashboard (Admin)", "GET", 
+                                   "api/design-manager/dashboard", 200,
+                                   auth_token=self.admin_token)
+        
+        # ProductionManager should NOT have access
+        success3, _ = self.run_test("Design Manager Dashboard (ProductionManager - Should Fail)", "GET", 
+                                   "api/design-manager/dashboard", 403,
+                                   auth_token=self.production_manager_token)
+        
+        # Designer should NOT have access
+        success4, _ = self.run_test("Design Manager Dashboard (Designer - Should Fail)", "GET", 
+                                   "api/design-manager/dashboard", 403,
+                                   auth_token=self.designer_token)
+        
+        return success1 and success2 and success3 and success4, {}
+
+    def test_design_tasks_access(self):
+        """Test GET /api/design-tasks - Should work for DesignManager"""
+        # DesignManager should have access
+        success1, _ = self.run_test("Design Tasks (DesignManager)", "GET", 
+                                   "api/design-tasks", 200,
+                                   auth_token=self.design_manager_token)
+        
+        # Admin should have access
+        success2, _ = self.run_test("Design Tasks (Admin)", "GET", 
+                                   "api/design-tasks", 200,
+                                   auth_token=self.admin_token)
+        
+        # ProductionManager should have access (they can see design tasks)
+        success3, _ = self.run_test("Design Tasks (ProductionManager)", "GET", 
+                                   "api/design-tasks", 200,
+                                   auth_token=self.production_manager_token)
+        
+        # Designer should have access (filtered to their tasks)
+        success4, _ = self.run_test("Design Tasks (Designer)", "GET", 
+                                   "api/design-tasks", 200,
+                                   auth_token=self.designer_token)
+        
+        return success1 and success2 and success3 and success4, {}
+
+    def test_design_projects_access(self):
+        """Test GET /api/design-projects - Should work for DesignManager"""
+        # DesignManager should have access
+        success1, _ = self.run_test("Design Projects (DesignManager)", "GET", 
+                                   "api/design-projects", 200,
+                                   auth_token=self.design_manager_token)
+        
+        # Admin should have access
+        success2, _ = self.run_test("Design Projects (Admin)", "GET", 
+                                   "api/design-projects", 200,
+                                   auth_token=self.admin_token)
+        
+        # ProductionManager should have access
+        success3, _ = self.run_test("Design Projects (ProductionManager)", "GET", 
+                                   "api/design-projects", 200,
+                                   auth_token=self.production_manager_token)
+        
+        # Designer should have access (filtered to their projects)
+        success4, _ = self.run_test("Design Projects (Designer)", "GET", 
+                                   "api/design-projects", 200,
+                                   auth_token=self.designer_token)
+        
+        return success1 and success2 and success3 and success4, {}
+
+    def test_validation_pipeline_access_design_manager(self):
+        """Test GET /api/validation-pipeline - Should NOT be accessible to DesignManager (returns 403)"""
+        # DesignManager should NOT have access
+        success1, _ = self.run_test("Validation Pipeline (DesignManager - Should Fail)", "GET", 
+                                   "api/validation-pipeline", 403,
+                                   auth_token=self.design_manager_token)
+        
+        # Designer should NOT have access
+        success2, _ = self.run_test("Validation Pipeline (Designer - Should Fail)", "GET", 
+                                   "api/validation-pipeline", 403,
+                                   auth_token=self.designer_token)
+        
+        return success1 and success2, {}
+
+    def test_validation_pipeline_access_production_manager(self):
+        """Test GET /api/validation-pipeline - Should allow ProductionManager role"""
+        # ProductionManager should have access
+        success1, _ = self.run_test("Validation Pipeline (ProductionManager)", "GET", 
+                                   "api/validation-pipeline", 200,
+                                   auth_token=self.production_manager_token)
+        
+        # Admin should have access
+        success2, _ = self.run_test("Validation Pipeline (Admin)", "GET", 
+                                   "api/validation-pipeline", 200,
+                                   auth_token=self.admin_token)
+        
+        return success1 and success2, {}
+
+    def test_validation_pipeline_validate_access(self):
+        """Test POST /api/validation-pipeline/{id}/validate - Should allow ProductionManager"""
+        # First get design projects to get an ID
+        success, projects_data = self.run_test("Get Design Projects for Validation", "GET", 
+                                              "api/design-projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['design_project_id']
+            
+            # ProductionManager should have access
+            success1, _ = self.run_test("Validate Design Project (ProductionManager)", "POST", 
+                                       f"api/validation-pipeline/{project_id}/validate", 200,
+                                       data={"validation_notes": "Test validation"},
+                                       auth_token=self.production_manager_token)
+            
+            # DesignManager should NOT have access
+            success2, _ = self.run_test("Validate Design Project (DesignManager - Should Fail)", "POST", 
+                                       f"api/validation-pipeline/{project_id}/validate", 403,
+                                       data={"validation_notes": "Test validation"},
+                                       auth_token=self.design_manager_token)
+            
+            return success1 and success2, {}
+        else:
+            print("⚠️  No design projects found for validation test")
+            return True, {}  # Skip if no projects
+
+    def test_validation_pipeline_send_to_production_access(self):
+        """Test POST /api/validation-pipeline/{id}/send-to-production - Should allow ProductionManager"""
+        # First get design projects to get an ID
+        success, projects_data = self.run_test("Get Design Projects for Send to Production", "GET", 
+                                              "api/design-projects", 200,
+                                              auth_token=self.admin_token)
+        if success and projects_data and len(projects_data) > 0:
+            project_id = projects_data[0]['design_project_id']
+            
+            # ProductionManager should have access
+            success1, _ = self.run_test("Send to Production (ProductionManager)", "POST", 
+                                       f"api/validation-pipeline/{project_id}/send-to-production", 200,
+                                       data={"production_notes": "Ready for production"},
+                                       auth_token=self.production_manager_token)
+            
+            # DesignManager should NOT have access
+            success2, _ = self.run_test("Send to Production (DesignManager - Should Fail)", "POST", 
+                                       f"api/validation-pipeline/{project_id}/send-to-production", 403,
+                                       data={"production_notes": "Ready for production"},
+                                       auth_token=self.design_manager_token)
+            
+            return success1 and success2, {}
+        else:
+            print("⚠️  No design projects found for send to production test")
+            return True, {}  # Skip if no projects
+
+    def test_ceo_dashboard_access(self):
+        """Test GET /api/ceo/dashboard - Should only allow Admin role"""
+        # Admin should have access
+        success1, _ = self.run_test("CEO Dashboard (Admin)", "GET", 
+                                   "api/ceo/dashboard", 200,
+                                   auth_token=self.admin_token)
+        
+        # DesignManager should NOT have access
+        success2, _ = self.run_test("CEO Dashboard (DesignManager - Should Fail)", "GET", 
+                                   "api/ceo/dashboard", 403,
+                                   auth_token=self.design_manager_token)
+        
+        # ProductionManager should NOT have access
+        success3, _ = self.run_test("CEO Dashboard (ProductionManager - Should Fail)", "GET", 
+                                   "api/ceo/dashboard", 403,
+                                   auth_token=self.production_manager_token)
+        
+        # Designer should NOT have access
+        success4, _ = self.run_test("CEO Dashboard (Designer - Should Fail)", "GET", 
+                                   "api/ceo/dashboard", 403,
+                                   auth_token=self.designer_token)
+        
+        return success1 and success2 and success3 and success4, {}
+
+    def test_role_descriptions_validation(self):
+        """Test that VALID_ROLES includes all expected roles"""
+        # This is more of a verification test - we'll check the auth/me endpoint
+        # to ensure our test users have the correct roles
+        
+        # Check DesignManager role
+        success1, dm_data = self.run_test("Verify DesignManager Role", "GET", 
+                                         "api/auth/me", 200,
+                                         auth_token=self.design_manager_token)
+        
+        # Check ProductionManager role
+        success2, pm_data = self.run_test("Verify ProductionManager Role", "GET", 
+                                         "api/auth/me", 200,
+                                         auth_token=self.production_manager_token)
+        
+        # Check HybridDesigner role
+        success3, hd_data = self.run_test("Verify HybridDesigner Role", "GET", 
+                                         "api/auth/me", 200,
+                                         auth_token=self.hybrid_designer_token)
+        
+        if success1 and success2 and success3:
+            dm_role_correct = dm_data.get('role') == 'DesignManager'
+            pm_role_correct = pm_data.get('role') == 'ProductionManager'
+            hd_role_correct = hd_data.get('role') == 'HybridDesigner'
+            
+            print(f"   DesignManager role correct: {dm_role_correct}")
+            print(f"   ProductionManager role correct: {pm_role_correct}")
+            print(f"   HybridDesigner role correct: {hd_role_correct}")
+            
+            return dm_role_correct and pm_role_correct and hd_role_correct, {}
+        
+        return False, {}
+
+    def run_design_workflow_tests(self):
+        """Run Design Manager and Production Manager role-based access control tests"""
+        print("🚀 Starting Design Workflow Role-Based Access Control Tests...")
+        print(f"   Base URL: {self.base_url}")
+        
+        # Setup test users
+        if not self.setup_test_users():
+            print("❌ Failed to setup basic test users. Exiting.")
+            return False
+            
+        if not self.setup_design_workflow_users():
+            print("❌ Failed to setup design workflow test users. Exiting.")
+            return False
+        
+        # Seed design workflow data first
+        print("\n📊 Seeding design workflow data...")
+        self.test_seed_design_workflow()
+        
+        # Run design workflow specific tests
+        design_workflow_tests = [
+            # Role validation in user management
+            self.test_user_invite_with_design_roles,
+            self.test_user_update_with_design_roles,
+            
+            # Design Manager role access
+            self.test_design_manager_dashboard_access,
+            self.test_design_tasks_access,
+            self.test_design_projects_access,
+            self.test_validation_pipeline_access_design_manager,
+            
+            # Production Manager role access
+            self.test_validation_pipeline_access_production_manager,
+            self.test_validation_pipeline_validate_access,
+            self.test_validation_pipeline_send_to_production_access,
+            
+            # CEO Dashboard access
+            self.test_ceo_dashboard_access,
+            
+            # Role descriptions validation
+            self.test_role_descriptions_validation,
+        ]
+        
+        print(f"\n🔍 Running {len(design_workflow_tests)} Design Workflow tests...")
+        
+        for test_method in design_workflow_tests:
+            try:
+                test_method()
+            except Exception as e:
+                print(f"❌ Test {test_method.__name__} failed with exception: {str(e)}")
+                self.failed_tests.append({
+                    "test": test_method.__name__,
+                    "error": str(e)
+                })
+        
+        # Print summary
+        print(f"\n📊 Design Workflow Test Summary:")
+        print(f"   Total tests: {self.tests_run}")
+        print(f"   Passed: {self.tests_passed}")
+        print(f"   Failed: {len(self.failed_tests)}")
+        
+        if self.failed_tests:
+            print(f"\n❌ Failed Tests:")
+            for failed in self.failed_tests:
+                print(f"   - {failed['test']}: {failed.get('error', 'Status mismatch')}")
+        else:
+            print(f"\n✅ All Design Workflow tests passed!")
+        
+        return len(self.failed_tests) == 0
+
+
 def main():
     print("🚀 Starting Arkiflo API Tests")
     print("=" * 50)
