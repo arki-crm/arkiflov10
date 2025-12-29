@@ -11,7 +11,8 @@ import {
   ChevronRight,
   Loader2,
   FileX2,
-  Phone
+  Phone,
+  Plus
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
