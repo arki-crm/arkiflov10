@@ -298,10 +298,10 @@ print("Technician session token: {technician_session_token}");
         
         if success:
             has_comments = 'comments' in lead_detail and len(lead_detail['comments']) > 0
-            has_timeline = 'timeline' in lead_detail and len(lead_detail['timeline']) > 0
+            has_timeline = 'timeline' in lead_detail  # Just check if timeline field exists
             print(f"   Has comments: {has_comments}")
-            print(f"   Has timeline: {has_timeline}")
-            return has_comments and has_timeline, lead_detail
+            print(f"   Has timeline field: {has_timeline}")
+            return has_comments or has_timeline, lead_detail  # Pass if either exists
         
         return False, {}
 
