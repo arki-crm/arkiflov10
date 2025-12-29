@@ -319,6 +319,94 @@ const Academy = () => {
     }
   };
 
+  // File upload handler
+  const handleFileUpload = async (file, fileType) => {
+    if (!file) return null;
+    
+    const allowedVideoTypes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'];
+    const allowedPdfTypes = ['application/pdf'];
+    const maxSize = 500 * 1024 * 1024; // 500MB
+    
+    // Validate file type
+    if (fileType === 'video' && !allowedVideoTypes.includes(file.type)) {
+      toast.error('Invalid video format. Allowed: MP4, MOV, AVI, WEBM');
+      return null;
+    }
+    if (fileType === 'pdf' && !allowedPdfTypes.includes(file.type)) {
+      toast.error('Only PDF files are allowed');
+      return null;
+    }
+    
+    // Validate file size
+    if (file.size > maxSize) {
+      toast.error(`File too large. Maximum size is ${maxSize / (1024 * 1024)}MB`);
+      return null;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      if (fileType === 'video') {
+        setUploadingVideo(true);
+      } else {
+        setUploadingPdf(true);
+      }
+      setUploadProgress(0);
+      
+      const response = await axios.post(`${API}/academy/upload`, formData, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(progress);
+        }
+      });
+      
+      toast.success(`${fileType === 'video' ? 'Video' : 'PDF'} uploaded successfully`);
+      return response.data.file_url;
+    } catch (err) {
+      console.error('Upload failed:', err);
+      toast.error(err.response?.data?.detail || `Failed to upload ${fileType}`);
+      return null;
+    } finally {
+      if (fileType === 'video') {
+        setUploadingVideo(false);
+      } else {
+        setUploadingPdf(false);
+      }
+      setUploadProgress(0);
+    }
+  };
+
+  const onVideoFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const fileUrl = await handleFileUpload(file, 'video');
+    if (fileUrl) {
+      setLessonForm(p => ({ ...p, video_url: fileUrl, video_type: 'uploaded' }));
+    }
+    // Reset input
+    if (videoInputRef.current) {
+      videoInputRef.current.value = '';
+    }
+  };
+
+  const onPdfFileSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const fileUrl = await handleFileUpload(file, 'pdf');
+    if (fileUrl) {
+      setLessonForm(p => ({ ...p, pdf_url: fileUrl }));
+    }
+    // Reset input
+    if (pdfInputRef.current) {
+      pdfInputRef.current.value = '';
+    }
+  };
+
   // Render YouTube embed
   const getYouTubeEmbedUrl = (url) => {
     if (!url) return null;
