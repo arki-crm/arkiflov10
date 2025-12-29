@@ -30,13 +30,14 @@ import LeadReport from './pages/LeadReport';
 import DesignerReport from './pages/DesignerReport';
 import DelayReport from './pages/DelayReport';
 
-// Phase 15 - Design Workflow Pages
+// V1 Simplified Design Workflow Pages
 import DesignBoard from './pages/DesignBoard';
 import DesignManagerDashboard from './pages/DesignManagerDashboard';
 import ValidationPipeline from './pages/ValidationPipeline';
 import CEODashboard from './pages/CEODashboard';
 import OperationsDashboard from './pages/OperationsDashboard';
 import SalesManagerDashboard from './pages/SalesManagerDashboard';
+import ProductionOpsDashboard from './pages/ProductionOpsDashboard';
 
 import './App.css';
 
