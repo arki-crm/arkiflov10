@@ -11,6 +11,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import PreSales from './pages/PreSales';
 import PreSalesDetail from './pages/PreSalesDetail';
+import CreatePreSalesLead from './pages/CreatePreSalesLead';
 import Leads from './pages/Leads';
 import LeadDetails from './pages/LeadDetails';
 import CreateLead from './pages/CreateLead';
@@ -68,6 +69,7 @@ const AppRouter = () => {
       >
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/presales" element={<PreSales />} />
+        <Route path="/presales/create" element={<CreatePreSalesLead />} />
         <Route path="/presales/:id" element={<PreSalesDetail />} />
         <Route path="/leads" element={<Leads />} />
         <Route path="/leads/create" element={<CreateLead />} />
