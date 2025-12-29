@@ -65,7 +65,8 @@ const SalesManagerDashboard = () => {
   const [reassigning, setReassigning] = useState(false);
 
   useEffect(() => {
-    if (user?.role && !['Admin', 'Manager', 'SalesManager'].includes(user.role)) {
+    // V1: Allow Admin, SalesManager, or users with senior_manager_view
+    if (user?.role && !['Admin', 'SalesManager'].includes(user.role) && !user?.senior_manager_view) {
       navigate('/dashboard');
       return;
     }
