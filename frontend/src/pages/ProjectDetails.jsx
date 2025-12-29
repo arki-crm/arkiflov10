@@ -1465,7 +1465,7 @@ const WarrantyServiceTab = ({ projectId, pid }) => {
           ) : (
             <div className="text-center py-8 text-slate-500">
               <Shield className="h-10 w-10 mx-auto text-slate-300 mb-3" />
-              <p>Warranty will be auto-generated when project reaches "Closed" status</p>
+              <p>Warranty will be auto-generated when project reaches Closed status</p>
             </div>
           )}
         </CardContent>
