@@ -121,8 +121,18 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
         { path: '/production-ops', label: 'My Dashboard', icon: LayoutDashboard },
         ...commonItems,
         { path: '/projects', label: 'Projects', icon: FolderKanban },
+        { path: '/warranty', label: 'Warranty', icon: Shield },
+        { path: '/service-requests', label: 'Service Requests', icon: Wrench },
+        { path: '/technicians', label: 'Technicians', icon: HardHat },
         { path: '/reports', label: 'Reports', icon: BarChart3 },
         ...seniorManagerItems
+      ];
+
+    // 7. TECHNICIAN - Only assigned service requests
+    case 'Technician':
+      return [
+        { path: '/service-requests', label: 'My Requests', icon: Wrench },
+        ...commonItems
       ];
 
     default:
