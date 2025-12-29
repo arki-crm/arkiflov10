@@ -11,7 +11,9 @@ import {
   Loader2,
   FileX2,
   Users,
-  Plus
+  Plus,
+  Pause,
+  Power
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
