@@ -315,11 +315,31 @@ const ProjectDetails = () => {
     }
   };
 
+  // Update customer details on project (Admin/SalesManager only)
+  const handleUpdateCustomerDetails = async (updatedData) => {
+    try {
+      await axios.put(`${API}/projects/${id}/customer-details`, updatedData, {
+        withCredentials: true
+      });
+      toast.success('Customer details updated');
+      fetchProject(); // Refresh project data
+    } catch (err) {
+      console.error('Failed to update customer details:', err);
+      toast.error(err.response?.data?.detail || 'Failed to update customer details');
+      throw err;
+    }
+  };
+  
+  // Can edit customer details on project (Admin/SalesManager only)
+  const canEditProjectCustomerDetails = () => {
+    return user?.role === 'Admin' || user?.role === 'SalesManager';
+  };
+
   // Check if user can change stage
   const canChangeStage = () => {
     if (!user || !project) return false;
-    if (user.role === 'Admin' || user.role === 'Manager') return true;
-    if (user.role === 'Designer') {
+    if (user.role === 'Admin' || user.role === 'SalesManager') return true;
+    if (user.role === 'Designer' || user.role === 'DesignManager') {
       return project.collaborators?.some(c => c.user_id === user.user_id);
     }
     return false;
