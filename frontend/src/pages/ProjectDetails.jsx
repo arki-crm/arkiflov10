@@ -75,6 +75,9 @@ const ProjectDetails = () => {
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [isUpdatingStage, setIsUpdatingStage] = useState(false);
   
+  // Sub-stage progression state
+  const [completedSubStages, setCompletedSubStages] = useState([]);
+  
   // Files and Notes state
   const [files, setFiles] = useState([]);
   const [notes, setNotes] = useState([]);
@@ -117,6 +120,7 @@ const ProjectDetails = () => {
       setFiles(response.data.files || []);
       setNotes(response.data.notes || []);
       setCollaborators(response.data.collaborators || []);
+      setCompletedSubStages(response.data.completed_substages || []);
     } catch (err) {
       console.error('Failed to fetch project:', err);
       if (err.response?.status === 403) {
