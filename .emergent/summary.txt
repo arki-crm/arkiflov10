@@ -1,0 +1,689 @@
+<analysis>**original_problem_statement:**
+The user has requested the implementation of **Phase 15** for the Arkiflo application. This phase focuses on building a highly-visual, low-friction workflow for the design team.
+
+**PRODUCT REQUIREMENTS:**
+1.  **New Roles:** Introduce 'Hybrid Designer', 'Designer (WFH)', 'Design Manager (Arya)', and 'Production Manager (Sharon)' without removing existing roles.
+2.  **Simplified Design Workflow:** Implement a new 9-step project flow that triggers automatically after a project is booked.
+3.  **Auto-Task Engine:** The system should automatically create and assign tasks, track timelines, log delays, and send notifications as a project moves through the new workflow stages.
+4.  **Designer UI:** Create an ultra-simple Kanban board (, , ) for designers to manage their tasks with 1-click actions and drag-and-drop functionality.
+5.  **Measurement Request System:** An automated flow to request, track, and complete site measurements.
+6.  **Meeting Scheduler:** A simple scheduler that generates placeholder Google Meet links and sends in-app notifications. Full Google API integration is deferred.
+7.  **Auto Time Tracking:** The system must automatically track task durations and detect delays without manual input from designers.
+8.  **Manager/CEO Dashboards:** Create specific, minimal dashboards for the Design Manager (Arya), Production Manager (Sharon), and a private CEO view for performance and bottleneck analysis.
+9.  **UX Rules:** The entire experience must be extremely clean, simple, and automation-heavy, prioritizing 1-click interactions and visual elements over forms.
+10. **Technical Constraints:** Use in-app notifications only (no email integration for now) and placeholder meeting links.
+
+**User's preferred language**: English
+
+**what currently exists?**
+A full-stack application (React, FastAPI, MongoDB) for managing interior design workflows. The application includes user authentication (Google OAuth), role-based access control, and modules for Projects, Leads, Calendar, Meetings, and Financials.
+
+In this session, two major updates were completed:
+1.  **Code Refactoring:** The monolithic  file (~2259 lines) was broken down into 7 smaller, reusable components, reducing its size by 55%. A modular directory structure (, , ) was created for the backend, although the main  file has not yet been fully broken down.
+2.  **Reports & Analytics Module:** A complete reporting section was built with backend APIs and frontend pages for Revenue, Project Health, Lead Conversion, Designer Performance, and Delay Analytics. This feature has been fully tested by both backend and frontend testing agents.
+
+**Last working item**:
+    - Last item agent was working: The agent began implementing **Sub-Phase 15A**, which lays the foundation for the new design workflow system. It added a significant amount of code to  to support the new features, including new Pydantic models, new workflow stage configurations, an auto-task engine logic, and numerous API endpoints for the design board, manager dashboards, and CEO view. It then created the placeholder frontend pages for these new views.
+    - Status: IN PROGRESS
+    - Agent Testing Done: N
+    - Which testing method agent to use? both
+    - User Testing Done: N
+
+**All Pending/In progress Issue list**:
+  - Issue 1:  (P1) Pre-existing Python Linting Errors in 
+  
+  Issues Detail:
+  - Issue 1: 
+     - **Description:** The  file still contains numerous pre-existing, non-critical linting errors (e.g., , ). The agent fixed new errors introduced in this session but did not address the old ones.
+     - **Attempted fixes:** None on the old code.
+     - **Next debug checklist:**
+        - Run F841 Local variable `user` is assigned to but never used
+   --> backend/server.py:850:5
+    |
+848 | async def get_active_users(request: Request):
+849 |     """Get list of active users (for collaborator dropdowns)"""
+850 |     user = await get_current_user(request)
+    |     ^^^^
+851 |     
+852 |     users = await db.users.find(
+    |
+help: Remove assignment to unused variable `user`
+
+F841 Local variable `user` is assigned to but never used
+   --> backend/server.py:862:5
+    |
+860 | async def get_active_designers(request: Request):
+861 |     """Get list of active designers (for assignment dropdowns)"""
+862 |     user = await get_current_user(request)
+    |     ^^^^
+863 |     
+864 |     designers = await db.users.find(
+    |
+help: Remove assignment to unused variable `user`
+
+E722 Do not use bare `except`
+    --> backend/server.py:1398:25
+     |
+1396 |                             else:
+1397 |                                 item["status"] = "pending"
+1398 |                         except:
+     |                         ^^^^^^
+1399 |                             item["status"] = "pending"
+1400 |                     else:
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:1414:21
+     |
+1412 |                         else:
+1413 |                             item["status"] = "pending"
+1414 |                     except:
+     |                     ^^^^^^
+1415 |                         item["status"] = "pending"
+1416 |                 else:
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:1898:17
+     |
+1896 |                     elif item["status"] not in ["completed", "delayed"]:
+1897 |                         item["status"] = "pending"
+1898 |                 except:
+     |                 ^^^^^^
+1899 |                     if item["status"] != "completed":
+1900 |                         item["status"] = "pending"
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:1917:17
+     |
+1915 |                     else:
+1916 |                         item["status"] = "pending"
+1917 |                 except:
+     |                 ^^^^^^
+1918 |                     item["status"] = "pending"
+1919 |             else:
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:1951:19
+     |
+1949 |         search_lower = search.lower()
+1950 |         leads = [
+1951 |             l for l in leads 
+     |                   ^
+1952 |             if search_lower in l.get("customer_name", "").lower() 
+1953 |             or search_lower in l.get("customer_phone", "").replace(" ", "")
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:2180:21
+     |
+2178 |                         else:
+2179 |                             item["status"] = "pending"
+2180 |                     except:
+     |                     ^^^^^^
+2181 |                         item["status"] = "pending"
+2182 |                 else:
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:3240:25
+     |
+3238 |                                 expected = expected.replace(tzinfo=timezone.utc)
+3239 |                             days_delayed = (now - expected).days
+3240 |                         except:
+     |                         ^^^^^^
+3241 |                             pass
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:3312:25
+     |
+3310 |                                     "designer": designer_name
+3311 |                                 })
+3312 |                         except:
+     |                         ^^^^^^
+3313 |                             pass
+3314 |         # Sort by expected date
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:3330:38
+     |
+3328 |         # Lead metrics
+3329 |         total_leads = len(all_leads)
+3330 |         qualified_leads = len([l for l in all_leads if l.get("status") == "Qualified"])
+     |                                      ^
+3331 |         converted_leads_count = await db.leads.count_documents({"is_converted": True})
+3332 |         booking_conversion_rate = round((converted_leads_count / max(total_leads + converted_leads_count, 1)) * 100, 1)
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:3349:21
+     |
+3347 |                         total_days += (updated_dt - created_dt).days
+3348 |                         count += 1
+3349 |                     except:
+     |                     ^^^^^^
+3350 |                         pass
+3351 |             if count > 0:
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:3394:37
+     |
+3392 |             if u.get("role") == "PreSales":
+3393 |                 user_id = u.get("user_id")
+3394 |                 user_leads = [l for l in all_leads if l.get("assigned_to") == user_id]
+     |                                     ^
+3395 |                 converted = await db.leads.count_documents({"assigned_to": user_id, "is_converted": True})
+3396 |                 presales_performance.append({
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:3475:27
+     |
+3473 |     elif user.role == "PreSales":
+3474 |         # My leads only
+3475 |         my_leads = [l for l in all_leads if l.get("assigned_to") == user.user_id]
+     |                           ^
+3476 |         
+3477 |         # Stage counts
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:3478:35
+     |
+3477 |         # Stage counts
+3478 |         bc_call_done = len([l for l in my_leads if l.get("stage") == "BC Call Done"])
+     |                                   ^
+3479 |         boq_shared = len([l for l in my_leads if l.get("stage") == "BOQ Shared"])
+3480 |         waiting_booking = len([l for l in my_leads if l.get("stage") == "Waiting for Booking"])
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:3479:33
+     |
+3477 |         # Stage counts
+3478 |         bc_call_done = len([l for l in my_leads if l.get("stage") == "BC Call Done"])
+3479 |         boq_shared = len([l for l in my_leads if l.get("stage") == "BOQ Shared"])
+     |                                 ^
+3480 |         waiting_booking = len([l for l in my_leads if l.get("stage") == "Waiting for Booking"])
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:3480:38
+     |
+3478 |         bc_call_done = len([l for l in my_leads if l.get("stage") == "BC Call Done"])
+3479 |         boq_shared = len([l for l in my_leads if l.get("stage") == "BOQ Shared"])
+3480 |         waiting_booking = len([l for l in my_leads if l.get("stage") == "Waiting for Booking"])
+     |                                      ^
+3481 |         
+3482 |         # Follow-ups due today (leads with milestones expected today)
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:3494:25
+     |
+3492 |                                 followups_today += 1
+3493 |                                 break
+3494 |                         except:
+     |                         ^^^^^^
+3495 |                             pass
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:3538:25
+     |
+3536 |                             if exp_dt.date() == now.date():
+3537 |                                 milestones_today += 1
+3538 |                         except:
+     |                         ^^^^^^
+3539 |                             pass
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:5056:42
+     |
+5054 |             {"_id": 0, "lead_id": 1, "customer_name": 1, "customer_phone": 1}
+5055 |         ).to_list(1000)
+5056 |         leads_map = {l["lead_id"]: l for l in leads_list}
+     |                                          ^
+5057 |     
+5058 |     # Enrich meetings
+     |
+
+F841 Local variable `users_map` is assigned to but never used
+    --> backend/server.py:5795:5
+     |
+5793 |     # Get all users
+5794 |     users = await db.users.find({}, {"_id": 0, "user_id": 1, "name": 1, "role": 1}).to_list(1000)
+5795 |     users_map = {u["user_id"]: u for u in users}
+     |     ^^^^^^^^^
+5796 |     presales_users = [u for u in users if u.get("role") == "PreSales"]
+     |
+help: Remove assignment to unused variable `users_map`
+
+F841 Local variable `now` is assigned to but never used
+    --> backend/server.py:5916:5
+     |
+5914 |         raise HTTPException(status_code=403, detail="Access denied")
+5915 |     
+5916 |     now = datetime.now(timezone.utc)
+     |     ^^^
+5917 |     
+5918 |     # Get all designers
+     |
+help: Remove assignment to unused variable `now`
+
+F841 Local variable `delayed_project_count` is assigned to but never used
+    --> backend/server.py:7542:9
+     |
+7540 |         # Get total design projects under management
+7541 |         total_projects = await db.design_projects.count_documents({"status": "active"})
+7542 |         delayed_project_count = await db.design_projects.count_documents({
+     |         ^^^^^^^^^^^^^^^^^^^^^
+7543 |             "status": "active",
+7544 |             "current_stage": {"$ne": "Validation & Kickoff"}
+     |
+help: Remove assignment to unused variable `delayed_project_count`
+
+Found 28 errors (5 fixed, 23 remaining).
+No fixes available (5 hidden fixes can be enabled with the `--unsafe-fixes` option)..
+        - Manually review and fix any remaining issues, such as replacing bare  blocks with .
+     - **Why fix this issue and what will be achieved with the fix?** To improve code quality, maintainability, and prevent potential bugs from overly broad exception handling.
+     - **Status:**  NOT STARTED
+     - **Is recurring issue?** Y
+     - **Should Test frontend/backend/both after fix?** backend
+     - **Blocked on other issue:** No
+
+**In progress Task List**:
+  - Task 1:  **(P0) Complete Phase 15A: Design Workflow Foundation**
+
+ Task Detail:
+  - Task 1: 
+     - **Where to resume:** 
+        1.  **Frontend Routing:** The agent created placeholder pages but did not link them. Update  to add routes for the new pages (, , , ).
+        2.  **Sidebar Navigation:** Update  to add navigation links to these new pages, ensuring they are displayed based on user roles.
+        3.  **Implement :** Build the Kanban UI, fetch data from the  endpoint, and implement drag-and-drop functionality to update stage progress.
+        4.  **Implement Other Pages:** Build out the UI for , , and , connecting them to their respective backend endpoints.
+        5.  **Testing:** Once implementation is complete, update  and run both backend and frontend testing agents to verify the entire design workflow.
+     - **What will be achieved with this?** The foundational user interfaces and backend connections for the new design workflow will be in place.
+     - **Status:**  IN PROGRESS
+     - **Should Test frontend/backend/both after fix?** both
+     - **Blocked on something:** No
+
+**Upcoming and Future Tasks**
+Upcoming Tasks:
+- **(P0) Complete Backend Refactoring:** The agent started modularizing the backend but did not move the API endpoint logic from  into a  directory. This is a critical step to manage the now ~7500-line file.
+- **(P1) Implement Full Phase 15 Features:**
+    - Measurement Request System (UI and frontend logic).
+    - Simple Meeting Scheduler (UI and frontend logic).
+    - Auto-notifications (implementing frontend display of in-app notifications).
+
+Future Tasks:
+- Implement Placeholder Page: Build out the functionality for .
+- Add a Quick Add button to the main dashboard.
+- Implement drag-and-drop for stage changes in Project/Lead details.
+- Implement file versioning.
+- Add rich text (markdown) support to the Notes editor.
+
+**Completed work in this session**
+- **Reports & Analytics Module (DONE):** Fully implemented and tested a comprehensive reporting section.
+- **Frontend Refactoring () (DONE):** Successfully broke down the largest frontend component into smaller, manageable pieces, improving maintainability.
+- **Backend Structure Creation (DONE):** Created the directory structure for a modular backend (, , ) and populated it with the relevant code from .
+
+**Earlier issues found/mentioned but not fixed**
+   - Issue 1: **Minor Python Linting Errors**
+     - **Description:** The agent has consistently ignored  warnings for bare  clauses and unused variables in the older sections of .
+     - **Debug checklist:** Run F841 Local variable `user` is assigned to but never used
+   --> backend/server.py:850:5
+    |
+848 | async def get_active_users(request: Request):
+849 |     """Get list of active users (for collaborator dropdowns)"""
+850 |     user = await get_current_user(request)
+    |     ^^^^
+851 |     
+852 |     users = await db.users.find(
+    |
+help: Remove assignment to unused variable `user`
+
+F841 Local variable `user` is assigned to but never used
+   --> backend/server.py:862:5
+    |
+860 | async def get_active_designers(request: Request):
+861 |     """Get list of active designers (for assignment dropdowns)"""
+862 |     user = await get_current_user(request)
+    |     ^^^^
+863 |     
+864 |     designers = await db.users.find(
+    |
+help: Remove assignment to unused variable `user`
+
+E722 Do not use bare `except`
+    --> backend/server.py:1398:25
+     |
+1396 |                             else:
+1397 |                                 item["status"] = "pending"
+1398 |                         except:
+     |                         ^^^^^^
+1399 |                             item["status"] = "pending"
+1400 |                     else:
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:1414:21
+     |
+1412 |                         else:
+1413 |                             item["status"] = "pending"
+1414 |                     except:
+     |                     ^^^^^^
+1415 |                         item["status"] = "pending"
+1416 |                 else:
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:1898:17
+     |
+1896 |                     elif item["status"] not in ["completed", "delayed"]:
+1897 |                         item["status"] = "pending"
+1898 |                 except:
+     |                 ^^^^^^
+1899 |                     if item["status"] != "completed":
+1900 |                         item["status"] = "pending"
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:1917:17
+     |
+1915 |                     else:
+1916 |                         item["status"] = "pending"
+1917 |                 except:
+     |                 ^^^^^^
+1918 |                     item["status"] = "pending"
+1919 |             else:
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:1951:19
+     |
+1949 |         search_lower = search.lower()
+1950 |         leads = [
+1951 |             l for l in leads 
+     |                   ^
+1952 |             if search_lower in l.get("customer_name", "").lower() 
+1953 |             or search_lower in l.get("customer_phone", "").replace(" ", "")
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:2180:21
+     |
+2178 |                         else:
+2179 |                             item["status"] = "pending"
+2180 |                     except:
+     |                     ^^^^^^
+2181 |                         item["status"] = "pending"
+2182 |                 else:
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:3240:25
+     |
+3238 |                                 expected = expected.replace(tzinfo=timezone.utc)
+3239 |                             days_delayed = (now - expected).days
+3240 |                         except:
+     |                         ^^^^^^
+3241 |                             pass
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:3312:25
+     |
+3310 |                                     "designer": designer_name
+3311 |                                 })
+3312 |                         except:
+     |                         ^^^^^^
+3313 |                             pass
+3314 |         # Sort by expected date
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:3330:38
+     |
+3328 |         # Lead metrics
+3329 |         total_leads = len(all_leads)
+3330 |         qualified_leads = len([l for l in all_leads if l.get("status") == "Qualified"])
+     |                                      ^
+3331 |         converted_leads_count = await db.leads.count_documents({"is_converted": True})
+3332 |         booking_conversion_rate = round((converted_leads_count / max(total_leads + converted_leads_count, 1)) * 100, 1)
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:3349:21
+     |
+3347 |                         total_days += (updated_dt - created_dt).days
+3348 |                         count += 1
+3349 |                     except:
+     |                     ^^^^^^
+3350 |                         pass
+3351 |             if count > 0:
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:3394:37
+     |
+3392 |             if u.get("role") == "PreSales":
+3393 |                 user_id = u.get("user_id")
+3394 |                 user_leads = [l for l in all_leads if l.get("assigned_to") == user_id]
+     |                                     ^
+3395 |                 converted = await db.leads.count_documents({"assigned_to": user_id, "is_converted": True})
+3396 |                 presales_performance.append({
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:3475:27
+     |
+3473 |     elif user.role == "PreSales":
+3474 |         # My leads only
+3475 |         my_leads = [l for l in all_leads if l.get("assigned_to") == user.user_id]
+     |                           ^
+3476 |         
+3477 |         # Stage counts
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:3478:35
+     |
+3477 |         # Stage counts
+3478 |         bc_call_done = len([l for l in my_leads if l.get("stage") == "BC Call Done"])
+     |                                   ^
+3479 |         boq_shared = len([l for l in my_leads if l.get("stage") == "BOQ Shared"])
+3480 |         waiting_booking = len([l for l in my_leads if l.get("stage") == "Waiting for Booking"])
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:3479:33
+     |
+3477 |         # Stage counts
+3478 |         bc_call_done = len([l for l in my_leads if l.get("stage") == "BC Call Done"])
+3479 |         boq_shared = len([l for l in my_leads if l.get("stage") == "BOQ Shared"])
+     |                                 ^
+3480 |         waiting_booking = len([l for l in my_leads if l.get("stage") == "Waiting for Booking"])
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:3480:38
+     |
+3478 |         bc_call_done = len([l for l in my_leads if l.get("stage") == "BC Call Done"])
+3479 |         boq_shared = len([l for l in my_leads if l.get("stage") == "BOQ Shared"])
+3480 |         waiting_booking = len([l for l in my_leads if l.get("stage") == "Waiting for Booking"])
+     |                                      ^
+3481 |         
+3482 |         # Follow-ups due today (leads with milestones expected today)
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:3494:25
+     |
+3492 |                                 followups_today += 1
+3493 |                                 break
+3494 |                         except:
+     |                         ^^^^^^
+3495 |                             pass
+     |
+
+E722 Do not use bare `except`
+    --> backend/server.py:3538:25
+     |
+3536 |                             if exp_dt.date() == now.date():
+3537 |                                 milestones_today += 1
+3538 |                         except:
+     |                         ^^^^^^
+3539 |                             pass
+     |
+
+E741 Ambiguous variable name: `l`
+    --> backend/server.py:5056:42
+     |
+5054 |             {"_id": 0, "lead_id": 1, "customer_name": 1, "customer_phone": 1}
+5055 |         ).to_list(1000)
+5056 |         leads_map = {l["lead_id"]: l for l in leads_list}
+     |                                          ^
+5057 |     
+5058 |     # Enrich meetings
+     |
+
+F841 Local variable `users_map` is assigned to but never used
+    --> backend/server.py:5795:5
+     |
+5793 |     # Get all users
+5794 |     users = await db.users.find({}, {"_id": 0, "user_id": 1, "name": 1, "role": 1}).to_list(1000)
+5795 |     users_map = {u["user_id"]: u for u in users}
+     |     ^^^^^^^^^
+5796 |     presales_users = [u for u in users if u.get("role") == "PreSales"]
+     |
+help: Remove assignment to unused variable `users_map`
+
+F841 Local variable `now` is assigned to but never used
+    --> backend/server.py:5916:5
+     |
+5914 |         raise HTTPException(status_code=403, detail="Access denied")
+5915 |     
+5916 |     now = datetime.now(timezone.utc)
+     |     ^^^
+5917 |     
+5918 |     # Get all designers
+     |
+help: Remove assignment to unused variable `now`
+
+F841 Local variable `delayed_project_count` is assigned to but never used
+    --> backend/server.py:7542:9
+     |
+7540 |         # Get total design projects under management
+7541 |         total_projects = await db.design_projects.count_documents({"status": "active"})
+7542 |         delayed_project_count = await db.design_projects.count_documents({
+     |         ^^^^^^^^^^^^^^^^^^^^^
+7543 |             "status": "active",
+7544 |             "current_stage": {"$ne": "Validation & Kickoff"}
+     |
+help: Remove assignment to unused variable `delayed_project_count`
+
+Found 23 errors.
+No fixes available (5 hidden fixes can be enabled with the `--unsafe-fixes` option). and manually resolve remaining issues.
+     - **Why to solve this issue and what will be achieved with this?** Improves code robustness and maintainability.
+     - **Should Test frontend/backend/both after fix:** backend
+     - **Is recurring issue?** Y
+
+**Known issue recurrence from previous fork**
+  - N/A
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+- **Backend:** FastAPI, MongoDB (async with ).
+- **Frontend:** React, React Router, Axios, TailwindCSS.
+- **UI:** Shadcn/UI components.
+- **Authentication:** Emergent-managed Google OAuth with session tokens.
+- **State Management:** React Context API (), , .
+
+**key DB schema**
+  - **projects:** 
+  - **tasks:** 
+  - **meetings:** 
+  - **users:** 
+  - **design_projects:** **(New)** 
+
+**changes in tech stack**
+  - None.
+
+**All files of reference**
+- **Created:**
+  - : All Pydantic models.
+  - : All configuration constants.
+  - : All utility functions.
+  - : 7 new components extracted from .
+  - : All report pages.
+  - : New design workflow pages.
+- **Updated:**
+  - : **Heavily modified**. Grew from ~5200 to ~7500 lines with the addition of all Phase 15 backend logic.
+  - : **Refactored**. Reduced from 2259 to 1006 lines.
+  - : Updated with routes for the Reports module.
+  - : Updated with nav links for the Reports module.
+
+**Areas that need refactoring**:
+- : **CRITICAL**. This file is now ~7500 lines. The agent created a modular structure but failed to move the API endpoint logic into a  directory. This task must be completed to make the backend maintainable.
+- : This component is over 600 lines and its helper components could be extracted.
+
+**key api endpoints**
+- **(New) Design Workflow:**
+  - : GET user's design projects for Kanban view.
+  - : PUT to update a project's stage.
+  - : GET data for Arya's dashboard.
+  - : GET data for Sharon's dashboard.
+  - : GET data for the CEO's dashboard.
+- **(New) Reports:**
+  - : GET endpoints for all reports.
+
+**Critical Info for New Agent**
+- You are starting **Phase 15**. The backend foundation is laid in  and placeholder frontend files exist.
+- Your immediate tasks are to wire up the new pages in  and , then build the UI for  and the other dashboards.
+- The user has explicitly requested to **keep things simple**: use placeholder Google Meet links (no real API integration) and in-app notifications only (no email integration).
+- **CRITICAL REFACTORING**: The  file is dangerously large. A high-priority task should be to create a  directory and split the API endpoints from  into logical files (e.g., , , ).
+
+**documents and test reports created in this job**
+  -  (updated for refactoring and reports module testing)
+  - 
+
+**Last 10 User Messages and any pending HUMAN messages** 
+- 10. **User:** Confirmed Phase 15 plan: use placeholder meeting links, in-app notifications only, add new roles on top of existing ones, and start with Sub-Phase 15A. (Status: **Addressed**)
+- 9. **Agent:** Asked for clarification on the Phase 15 implementation plan. (Status: Completed)
+- 8. **User:** Provided the detailed prompt for Phase 15. (Status: **In Progress**)
+- 7. **Agent:** Finished the Reports & Analytics module and asked for verification. (Status: Completed)
+- 6. **User:** Instructed the agent to complete the Reports & Analytics module. (Status: **Addressed**)
+- 5. **Agent:** Finished the code refactoring and asked for the next steps. (Status: Completed)
+- 4. **User:** Confirmed the refactoring plan for  and . (Status: **Addressed**)
+- 3. **Agent:** Proposed a plan to refactor the large  and  files before starting new features. (Status: Completed)
+- 2. **User:** (Initial message for this fork) User confirmed refactoring plan. (Status: **Addressed**)
+- 1. **Agent:** (Initial ask_human for this fork) Proposed plan to refactor before starting reports module. (Status: Completed)
+
+**Project Health Check:**
+- **Broken:** None.
+- **Mocked:** The app uses placeholder meeting links as requested by the user.
+
+**3rd Party Integrations**
+	 •	**Emergent-managed Google Auth** — Used for user login and authentication.
+
+**Testing status**
+  - Testing agent used after significant changes: YES (for Refactoring and Reports Module)
+  - Troubleshoot agent used after agent stuck in loop: NO
+  - Test files created: []
+  - Known regressions: []
+
+**Credentials to test flow:**
+N/A. The application uses Google OAuth. The first user to sign in is automatically granted the 'Admin' role.
+
+**What agent forgot to execute**
+- The agent did not complete the backend refactoring. It created the file structure (, , ) but then proceeded to add ~2300 lines of new code to the already oversized  instead of creating a  directory and splitting the logic. This has worsened the technical debt.
+- The agent did not fix the pre-existing linting errors in .</analysis>

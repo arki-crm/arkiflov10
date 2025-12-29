@@ -1,12 +1,11 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -4510,7 +4509,7 @@ async def create_task(task_data: TaskCreate, request: Request):
             "New Task Assigned",
             f"{user.name} assigned you a task: '{task_data.title}'{project_name}",
             "task",
-            f"/calendar"
+            "/calendar"
         )
     
     return {"message": "Task created successfully", "task": new_task}
@@ -4584,7 +4583,7 @@ async def update_task(task_id: str, task_data: TaskUpdate, request: Request):
             "Task Reassigned to You",
             f"{user.name} assigned you a task: '{task.get('title')}'",
             "task",
-            f"/calendar"
+            "/calendar"
         )
     
     # Get updated task
