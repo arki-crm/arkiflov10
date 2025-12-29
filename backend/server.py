@@ -1788,8 +1788,6 @@ async def complete_substage(project_id: str, request: Request):
     body = await request.json()
     
     substage_id = body.get("substage_id")
-    substage_name = body.get("substage_name", "")
-    group_name = body.get("group_name", "")
     
     if not substage_id:
         raise HTTPException(status_code=400, detail="substage_id is required")
