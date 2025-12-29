@@ -788,23 +788,74 @@ const Academy = () => {
             {(lessonForm.content_type === 'video' || lessonForm.content_type === 'mixed') && (
               <div className="space-y-3 p-4 bg-slate-50 rounded-lg">
                 <h4 className="font-medium text-slate-700 flex items-center gap-2"><Video className="w-4 h-4" />Video</h4>
+                
+                {/* Video upload area */}
+                <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors">
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept=".mp4,.mov,.avi,.webm"
+                    onChange={onVideoFileSelect}
+                    className="hidden"
+                    id="video-upload"
+                  />
+                  
+                  {uploadingVideo ? (
+                    <div className="space-y-2">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600" />
+                      <p className="text-sm text-slate-600">Uploading video...</p>
+                      <Progress value={uploadProgress} className="w-full max-w-xs mx-auto" />
+                      <p className="text-xs text-slate-500">{uploadProgress}%</p>
+                    </div>
+                  ) : lessonForm.video_url && lessonForm.video_type === 'uploaded' ? (
+                    <div className="space-y-2">
+                      <CheckCircle className="w-8 h-8 mx-auto text-green-600" />
+                      <p className="text-sm text-green-700 font-medium">Video uploaded</p>
+                      <p className="text-xs text-slate-500 truncate max-w-xs mx-auto">{lessonForm.video_url}</p>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => videoInputRef.current?.click()}
+                      >
+                        <Upload className="w-4 h-4 mr-2" />Replace Video
+                      </Button>
+                    </div>
+                  ) : (
+                    <label htmlFor="video-upload" className="cursor-pointer">
+                      <Upload className="w-8 h-8 mx-auto text-slate-400 mb-2" />
+                      <p className="text-sm font-medium text-slate-700">Click to upload video</p>
+                      <p className="text-xs text-slate-500 mt-1">MP4, MOV, AVI, WEBM (max 500MB)</p>
+                    </label>
+                  )}
+                </div>
+                
+                {/* Divider */}
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  <div className="flex-1 border-t border-slate-200" />
+                  <span>OR use URL</span>
+                  <div className="flex-1 border-t border-slate-200" />
+                </div>
+                
+                {/* Manual URL input */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>Video Type</Label>
-                    <Select value={lessonForm.video_type} onValueChange={(v) => setLessonForm(p => ({ ...p, video_type: v }))}>
+                    <Label>Video Source</Label>
+                    <Select value={lessonForm.video_type} onValueChange={(v) => setLessonForm(p => ({ ...p, video_type: v, video_url: '' }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="youtube">YouTube</SelectItem>
                         <SelectItem value="uploaded">Uploaded File</SelectItem>
+                        <SelectItem value="youtube">YouTube Link</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
-                    <Label>Video URL</Label>
+                    <Label>{lessonForm.video_type === 'youtube' ? 'YouTube URL' : 'Video URL (if using external link)'}</Label>
                     <Input
                       value={lessonForm.video_url}
                       onChange={(e) => setLessonForm(p => ({ ...p, video_url: e.target.value }))}
-                      placeholder={lessonForm.video_type === 'youtube' ? 'YouTube URL' : 'Video file URL'}
+                      placeholder={lessonForm.video_type === 'youtube' ? 'https://youtube.com/watch?v=...' : 'Leave empty if uploaded above'}
+                      disabled={uploadingVideo}
                     />
                   </div>
                 </div>
