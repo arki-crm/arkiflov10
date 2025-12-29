@@ -279,32 +279,34 @@ db.user_sessions.insertOne({{
         """Test auto-collaborator system based on stage changes"""
         print("\n🧪 Testing Auto-Collaborator System...")
         
-        # First create a test project
-        project_data = {
-            "project_name": "RBAC Test Project",
-            "client_name": "Test Client",
-            "client_phone": "+1234567890",
-            "stage": "Design Finalization",
-            "summary": "Test project for RBAC auto-collaborator testing"
-        }
-        
-        success, project_response = self.run_test(
-            "Create Test Project for Auto-Collaborator",
+        # First seed projects to ensure we have test data
+        success, seed_response = self.run_test(
+            "Seed Projects for Auto-Collaborator Test",
             "POST",
-            "api/projects",
+            "api/projects/seed",
             200,
-            data=project_data,
             auth_token=self.tokens["Admin"]
         )
         
         if not success:
-            print("❌ Failed to create test project")
+            print("❌ Failed to seed projects")
             return False
         
-        project_id = project_response.get("project_id")
-        if not project_id:
-            print("❌ No project_id in response")
+        # Get list of projects
+        success, projects_list = self.run_test(
+            "Get Projects List for Auto-Collaborator",
+            "GET",
+            "api/projects",
+            200,
+            auth_token=self.tokens["Admin"]
+        )
+        
+        if not success or not projects_list or len(projects_list) == 0:
+            print("❌ No projects available for testing")
             return False
+        
+        project_id = projects_list[0]["project_id"]
+        print(f"   Using project: {project_id}")
         
         # Test stage "Booked" should trigger DesignManager to be added
         print("\n--- Testing 'Booked' Stage Auto-Collaborator ---")
