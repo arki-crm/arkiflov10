@@ -330,9 +330,16 @@ const Leads = () => {
                       data-testid={`lead-row-${lead.lead_id}`}
                     >
                       <td className="px-4 py-3">
-                        <p className="font-medium text-slate-900 group-hover:text-blue-600 transition-colors">
-                          {lead.customer_name}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          {lead.pid && (
+                            <span className="font-mono text-xs font-bold bg-slate-900 text-white px-1.5 py-0.5 rounded">
+                              {lead.pid}
+                            </span>
+                          )}
+                          <p className="font-medium text-slate-900 group-hover:text-blue-600 transition-colors">
+                            {lead.customer_name}
+                          </p>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span className={cn(
