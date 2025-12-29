@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import CustomerDetailsSection from '../components/CustomerDetailsSection';
 
 // Import extracted components
 import { 
