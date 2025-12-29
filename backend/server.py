@@ -1499,7 +1499,7 @@ async def update_project_customer_details(project_id: str, request: Request):
 
 @api_router.put("/projects/{project_id}/stage")
 async def update_stage(project_id: str, stage_update: StageUpdate, request: Request):
-    """Update project stage"""
+    """Update project stage - forward-only progression (except Admin)"""
     user = await get_current_user(request)
     
     # PreSales cannot access project details
@@ -1525,6 +1525,22 @@ async def update_stage(project_id: str, stage_update: StageUpdate, request: Requ
     if old_stage == new_stage:
         return {"message": "Stage unchanged", "stage": new_stage}
     
+    # FORWARD-ONLY VALIDATION (except Admin)
+    old_index = STAGE_ORDER.index(old_stage) if old_stage in STAGE_ORDER else 0
+    new_index = STAGE_ORDER.index(new_stage)
+    
+    if new_index < old_index:
+        # Backward movement requested
+        if user.role != "Admin":
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Cannot move backward from '{old_stage}' to '{new_stage}'. Stage progression is forward-only. Only Admin can rollback stages."
+            )
+        # Admin can rollback - add special note
+        rollback_note = f" (Admin rollback from '{old_stage}')"
+    else:
+        rollback_note = ""
+    
     now = datetime.now(timezone.utc)
     
     # Create system comment for stage change
@@ -1533,7 +1549,7 @@ async def update_stage(project_id: str, stage_update: StageUpdate, request: Requ
         "user_id": user.user_id,
         "user_name": user.name,
         "role": user.role,
-        "message": f"Stage updated from \"{old_stage}\" to \"{new_stage}\"",
+        "message": f"Stage updated from \"{old_stage}\" to \"{new_stage}\"{rollback_note}",
         "is_system": True,
         "created_at": now.isoformat()
     }
