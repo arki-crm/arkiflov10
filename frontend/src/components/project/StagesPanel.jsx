@@ -200,6 +200,11 @@ export const StagesPanel = ({
                       const isSubComplete = completedSubStages.includes(subStage.id);
                       const canComplete = canCompleteSubStage(subStage.id, completedSubStages);
                       const isNextStep = canComplete && canChangeStage;
+                      
+                      // Debug log for first few sub-stages
+                      if (subIndex < 3) {
+                        console.log(`SubStage ${subStage.id}: isComplete=${isSubComplete}, canComplete=${canComplete}, isNextStep=${isNextStep}`);
+                      }
 
                       return (
                         <button
@@ -209,7 +214,7 @@ export const StagesPanel = ({
                           className={cn(
                             "w-full flex items-center gap-2 p-2 rounded-md text-left transition-all",
                             isSubComplete && "bg-green-50",
-                            isNextStep && "cursor-pointer hover:bg-blue-50 border border-transparent hover:border-blue-200",
+                            isNextStep && !isSubComplete && "cursor-pointer hover:bg-blue-50 border border-transparent hover:border-blue-200",
                             !isSubComplete && !isNextStep && "opacity-50 cursor-not-allowed"
                           )}
                           data-testid={`substage-${subStage.id}`}
