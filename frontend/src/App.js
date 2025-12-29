@@ -23,6 +23,12 @@ import Profile from './pages/Profile';
 import Notifications from './pages/Notifications';
 import Calendar from './pages/Calendar';
 import Meetings from './pages/Meetings';
+import Reports from './pages/Reports';
+import RevenueReport from './pages/RevenueReport';
+import ProjectReport from './pages/ProjectReport';
+import LeadReport from './pages/LeadReport';
+import DesignerReport from './pages/DesignerReport';
+import DelayReport from './pages/DelayReport';
 
 import './App.css';
 
