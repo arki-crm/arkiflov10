@@ -36,6 +36,7 @@ import DesignManagerDashboard from './pages/DesignManagerDashboard';
 import ValidationPipeline from './pages/ValidationPipeline';
 import CEODashboard from './pages/CEODashboard';
 import OperationsDashboard from './pages/OperationsDashboard';
+import SalesManagerDashboard from './pages/SalesManagerDashboard';
 
 import './App.css';
 
