@@ -39,10 +39,14 @@ import {
   Wallet,
   Receipt,
   Edit2,
-  Trash2
+  Trash2,
+  Pause,
+  Play,
+  Power
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
+import { Textarea } from '../components/ui/textarea';
 import CustomerDetailsSection from '../components/CustomerDetailsSection';
 
 // Import extracted components
