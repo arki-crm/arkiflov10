@@ -660,6 +660,7 @@ const PreSalesDetail = () => {
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
+  const [showConvertDialog, setShowConvertDialog] = useState(false);
 
   // Fetch pre-sales lead
   const fetchLead = async () => {
