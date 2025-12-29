@@ -10,6 +10,7 @@ import AppLayout from './components/layout/AppLayout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import PreSales from './pages/PreSales';
+import PreSalesDetail from './pages/PreSalesDetail';
 import Leads from './pages/Leads';
 import LeadDetails from './pages/LeadDetails';
 import Projects from './pages/Projects';
