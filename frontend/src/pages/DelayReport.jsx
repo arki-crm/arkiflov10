@@ -114,7 +114,7 @@ const DelayReport = () => {
         <Card className="border-slate-200">
           <CardContent className="p-4">
             <p className="text-xs text-slate-500 uppercase">Projects Affected</p>
-            <p className="text-2xl font-bold text-amber-600">{summary.projects_with_delays || 0}</p>
+            <p className="text-2xl font-bold text-amber-600">{data?.projects_with_delays || 0}</p>
           </CardContent>
         </Card>
 
