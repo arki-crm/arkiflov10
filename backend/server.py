@@ -7842,6 +7842,320 @@ async def get_operations_dashboard(request: Request):
         "upcoming_deliveries": upcoming_deliveries[:10]
     }
 
+# ============ SALES MANAGER DASHBOARD ============
+
+@api_router.get("/sales-manager/dashboard")
+async def get_sales_manager_dashboard(request: Request):
+    """
+    Dashboard for Sales Manager - monitors all pre-booking leads, sales performance, funnel analytics
+    """
+    user = await get_current_user(request)
+    
+    if user.role not in SALES_MANAGER_ROLES:
+        raise HTTPException(status_code=403, detail="Access denied. Sales Manager role required.")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Get all leads in pre-booking stages (sales pipeline)
+    all_leads = await db.leads.find(
+        {"stage": {"$in": PRE_BOOKING_STAGES}, "status": {"$nin": ["Lost", "Converted"]}},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    # Sales funnel metrics
+    funnel = {stage: 0 for stage in PRE_BOOKING_STAGES}
+    bc_call_pending = 0
+    bc_call_done = 0
+    site_visit_pending = 0
+    site_visit_done = 0
+    tentative_boq_sent = 0
+    revised_boq_sent = 0
+    waiting_for_booking = 0
+    
+    # Leads by assignee (designer performance)
+    leads_by_assignee = {}
+    
+    # Inactive leads tracking
+    inactive_leads = []  # No activity in X days
+    no_followup_leads = []  # No follow-up scheduled
+    needs_reassignment = []  # Multiple failed attempts
+    
+    for lead in all_leads:
+        stage = lead.get("stage", "New Lead")
+        if stage in funnel:
+            funnel[stage] += 1
+        
+        # Count by status
+        if "BC Call" in stage:
+            if "Done" in stage:
+                bc_call_done += 1
+            else:
+                bc_call_pending += 1
+        
+        if "Site Visit" in stage:
+            if "Done" in stage:
+                site_visit_done += 1
+            else:
+                site_visit_pending += 1
+        
+        if stage == "Tentative BOQ Sent":
+            tentative_boq_sent += 1
+        elif stage == "Revised BOQ Sent":
+            revised_boq_sent += 1
+        elif stage == "Waiting for Booking":
+            waiting_for_booking += 1
+        
+        # Track by assignee
+        assignee_id = lead.get("assigned_to")
+        if assignee_id:
+            if assignee_id not in leads_by_assignee:
+                leads_by_assignee[assignee_id] = {
+                    "total": 0,
+                    "new": 0,
+                    "bc_done": 0,
+                    "site_done": 0,
+                    "boq_sent": 0,
+                    "waiting_booking": 0
+                }
+            leads_by_assignee[assignee_id]["total"] += 1
+            if stage == "New Lead":
+                leads_by_assignee[assignee_id]["new"] += 1
+            elif "BC Call Done" in stage:
+                leads_by_assignee[assignee_id]["bc_done"] += 1
+            elif "Site Visit Done" in stage:
+                leads_by_assignee[assignee_id]["site_done"] += 1
+            elif "BOQ" in stage:
+                leads_by_assignee[assignee_id]["boq_sent"] += 1
+            elif stage == "Waiting for Booking":
+                leads_by_assignee[assignee_id]["waiting_booking"] += 1
+        
+        # Check for inactive leads (no update in 7+ days)
+        updated_at = lead.get("updated_at")
+        if updated_at:
+            try:
+                last_update = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+                days_inactive = (now - last_update).days
+                if days_inactive >= 7:
+                    inactive_leads.append({
+                        "lead_id": lead.get("lead_id"),
+                        "client_name": lead.get("client_name"),
+                        "stage": stage,
+                        "assigned_to": assignee_id,
+                        "days_inactive": days_inactive
+                    })
+            except:
+                pass
+        
+        # Check for leads with no follow-up
+        next_followup = lead.get("next_followup")
+        if not next_followup:
+            no_followup_leads.append({
+                "lead_id": lead.get("lead_id"),
+                "client_name": lead.get("client_name"),
+                "stage": stage,
+                "assigned_to": assignee_id
+            })
+        
+        # Check for leads needing reassignment (multiple reschedules or long in same stage)
+        if lead.get("reschedule_count", 0) >= 3:
+            needs_reassignment.append({
+                "lead_id": lead.get("lead_id"),
+                "client_name": lead.get("client_name"),
+                "stage": stage,
+                "assigned_to": assignee_id,
+                "reason": "Multiple reschedules"
+            })
+    
+    # Get designer details for performance view
+    designer_performance = []
+    sales_users = await db.users.find(
+        {"role": {"$in": ["PreSales", "HybridDesigner", "Designer"]}, "status": "Active"},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "picture": 1}
+    ).to_list(100)
+    
+    for sales_user in sales_users:
+        user_id = sales_user["user_id"]
+        stats = leads_by_assignee.get(user_id, {
+            "total": 0, "new": 0, "bc_done": 0, "site_done": 0, "boq_sent": 0, "waiting_booking": 0
+        })
+        
+        # Calculate conversion rate
+        total = stats["total"]
+        conversion_rate = (stats["waiting_booking"] / total * 100) if total > 0 else 0
+        
+        designer_performance.append({
+            "user_id": user_id,
+            "name": sales_user.get("name"),
+            "picture": sales_user.get("picture"),
+            "role": sales_user.get("role"),
+            "stats": stats,
+            "conversion_rate": round(conversion_rate, 1)
+        })
+    
+    # Sort by conversion rate descending
+    designer_performance.sort(key=lambda x: x["conversion_rate"], reverse=True)
+    
+    # Recent conversions (leads converted to projects in last 30 days)
+    thirty_days_ago = (now - timedelta(days=30)).isoformat()
+    recent_conversions = await db.projects.count_documents({
+        "created_at": {"$gte": thirty_days_ago},
+        "stage": {"$nin": PRE_BOOKING_STAGES}
+    })
+    
+    # Total value in pipeline (estimated)
+    pipeline_value = sum(lead.get("budget", 0) or 0 for lead in all_leads)
+    
+    return {
+        "summary": {
+            "total_active_leads": len(all_leads),
+            "bc_call_pending": bc_call_pending,
+            "bc_call_done": bc_call_done,
+            "site_visit_pending": site_visit_pending,
+            "site_visit_done": site_visit_done,
+            "tentative_boq_sent": tentative_boq_sent,
+            "revised_boq_sent": revised_boq_sent,
+            "waiting_for_booking": waiting_for_booking,
+            "inactive_count": len(inactive_leads),
+            "no_followup_count": len(no_followup_leads),
+            "needs_reassignment_count": len(needs_reassignment),
+            "recent_conversions": recent_conversions,
+            "pipeline_value": pipeline_value
+        },
+        "funnel": funnel,
+        "designer_performance": designer_performance,
+        "inactive_leads": sorted(inactive_leads, key=lambda x: x["days_inactive"], reverse=True)[:15],
+        "no_followup_leads": no_followup_leads[:15],
+        "needs_reassignment": needs_reassignment[:15]
+    }
+
+
+@api_router.post("/sales-manager/reassign-lead/{lead_id}")
+async def reassign_lead(lead_id: str, request: Request):
+    """Reassign a lead to a different designer"""
+    user = await get_current_user(request)
+    
+    if user.role not in SALES_MANAGER_ROLES:
+        raise HTTPException(status_code=403, detail="Access denied. Sales Manager role required.")
+    
+    body = await request.json()
+    new_assignee_id = body.get("assignee_id")
+    reason = body.get("reason", "Reassigned by Sales Manager")
+    
+    if not new_assignee_id:
+        raise HTTPException(status_code=400, detail="New assignee ID required")
+    
+    # Get the lead
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Verify lead is in sales stage
+    if lead.get("stage") not in PRE_BOOKING_STAGES:
+        raise HTTPException(status_code=400, detail="Can only reassign leads in sales stages")
+    
+    # Get new assignee details
+    new_assignee = await db.users.find_one(
+        {"user_id": new_assignee_id},
+        {"_id": 0, "name": 1, "email": 1, "role": 1}
+    )
+    if not new_assignee:
+        raise HTTPException(status_code=404, detail="New assignee not found")
+    
+    old_assignee_id = lead.get("assigned_to")
+    now = datetime.now(timezone.utc)
+    
+    # Update lead
+    await db.leads.update_one(
+        {"lead_id": lead_id},
+        {
+            "$set": {
+                "assigned_to": new_assignee_id,
+                "assigned_to_name": new_assignee.get("name"),
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "comments": {
+                    "id": str(uuid.uuid4()),
+                    "user_id": user.user_id,
+                    "user_name": user.name,
+                    "message": f"Lead reassigned to {new_assignee.get('name')}. Reason: {reason}",
+                    "is_system": True,
+                    "created_at": now.isoformat()
+                }
+            }
+        }
+    )
+    
+    # Notify new assignee
+    notification = {
+        "id": str(uuid.uuid4()),
+        "user_id": new_assignee_id,
+        "title": "Lead Assigned",
+        "message": f"Lead '{lead.get('client_name')}' has been assigned to you by {user.name}",
+        "type": "lead_assigned",
+        "read": False,
+        "link_url": f"/leads/{lead_id}",
+        "created_at": now.isoformat()
+    }
+    await db.notifications.insert_one(notification)
+    
+    return {"success": True, "message": f"Lead reassigned to {new_assignee.get('name')}"}
+
+
+@api_router.get("/sales-manager/lead-activity/{lead_id}")
+async def get_lead_sales_activity(lead_id: str, request: Request):
+    """Get all sales-related activity for a lead"""
+    user = await get_current_user(request)
+    
+    if user.role not in SALES_MANAGER_ROLES:
+        raise HTTPException(status_code=403, detail="Access denied. Sales Manager role required.")
+    
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Get all comments and activities
+    comments = lead.get("comments", [])
+    
+    # Get meetings related to this lead
+    meetings = await db.meetings.find(
+        {"lead_id": lead_id},
+        {"_id": 0}
+    ).to_list(50)
+    
+    # Combine into activity timeline
+    activity = []
+    
+    for comment in comments:
+        activity.append({
+            "type": "comment",
+            "timestamp": comment.get("created_at"),
+            "user_name": comment.get("user_name"),
+            "message": comment.get("message"),
+            "is_system": comment.get("is_system", False)
+        })
+    
+    for meeting in meetings:
+        activity.append({
+            "type": "meeting",
+            "timestamp": meeting.get("created_at"),
+            "meeting_type": meeting.get("meeting_type"),
+            "status": meeting.get("status"),
+            "scheduled_for": meeting.get("scheduled_for")
+        })
+    
+    # Sort by timestamp descending
+    activity.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    
+    return {
+        "lead_id": lead_id,
+        "client_name": lead.get("client_name"),
+        "stage": lead.get("stage"),
+        "assigned_to": lead.get("assigned_to_name"),
+        "activity": activity[:50]
+    }
+
+
 # ============ AUTO-COLLABORATOR SYSTEM ============
 
 async def auto_add_stage_collaborators(project_id: str, new_stage: str, activity_message: str = None):
