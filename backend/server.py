@@ -2576,6 +2576,157 @@ async def assign_designer(lead_id: str, assign_data: LeadAssignDesigner, request
         "designer_name": designer["name"]
     }
 
+# ============ LEAD COLLABORATOR ENDPOINTS ============
+
+@api_router.get("/leads/{lead_id}/collaborators")
+async def get_lead_collaborators(lead_id: str, request: Request):
+    """Get collaborators for a lead"""
+    user = await get_current_user(request)
+    
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    collaborators = lead.get("collaborators", [])
+    
+    # Enrich with user details
+    enriched = []
+    for collab in collaborators:
+        user_doc = await db.users.find_one({"user_id": collab.get("user_id")}, {"_id": 0})
+        if user_doc:
+            enriched.append({
+                **collab,
+                "name": user_doc.get("name", "Unknown"),
+                "email": user_doc.get("email", ""),
+                "picture": user_doc.get("picture")
+            })
+        else:
+            enriched.append(collab)
+    
+    return {"collaborators": enriched}
+
+@api_router.post("/leads/{lead_id}/collaborators")
+async def add_lead_collaborator(lead_id: str, request: Request):
+    """Add collaborator to a lead"""
+    user = await get_current_user(request)
+    body = await request.json()
+    
+    collaborator_user_id = body.get("user_id")
+    reason = body.get("reason", "Added by user")
+    
+    if not collaborator_user_id:
+        raise HTTPException(status_code=400, detail="user_id is required")
+    
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Permission check: Admin, SalesManager, or lead owner/designer can add collaborators
+    is_owner = lead.get("assigned_to") == user.user_id or lead.get("designer_id") == user.user_id
+    if user.role not in ["Admin", "SalesManager", "Manager"] and not is_owner:
+        raise HTTPException(status_code=403, detail="Only Admin, Sales Manager, or lead owner can add collaborators")
+    
+    # Verify collaborator exists
+    collab_user = await db.users.find_one({"user_id": collaborator_user_id}, {"_id": 0})
+    if not collab_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if already a collaborator
+    existing_collaborators = lead.get("collaborators", [])
+    if any(c.get("user_id") == collaborator_user_id for c in existing_collaborators):
+        raise HTTPException(status_code=400, detail="User is already a collaborator")
+    
+    now = datetime.now(timezone.utc)
+    
+    new_collaborator = {
+        "user_id": collaborator_user_id,
+        "role": collab_user.get("role", "Unknown"),
+        "added_at": now.isoformat(),
+        "added_by": user.user_id,
+        "reason": reason,
+        "can_edit": collab_user.get("role") in ["Admin", "SalesManager", "Manager", "Designer"]
+    }
+    
+    # System comment
+    system_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": f"Added {collab_user.get('name', 'Unknown')} as collaborator",
+        "is_system": True,
+        "created_at": now.isoformat()
+    }
+    
+    await db.leads.update_one(
+        {"lead_id": lead_id},
+        {
+            "$push": {
+                "collaborators": new_collaborator,
+                "comments": system_comment
+            },
+            "$set": {"updated_at": now.isoformat()}
+        }
+    )
+    
+    return {
+        "success": True,
+        "collaborator": {
+            **new_collaborator,
+            "name": collab_user.get("name"),
+            "email": collab_user.get("email"),
+            "picture": collab_user.get("picture")
+        }
+    }
+
+@api_router.delete("/leads/{lead_id}/collaborators/{collaborator_user_id}")
+async def remove_lead_collaborator(lead_id: str, collaborator_user_id: str, request: Request):
+    """Remove collaborator from a lead"""
+    user = await get_current_user(request)
+    
+    lead = await db.leads.find_one({"lead_id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    
+    # Only Admin/Manager/SalesManager can remove collaborators
+    if user.role not in ["Admin", "SalesManager", "Manager"]:
+        raise HTTPException(status_code=403, detail="Only Admin, Sales Manager, or Manager can remove collaborators")
+    
+    # Find collaborator to remove
+    collaborators = lead.get("collaborators", [])
+    collab_to_remove = next((c for c in collaborators if c.get("user_id") == collaborator_user_id), None)
+    
+    if not collab_to_remove:
+        raise HTTPException(status_code=404, detail="Collaborator not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Get name for comment
+    collab_user = await db.users.find_one({"user_id": collaborator_user_id}, {"_id": 0})
+    collab_name = collab_user.get("name", "Unknown") if collab_user else "Unknown"
+    
+    # System comment
+    system_comment = {
+        "id": f"comment_{uuid.uuid4().hex[:8]}",
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "role": user.role,
+        "message": f"Removed {collab_name} from collaborators",
+        "is_system": True,
+        "created_at": now.isoformat()
+    }
+    
+    await db.leads.update_one(
+        {"lead_id": lead_id},
+        {
+            "$pull": {"collaborators": {"user_id": collaborator_user_id}},
+            "$push": {"comments": system_comment},
+            "$set": {"updated_at": now.isoformat()}
+        }
+    )
+    
+    return {"success": True, "message": f"Removed {collab_name} from collaborators"}
+
 @api_router.post("/leads/{lead_id}/convert")
 async def convert_to_project(lead_id: str, request: Request):
     """Convert a lead to a project - carries forward PID and all history"""
