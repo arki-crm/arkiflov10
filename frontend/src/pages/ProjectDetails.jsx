@@ -122,6 +122,7 @@ const ProjectDetails = () => {
       setNotes(response.data.notes || []);
       setCollaborators(response.data.collaborators || []);
       setCompletedSubStages(response.data.completed_substages || []);
+      setPercentageSubStages(response.data.percentage_substages || {});
     } catch (err) {
       console.error('Failed to fetch project:', err);
       if (err.response?.status === 403) {
