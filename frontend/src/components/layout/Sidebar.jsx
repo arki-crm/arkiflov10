@@ -79,6 +79,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
         { path: '/presales', label: 'Pre-Sales', icon: UserPlus },
         { path: '/leads', label: 'My Leads', icon: Users },
         { path: '/leads/create', label: 'Create Lead', icon: FileText },
+        { path: '/academy', label: 'Academy', icon: GraduationCap },
         ...commonItems,
         { path: '/reports', label: 'Reports', icon: BarChart3 },
         ...seniorManagerItems
