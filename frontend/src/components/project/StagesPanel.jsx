@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Loader2, ChevronRight, ChevronDown, Lock, Circle } from 'lucide-react';
+import { Check, Loader2, ChevronRight, ChevronDown, Lock, Circle, Percent } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { 
   MILESTONE_GROUPS, 
@@ -7,6 +7,9 @@ import {
   canCompleteSubStage,
   getCurrentMilestoneGroup 
 } from './utils';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,7 +24,9 @@ import {
 export const StagesPanel = ({ 
   currentStage, 
   completedSubStages = [], 
+  percentageSubStages = {},
   onSubStageComplete, 
+  onPercentageUpdate,
   canChangeStage, 
   isUpdating,
   userRole 
@@ -32,6 +37,14 @@ export const StagesPanel = ({
     return currentGroup ? { [currentGroup.id]: true } : { design_finalization: true };
   });
   const [confirmDialog, setConfirmDialog] = useState({ open: false, subStage: null, groupName: null });
+  const [percentageDialog, setPercentageDialog] = useState({ 
+    open: false, 
+    subStage: null, 
+    groupName: null,
+    currentPercentage: 0 
+  });
+  const [newPercentage, setNewPercentage] = useState(0);
+  const [percentageComment, setPercentageComment] = useState('');
 
   // Update expanded groups when completedSubStages changes
   React.useEffect(() => {
@@ -55,7 +68,15 @@ export const StagesPanel = ({
     if (!canChangeStage || isUpdating) return;
     if (!canCompleteSubStage(subStage.id, completedSubStages)) return;
     
-    setConfirmDialog({ open: true, subStage, groupName });
+    // Check if this is a percentage-type sub-stage
+    if (subStage.type === 'percentage') {
+      const currentPct = percentageSubStages[subStage.id] || 0;
+      setNewPercentage(currentPct);
+      setPercentageComment('');
+      setPercentageDialog({ open: true, subStage, groupName, currentPercentage: currentPct });
+    } else {
+      setConfirmDialog({ open: true, subStage, groupName });
+    }
   };
 
   const confirmComplete = () => {
@@ -63,6 +84,21 @@ export const StagesPanel = ({
       onSubStageComplete(confirmDialog.subStage.id, confirmDialog.subStage.name, confirmDialog.groupName);
     }
     setConfirmDialog({ open: false, subStage: null, groupName: null });
+  };
+
+  const confirmPercentageUpdate = () => {
+    if (percentageDialog.subStage && onPercentageUpdate) {
+      onPercentageUpdate(
+        percentageDialog.subStage.id, 
+        percentageDialog.subStage.name, 
+        percentageDialog.groupName,
+        newPercentage,
+        percentageComment
+      );
+    }
+    setPercentageDialog({ open: false, subStage: null, groupName: null, currentPercentage: 0 });
+    setNewPercentage(0);
+    setPercentageComment('');
   };
 
   // Check if entire group is complete
@@ -196,6 +232,8 @@ export const StagesPanel = ({
                       const isSubComplete = completedSubStages.includes(subStage.id);
                       const canComplete = canCompleteSubStage(subStage.id, completedSubStages);
                       const isNextStep = canComplete && canChangeStage;
+                      const isPercentageType = subStage.type === 'percentage';
+                      const currentPct = percentageSubStages[subStage.id] || 0;
 
                       return (
                         <button
@@ -219,6 +257,8 @@ export const StagesPanel = ({
                           )}>
                             {isSubComplete ? (
                               <Check className="w-3 h-3 text-white" />
+                            ) : isPercentageType && isNextStep ? (
+                              <Percent className="w-2.5 h-2.5 text-amber-500" />
                             ) : isNextStep ? (
                               <Circle className="w-2 h-2 text-blue-500 fill-blue-500" />
                             ) : (
@@ -226,17 +266,38 @@ export const StagesPanel = ({
                             )}
                           </div>
 
-                          <span className={cn(
-                            "text-xs flex-1",
-                            isSubComplete && "text-green-700 line-through",
-                            isNextStep && !isSubComplete && "text-slate-700 font-medium",
-                            !isSubComplete && !isNextStep && "text-slate-400"
-                          )}>
-                            {subStage.name}
-                          </span>
+                          <div className="flex-1 min-w-0">
+                            <span className={cn(
+                              "text-xs",
+                              isSubComplete && "text-green-700 line-through",
+                              isNextStep && !isSubComplete && "text-slate-700 font-medium",
+                              !isSubComplete && !isNextStep && "text-slate-400"
+                            )}>
+                              {subStage.name}
+                            </span>
+                            
+                            {/* Percentage progress bar for percentage-type sub-stages */}
+                            {isPercentageType && !isSubComplete && isNextStep && (
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                  <div 
+                                    className="h-full bg-amber-500 rounded-full transition-all"
+                                    style={{ width: `${currentPct}%` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] text-amber-600 font-medium">{currentPct}%</span>
+                              </div>
+                            )}
+                          </div>
 
                           {isNextStep && !isSubComplete && !isUpdating && (
-                            <ChevronRight className="w-3 h-3 text-blue-500" />
+                            isPercentageType ? (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded font-medium">
+                                Update
+                              </span>
+                            ) : (
+                              <ChevronRight className="w-3 h-3 text-blue-500" />
+                            )
                           )}
                           {isUpdating && isNextStep && (
                             <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
@@ -258,7 +319,7 @@ export const StagesPanel = ({
         </p>
       )}
 
-      {/* Confirmation Dialog */}
+      {/* Standard Confirmation Dialog */}
       <AlertDialog 
         open={confirmDialog.open} 
         onOpenChange={(open) => !open && setConfirmDialog({ open: false, subStage: null, groupName: null })}
@@ -291,6 +352,96 @@ export const StagesPanel = ({
               className="bg-green-600 hover:bg-green-700"
             >
               Confirm Complete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Percentage Update Dialog */}
+      <AlertDialog 
+        open={percentageDialog.open} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setPercentageDialog({ open: false, subStage: null, groupName: null, currentPercentage: 0 });
+            setNewPercentage(0);
+            setPercentageComment('');
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Percent className="w-5 h-5 text-amber-500" />
+              Update Non-Modular Dependency Work Progress
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4">
+                <p className="text-sm text-slate-600">
+                  Current progress: <strong className="text-slate-700">{percentageDialog.currentPercentage}%</strong>
+                </p>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">New Percentage (0-100)</label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="number"
+                      min={percentageDialog.currentPercentage}
+                      max={100}
+                      value={newPercentage}
+                      onChange={(e) => setNewPercentage(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+                      className="w-24"
+                    />
+                    <div className="flex-1 h-3 bg-slate-200 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-amber-500 rounded-full transition-all"
+                        style={{ width: `${newPercentage}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-bold text-amber-600 w-12">{newPercentage}%</span>
+                  </div>
+                  {newPercentage < percentageDialog.currentPercentage && (
+                    <p className="text-xs text-red-500">
+                      ⚠️ Cannot decrease progress below {percentageDialog.currentPercentage}%
+                    </p>
+                  )}
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-slate-700">Comment (optional)</label>
+                  <Textarea
+                    value={percentageComment}
+                    onChange={(e) => setPercentageComment(e.target.value)}
+                    placeholder="Add a note about this progress update..."
+                    rows={2}
+                  />
+                </div>
+
+                {newPercentage >= 100 && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <p className="text-green-700 text-sm font-medium">✅ This will auto-complete the sub-stage</p>
+                    <p className="text-green-600 text-xs mt-1">
+                      Setting to 100% will mark this step as complete and unlock the next step.
+                    </p>
+                  </div>
+                )}
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-amber-700 text-sm font-medium">⚠️ Progress is forward-only</p>
+                  <p className="text-amber-600 text-xs mt-1">
+                    You cannot decrease the percentage once updated.
+                  </p>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmPercentageUpdate}
+              disabled={newPercentage < percentageDialog.currentPercentage || newPercentage === percentageDialog.currentPercentage}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              {newPercentage >= 100 ? 'Complete Step' : 'Update Progress'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
