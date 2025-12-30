@@ -96,8 +96,23 @@ class ProfileUpdate(BaseModel):
 class SessionRequest(BaseModel):
     session_id: str
 
+class LocalLoginRequest(BaseModel):
+    email: str
+    password: str
+
 class RoleUpdateRequest(BaseModel):
     role: str
+
+# ============ LOCAL AUTH HELPERS ============
+
+def hash_password(password: str) -> str:
+    """Hash password using SHA-256 with salt"""
+    salt = "arkiflo_local_salt_2024"  # Fixed salt for simplicity
+    return hashlib.sha256(f"{password}{salt}".encode()).hexdigest()
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify password against hash"""
+    return hash_password(password) == hashed
 
 # ============ PROJECT MODELS ============
 
