@@ -52,8 +52,8 @@ const Login = () => {
       if (response.data.success) {
         toast.success('Login successful!');
         // Refresh user context and navigate
-        if (refreshUser) {
-          await refreshUser();
+        if (checkAuth) {
+          await checkAuth();
         }
         navigate('/dashboard', { replace: true });
       }
