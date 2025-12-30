@@ -1033,6 +1033,157 @@ async def logout(request: Request, response: Response):
     response.delete_cookie(key="session_token", path="/")
     return {"message": "Logged out successfully"}
 
+
+# ============ LOCAL LOGIN SYSTEM ============
+
+@api_router.post("/auth/local-login")
+async def local_login(credentials: LocalLoginRequest, response: Response):
+    """
+    Local login for testing outside Emergent environment.
+    This does NOT replace Google OAuth - it's an additional option for local testing.
+    """
+    # Find user by email with local password
+    user_doc = await db.users.find_one(
+        {"email": credentials.email, "local_password": {"$exists": True}},
+        {"_id": 0}
+    )
+    
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # Verify password
+    if not verify_password(credentials.password, user_doc.get("local_password", "")):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # Check if user is active
+    if user_doc.get("status") != "Active":
+        raise HTTPException(status_code=403, detail="Account is not active")
+    
+    # Create session
+    session_token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    
+    await db.user_sessions.insert_one({
+        "user_id": user_doc["user_id"],
+        "session_token": session_token,
+        "expires_at": expires_at,
+        "created_at": datetime.now(timezone.utc),
+        "login_type": "local"
+    })
+    
+    # Update last login
+    await db.users.update_one(
+        {"user_id": user_doc["user_id"]},
+        {"$set": {"last_login": datetime.now(timezone.utc)}}
+    )
+    
+    # Set session cookie
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=7 * 24 * 60 * 60,
+        path="/"
+    )
+    
+    logger.info(f"Local login successful for user: {credentials.email}")
+    
+    return {
+        "success": True,
+        "message": "Login successful",
+        "user": {
+            "user_id": user_doc["user_id"],
+            "email": user_doc["email"],
+            "name": user_doc["name"],
+            "role": user_doc["role"],
+            "picture": user_doc.get("picture")
+        }
+    }
+
+
+@api_router.post("/auth/setup-local-admin")
+async def setup_local_admin(request: Request):
+    """
+    Setup a local admin user for testing.
+    This creates the predefined admin user with local password.
+    Can only be called once - subsequent calls will update the password.
+    """
+    # Predefined admin credentials
+    admin_email = "thaha.pakayil@gmail.com"
+    admin_password = "password123"
+    admin_name = "Thaha Pakayil"
+    
+    # Check if user already exists
+    existing_user = await db.users.find_one({"email": admin_email}, {"_id": 0})
+    
+    now = datetime.now(timezone.utc)
+    hashed_password = hash_password(admin_password)
+    
+    if existing_user:
+        # Update existing user with local password
+        await db.users.update_one(
+            {"email": admin_email},
+            {"$set": {
+                "local_password": hashed_password,
+                "role": "Admin",
+                "status": "Active",
+                "updated_at": now.isoformat()
+            }}
+        )
+        logger.info(f"Updated local admin: {admin_email}")
+        return {
+            "success": True,
+            "message": "Local admin updated successfully",
+            "email": admin_email,
+            "role": "Admin"
+        }
+    else:
+        # Create new admin user
+        user_id = f"local_admin_{uuid.uuid4().hex[:8]}"
+        user_doc = {
+            "user_id": user_id,
+            "email": admin_email,
+            "name": admin_name,
+            "picture": "https://ui-avatars.com/api/?name=Thaha+Pakayil&background=2563eb&color=fff",
+            "role": "Admin",
+            "status": "Active",
+            "local_password": hashed_password,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat()
+        }
+        
+        await db.users.insert_one(user_doc)
+        logger.info(f"Created local admin: {admin_email}")
+        
+        return {
+            "success": True,
+            "message": "Local admin created successfully",
+            "email": admin_email,
+            "role": "Admin",
+            "user_id": user_id
+        }
+
+
+@api_router.get("/auth/check-local-admin")
+async def check_local_admin():
+    """Check if local admin is set up"""
+    admin_email = "thaha.pakayil@gmail.com"
+    existing_user = await db.users.find_one(
+        {"email": admin_email, "local_password": {"$exists": True}},
+        {"_id": 0, "email": 1, "role": 1, "name": 1}
+    )
+    
+    if existing_user:
+        return {
+            "exists": True,
+            "email": existing_user.get("email"),
+            "name": existing_user.get("name"),
+            "role": existing_user.get("role")
+        }
+    return {"exists": False}
+
 # ============ USER MANAGEMENT ============
 
 # ============ V1 SIMPLIFIED RBAC SYSTEM ============
