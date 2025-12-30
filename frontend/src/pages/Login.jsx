@@ -1,13 +1,26 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Loader2, Mail, Lock, ChevronDown, ChevronUp } from 'lucide-react';
+import { toast } from 'sonner';
+import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const Login = () => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, refreshUser } = useAuth();
   const navigate = useNavigate();
+  
+  // Local login state
+  const [showLocalLogin, setShowLocalLogin] = useState(false);
+  const [localEmail, setLocalEmail] = useState('');
+  const [localPassword, setLocalPassword] = useState('');
+  const [localLoading, setLocalLoading] = useState(false);
+  const [setupLoading, setSetupLoading] = useState(false);
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
@@ -19,6 +32,55 @@ const Login = () => {
     // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
     const redirectUrl = window.location.origin + '/dashboard';
     window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+  };
+
+  const handleLocalLogin = async (e) => {
+    e.preventDefault();
+    
+    if (!localEmail || !localPassword) {
+      toast.error('Please enter email and password');
+      return;
+    }
+    
+    try {
+      setLocalLoading(true);
+      const response = await axios.post(`${API_URL}/api/auth/local-login`, {
+        email: localEmail,
+        password: localPassword
+      }, { withCredentials: true });
+      
+      if (response.data.success) {
+        toast.success('Login successful!');
+        // Refresh user context and navigate
+        if (refreshUser) {
+          await refreshUser();
+        }
+        navigate('/dashboard', { replace: true });
+      }
+    } catch (err) {
+      console.error('Local login failed:', err);
+      toast.error(err.response?.data?.detail || 'Invalid email or password');
+    } finally {
+      setLocalLoading(false);
+    }
+  };
+
+  const handleSetupLocalAdmin = async () => {
+    try {
+      setSetupLoading(true);
+      const response = await axios.post(`${API_URL}/api/auth/setup-local-admin`, {}, { withCredentials: true });
+      
+      if (response.data.success) {
+        toast.success('Local admin setup complete! You can now login.');
+        setLocalEmail('thaha.pakayil@gmail.com');
+        setLocalPassword('password123');
+      }
+    } catch (err) {
+      console.error('Setup failed:', err);
+      toast.error(err.response?.data?.detail || 'Failed to setup local admin');
+    } finally {
+      setSetupLoading(false);
+    }
   };
 
   if (loading) {
@@ -47,7 +109,8 @@ const Login = () => {
             Interior Design Workflow System
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-4">
+        <CardContent className="pt-4 space-y-4">
+          {/* Google OAuth Button */}
           <Button
             onClick={handleGoogleLogin}
             className="w-full h-11 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-sm"
@@ -74,8 +137,96 @@ const Login = () => {
             Continue with Google
           </Button>
           
-          <p className="mt-6 text-center text-xs text-slate-500">
-            By signing in, you agree to our Terms of Service and Privacy Policy
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-slate-200" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-2 text-slate-500">Or</span>
+            </div>
+          </div>
+          
+          {/* Local Login Toggle */}
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full text-slate-600 hover:text-slate-900"
+            onClick={() => setShowLocalLogin(!showLocalLogin)}
+          >
+            {showLocalLogin ? <ChevronUp className="w-4 h-4 mr-2" /> : <ChevronDown className="w-4 h-4 mr-2" />}
+            Local Admin Login
+          </Button>
+          
+          {/* Local Login Form */}
+          {showLocalLogin && (
+            <form onSubmit={handleLocalLogin} className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-slate-700">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="thaha.pakayil@gmail.com"
+                    value={localEmail}
+                    onChange={(e) => setLocalEmail(e.target.value)}
+                    className="pl-10"
+                    data-testid="local-email-input"
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-slate-700">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={localPassword}
+                    onChange={(e) => setLocalPassword(e.target.value)}
+                    className="pl-10"
+                    data-testid="local-password-input"
+                  />
+                </div>
+              </div>
+              
+              <Button
+                type="submit"
+                className="w-full bg-blue-600 hover:bg-blue-700"
+                disabled={localLoading}
+                data-testid="local-login-button"
+              >
+                {localLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                Login with Email
+              </Button>
+              
+              {/* Setup Local Admin Button */}
+              <div className="pt-2 border-t border-slate-100">
+                <p className="text-xs text-slate-500 mb-2 text-center">
+                  First time? Setup local admin account:
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full text-sm"
+                  onClick={handleSetupLocalAdmin}
+                  disabled={setupLoading}
+                >
+                  {setupLoading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  Setup Local Admin
+                </Button>
+              </div>
+            </form>
+          )}
+          
+          <p className="mt-4 text-center text-xs text-slate-500">
+            By signing in, you agree to our{' '}
+            <a href="#" className="text-blue-600 hover:underline">Terms of Service</a>
+            {' '}and{' '}
+            <a href="#" className="text-blue-600 hover:underline">Privacy Policy</a>
           </p>
         </CardContent>
       </Card>
