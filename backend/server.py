@@ -3253,17 +3253,22 @@ async def get_lead(lead_id: str, request: Request):
 
 @api_router.post("/leads")
 async def create_lead(lead_data: LeadCreate, request: Request):
-    """Create a new lead"""
+    """Create a new lead directly (for walk-ins, referrals, legacy data)"""
     user = await get_current_user(request)
     
-    if user.role not in ["Admin", "Manager", "PreSales"]:
+    if user.role not in ["Admin", "Manager", "SalesManager", "PreSales"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
     now = datetime.now(timezone.utc)
     lead_id = f"lead_{uuid.uuid4().hex[:8]}"
     
+    # Generate PID for direct leads
+    pid = await generate_pid()
+    
     new_lead = {
         "lead_id": lead_id,
+        "lead_type": "lead",  # Direct lead creation
+        "pid": pid,  # Assign PID immediately for direct leads
         # Customer Details (persistent across all stages)
         "customer_name": lead_data.customer_name,
         "customer_phone": lead_data.customer_phone,
@@ -3273,9 +3278,9 @@ async def create_lead(lead_data: LeadCreate, request: Request):
         "source": lead_data.source,
         "budget": lead_data.budget,
         # Lead Status
-        "status": lead_data.status,
+        "status": lead_data.status or "In Progress",
         "stage": "BC Call Done",
-        "assigned_to": user.user_id if user.role == "PreSales" else None,
+        "assigned_to": user.user_id if user.role == "PreSales" else lead_data.assigned_to,
         "designer_id": None,
         "is_converted": False,
         "project_id": None,
@@ -3285,16 +3290,21 @@ async def create_lead(lead_data: LeadCreate, request: Request):
             "user_id": "system",
             "user_name": "System",
             "role": "System",
-            "message": "Lead created",
+            "message": f"Lead created directly by {user.name}. PID: {pid}",
             "is_system": True,
             "created_at": now.isoformat()
         }],
+        "collaborators": [],
+        "files": [],
         "created_by": user.user_id,
         "updated_at": now.isoformat(),
         "created_at": now.isoformat()
     }
     
     await db.leads.insert_one(new_lead)
+    
+    # Remove _id before returning
+    new_lead.pop("_id", None)
     
     return new_lead
 
