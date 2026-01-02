@@ -10765,7 +10765,7 @@ async def get_warranty_by_project(project_id: str, request: Request):
 
 @api_router.put("/warranties/{warranty_id}")
 async def update_warranty(warranty_id: str, request: Request):
-    """Update warranty details (files, materials, modules, notes)"""
+    """Update warranty details (files, materials, modules, notes, and dates for Admin)"""
     user = await get_current_user(request)
     
     if user.role not in ["Admin", "SalesManager", "ProductionOpsManager"]:
@@ -10779,15 +10779,48 @@ async def update_warranty(warranty_id: str, request: Request):
     now = datetime.now(timezone.utc)
     update_fields = {"updated_at": now.isoformat()}
     
+    # Standard fields - all managers can update
     allowed_fields = ["warranty_book_url", "vendor_warranty_files", "materials_list", "modules_list", "notes"]
     for field in allowed_fields:
         if field in body:
             update_fields[field] = body[field]
     
+    # Admin-only fields - warranty dates and period
+    admin_fields = ["warranty_start_date", "warranty_end_date", "warranty_period_years"]
+    if user.role == "Admin":
+        for field in admin_fields:
+            if field in body:
+                update_fields[field] = body[field]
+        
+        # If warranty_period_years is provided, recalculate end date
+        if "warranty_period_years" in body and "warranty_start_date" in body:
+            try:
+                start_date = datetime.strptime(body["warranty_start_date"], "%Y-%m-%d")
+                end_date = start_date + timedelta(days=365 * int(body["warranty_period_years"]))
+                update_fields["warranty_end_date"] = end_date.strftime("%Y-%m-%d")
+            except Exception as e:
+                logger.warning(f"Error calculating warranty end date: {e}")
+    
     await db.warranties.update_one(
         {"warranty_id": warranty_id},
         {"$set": update_fields}
     )
+    
+    # Log the update if dates were changed
+    if any(f in body for f in admin_fields):
+        activity_entry = {
+            "id": str(uuid.uuid4()),
+            "type": "warranty_update",
+            "message": f"Warranty dates updated by {user.name}",
+            "user_id": user.user_id,
+            "user_name": user.name,
+            "timestamp": now.isoformat(),
+            "metadata": {k: body[k] for k in admin_fields if k in body}
+        }
+        await db.warranties.update_one(
+            {"warranty_id": warranty_id},
+            {"$push": {"activity": activity_entry}}
+        )
     
     updated = await db.warranties.find_one({"warranty_id": warranty_id}, {"_id": 0})
     return updated
