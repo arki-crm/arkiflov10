@@ -586,6 +586,42 @@ STAGE_ORDER = [
     "Handover"
 ]
 
+# Default TAT days for substages (used in timeline regeneration)
+DEFAULT_TAT_DAYS = {
+    "site_measurement": 1,
+    "design_meeting_1": 3,
+    "design_meeting_2": 2,
+    "design_meeting_3": 2,
+    "final_design_presentation": 3,
+    "material_selection": 2,
+    "payment_collection_50": 2,
+    "production_drawing_prep": 3,
+    "validation_internal": 2,
+    "kws_signoff": 2,
+    "kickoff_meeting": 2,
+    "vendor_mapping": 3,
+    "factory_slot_allocation": 3,
+    "jit_delivery_plan": 3,
+    "non_modular_dependency": 5,
+    "raw_material_procurement": 5,
+    "production_kickstart": 4,
+    "factory_qc": 5,
+    "production_ready": 3,
+    "payment_collection_45": 2,
+    "dispatch_scheduled": 2,
+    "installation_team_scheduled": 2,
+    "materials_dispatched": 3,
+    "delivery_confirmed": 2,
+    "final_inspection": 2,
+    "cleaning": 1,
+    "handover_docs": 1,
+    "project_handover": 1,
+    "csat": 3,
+    "review_video_photos": 2,
+    "issue_warranty_book": 1,
+    "closed": 1
+}
+
 # ============ DESIGN WORKFLOW SYSTEM (Phase 15) ============
 
 # 9-Step Design Workflow Stages (after booking)
