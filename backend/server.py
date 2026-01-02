@@ -3197,11 +3197,11 @@ async def add_collaborator(project_id: str, collab_data: CollaboratorAdd, reques
 
 @api_router.delete("/projects/{project_id}/collaborators/{user_id}")
 async def remove_collaborator(project_id: str, user_id: str, request: Request):
-    """Remove a collaborator (Admin only)"""
+    """Remove a collaborator (Admin or Manager)"""
     user = await get_current_user(request)
     
-    if user.role != "Admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+    if user.role not in ["Admin", "Manager", "SalesManager", "DesignManager", "ProductionOpsManager"]:
+        raise HTTPException(status_code=403, detail="Manager access required")
     
     result = await db.projects.update_one(
         {"project_id": project_id},
