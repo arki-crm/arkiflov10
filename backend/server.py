@@ -246,7 +246,8 @@ class LeadCreate(BaseModel):
     customer_requirements: Optional[str] = None
     source: str = "Others"
     budget: Optional[float] = None
-    status: str = "New"
+    status: str = "In Progress"
+    assigned_to: Optional[str] = None  # For direct lead creation
 
 class LeadUpdate(BaseModel):
     """For updating customer details - respects role-based permissions"""
