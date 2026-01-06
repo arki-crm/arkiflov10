@@ -1973,6 +1973,9 @@ async def get_project(project_id: str, request: Request):
         "files": project.get("files", []),
         "notes": project.get("notes", []),
         "lead_id": project.get("lead_id"),
+        # CRITICAL: Include milestone state for proper rehydration on page load
+        "completed_substages": project.get("completed_substages", []),
+        "percentage_substages": project.get("percentage_substages", {}),
         "updated_at": updated_at,
         "created_at": created_at
     }
