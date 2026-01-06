@@ -1900,10 +1900,12 @@ async def list_projects(request: Request, stage: Optional[str] = None, search: O
         
         result.append({
             "project_id": p["project_id"],
+            "pid": p.get("pid"),  # CRITICAL: Include PID in list
             "project_name": p["project_name"],
             "client_name": p["client_name"],
             "client_phone": p["client_phone"],
             "stage": p["stage"],
+            "hold_status": p.get("hold_status", "Active"),
             "collaborators": collaborator_details,
             "summary": p.get("summary", ""),
             "updated_at": updated_at,
