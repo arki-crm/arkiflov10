@@ -7879,6 +7879,86 @@ async def get_leads_report(request: Request):
         "presales_performance": presales_list
     }
 
+# ============ PRE-SALES LIST API (CRITICAL) ============
+
+@api_router.get("/presales")
+async def list_presales_leads(request: Request, status: Optional[str] = None):
+    """
+    List pre-sales leads ONLY (lead_type='presales').
+    These are leads that have NOT been promoted to the sales pipeline yet.
+    """
+    user = await get_current_user(request)
+    
+    if user.role not in ["Admin", "Manager", "SalesManager", "PreSales"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Query ONLY presales leads (not converted to regular leads)
+    query = {
+        "lead_type": "presales",
+        "is_converted": False
+    }
+    
+    # PreSales role sees only their assigned leads
+    if user.role == "PreSales":
+        query["assigned_to"] = user.user_id
+    
+    # Status filter
+    if status and status != "all":
+        query["status"] = status
+    
+    # Fetch presales leads
+    presales_leads = await db.leads.find(query, {"_id": 0}).to_list(1000)
+    
+    # Get assigned user details
+    all_user_ids = set()
+    for lead in presales_leads:
+        if lead.get("assigned_to"):
+            all_user_ids.add(lead["assigned_to"])
+    
+    users_map = {}
+    if all_user_ids:
+        users_list = await db.users.find(
+            {"user_id": {"$in": list(all_user_ids)}},
+            {"_id": 0, "user_id": 1, "name": 1, "picture": 1, "role": 1}
+        ).to_list(100)
+        users_map = {u["user_id"]: u for u in users_list}
+    
+    # Build response with user details
+    result = []
+    for lead in presales_leads:
+        # Convert datetime to string if needed
+        updated_at = lead.get("updated_at", lead.get("created_at", ""))
+        created_at = lead.get("created_at", "")
+        if isinstance(updated_at, datetime):
+            updated_at = updated_at.isoformat()
+        if isinstance(created_at, datetime):
+            created_at = created_at.isoformat()
+        
+        assigned_user = users_map.get(lead.get("assigned_to"))
+        
+        result.append({
+            "lead_id": lead["lead_id"],
+            "lead_type": lead.get("lead_type", "presales"),
+            "customer_name": lead["customer_name"],
+            "customer_phone": lead["customer_phone"],
+            "customer_email": lead.get("customer_email"),
+            "source": lead.get("source"),
+            "budget": lead.get("budget"),
+            "status": lead.get("status", "New"),
+            "stage": lead.get("stage", "New"),
+            "assigned_to": lead.get("assigned_to"),
+            "assigned_to_details": assigned_user,
+            "is_converted": lead.get("is_converted", False),
+            "updated_at": updated_at,
+            "created_at": created_at
+        })
+    
+    # Sort by created_at descending (newest first)
+    result.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    
+    return result
+
+
 # ============ PRE-SALES DETAIL APIS ============
 
 @api_router.post("/presales/create")
