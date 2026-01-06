@@ -1950,14 +1950,27 @@ async def get_project(project_id: str, request: Request):
     
     return {
         "project_id": project["project_id"],
+        "pid": project.get("pid"),  # CRITICAL: Include PID
         "project_name": project["project_name"],
         "client_name": project["client_name"],
         "client_phone": project["client_phone"],
+        "client_email": project.get("client_email"),
+        "client_address": project.get("client_address"),
+        "client_requirements": project.get("client_requirements"),
+        "lead_source": project.get("lead_source"),
+        "budget": project.get("budget"),
+        "project_value": project.get("project_value"),
         "stage": project["stage"],
+        "hold_status": project.get("hold_status", "Active"),
+        "hold_reason": project.get("hold_reason"),
         "collaborators": collaborator_details,
         "summary": project.get("summary", ""),
         "timeline": project.get("timeline", []),
+        "lead_timeline": project.get("lead_timeline", []),
         "comments": project.get("comments", []),
+        "files": project.get("files", []),
+        "notes": project.get("notes", []),
+        "lead_id": project.get("lead_id"),
         "updated_at": updated_at,
         "created_at": created_at
     }
