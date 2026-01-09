@@ -1473,6 +1473,9 @@ def format_user_response(user_doc):
             return dt.isoformat()
         return str(dt) if dt else None
     
+    # Get effective permissions
+    effective_permissions = get_user_permissions(user_doc)
+    
     return {
         "user_id": user_doc.get("user_id"),
         "email": user_doc.get("email"),
@@ -1482,6 +1485,9 @@ def format_user_response(user_doc):
         "phone": user_doc.get("phone"),
         "status": user_doc.get("status", "Active"),
         "senior_manager_view": user_doc.get("senior_manager_view", False),  # V1 permission toggle
+        "custom_permissions": user_doc.get("custom_permissions", False),
+        "permissions": user_doc.get("permissions", []),
+        "effective_permissions": effective_permissions,
         "created_at": format_dt(user_doc.get("created_at")),
         "updated_at": format_dt(user_doc.get("updated_at")),
         "last_login": format_dt(user_doc.get("last_login"))
