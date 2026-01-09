@@ -71,7 +71,15 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     checkAuth,
-    setUserFromCallback
+    setUserFromCallback,
+    // Permission helper
+    hasPermission: (permission) => {
+      if (!user) return false;
+      // Admin always has all permissions
+      if (user.role === 'Admin') return true;
+      // Check effective permissions
+      return (user.effective_permissions || []).includes(permission);
+    }
   };
 
   return (
