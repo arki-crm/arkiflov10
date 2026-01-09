@@ -362,7 +362,7 @@ const UserEdit = () => {
         </Button>
       </div>
 
-      <Tabs defaultValue="profile" className="w-full">
+      <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="profile">Profile</TabsTrigger>
           {isAdmin && <TabsTrigger value="permissions">Permissions</TabsTrigger>}
