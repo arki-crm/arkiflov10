@@ -1047,17 +1047,28 @@ async def create_session(request: SessionRequest, response: Response):
         logger.error(f"Auth API request failed: {e}")
         raise HTTPException(status_code=500, detail="Authentication service error")
 
-@api_router.get("/auth/me", response_model=UserResponse)
+@api_router.get("/auth/me")
 async def get_me(request: Request):
-    """Get current authenticated user"""
+    """Get current authenticated user with permissions"""
     user = await get_current_user(request)
-    return UserResponse(
-        user_id=user.user_id,
-        email=user.email,
-        name=user.name,
-        picture=user.picture,
-        role=user.role
-    )
+    
+    # Get full user doc for permissions
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not user_doc:
+        user_doc = {"role": user.role}
+    
+    effective_permissions = get_user_permissions(user_doc)
+    
+    return {
+        "user_id": user.user_id,
+        "email": user.email,
+        "name": user.name,
+        "picture": user.picture,
+        "role": user.role,
+        "custom_permissions": user_doc.get("custom_permissions", False),
+        "permissions": user_doc.get("permissions", []),
+        "effective_permissions": effective_permissions
+    }
 
 @api_router.post("/auth/logout")
 async def logout(request: Request, response: Response):
