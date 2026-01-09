@@ -203,6 +203,44 @@ const Users = () => {
     });
   };
 
+  // Handle create user with local password
+  const handleCreateUser = async () => {
+    // Validation
+    if (!newUser.name.trim()) {
+      toast.error('Name is required');
+      return;
+    }
+    if (!newUser.email.trim()) {
+      toast.error('Email is required');
+      return;
+    }
+    if (!newUser.password || newUser.password.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+    
+    try {
+      setCreating(true);
+      await axios.post(`${API_URL}/api/users/create-local`, {
+        name: newUser.name.trim(),
+        email: newUser.email.trim(),
+        password: newUser.password,
+        role: newUser.role,
+        phone: newUser.phone.trim() || null
+      }, { withCredentials: true });
+      
+      toast.success('User created successfully');
+      setCreateDialogOpen(false);
+      setNewUser({ name: '', email: '', password: '', role: 'Designer', phone: '' });
+      fetchUsers();
+    } catch (err) {
+      console.error('Error creating user:', err);
+      toast.error(err.response?.data?.detail || 'Failed to create user');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   // Filter users by search query
   const filteredUsers = users.filter(u => {
     if (!searchQuery) return true;
