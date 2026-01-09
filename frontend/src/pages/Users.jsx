@@ -467,6 +467,12 @@ const Users = () => {
                                   Edit User
                                 </DropdownMenuItem>
                               )}
+                              {user?.role === 'Admin' && (
+                                <DropdownMenuItem onClick={() => navigate(`/users/${u.user_id}?tab=permissions`)}>
+                                  <Key className="w-4 h-4 mr-2" />
+                                  Manage Permissions
+                                </DropdownMenuItem>
+                              )}
                               {canToggleStatus(u) && (
                                 <DropdownMenuItem onClick={() => handleToggleStatus(u)}>
                                   {u.status === 'Active' ? (
