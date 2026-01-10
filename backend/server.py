@@ -2792,6 +2792,47 @@ def get_all_substages():
             })
     return all_substages
 
+
+# Mapping from milestone group ID to required permission
+MILESTONE_GROUP_PERMISSIONS = {
+    "design_finalization": "milestones.update.design",
+    "production": "milestones.update.production",
+    "delivery": "milestones.update.delivery",
+    "installation": "milestones.update.installation",
+    "handover": "milestones.update.handover"
+}
+
+
+def get_milestone_permission_for_substage(substage_id: str) -> str:
+    """Get the required permission for updating a specific substage"""
+    for group in MILESTONE_GROUPS:
+        for sub in group["subStages"]:
+            if sub["id"] == substage_id:
+                return MILESTONE_GROUP_PERMISSIONS.get(group["id"], "")
+    return ""
+
+
+def check_milestone_permission(user_doc: dict, substage_id: str) -> tuple[bool, str]:
+    """
+    Check if user has explicit permission to update a milestone.
+    Returns (has_permission, error_message)
+    """
+    required_permission = get_milestone_permission_for_substage(substage_id)
+    if not required_permission:
+        return False, "Invalid substage"
+    
+    # Check explicit permission - NO role fallback
+    if has_permission(user_doc, required_permission):
+        return True, ""
+    
+    # Get friendly group name for error message
+    for group in MILESTONE_GROUPS:
+        for sub in group["subStages"]:
+            if sub["id"] == substage_id:
+                return False, f"You don't have permission to update {group['name']} milestones. Required permission: {required_permission}"
+    
+    return False, f"Permission denied. Required: {required_permission}"
+
 def can_complete_substage(substage_id: str, completed_substages: list):
     """Check if a sub-stage can be completed (previous must be done)"""
     all_substages = get_all_substages()
