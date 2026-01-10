@@ -16429,7 +16429,9 @@ async def get_company_settings(request: Request):
     settings = await db.finance_company_settings.find_one({}, {"_id": 0})
     if not settings:
         return COMPANY_SETTINGS_DEFAULT
-    return settings
+    # Merge with defaults for any missing fields
+    merged = {**COMPANY_SETTINGS_DEFAULT, **settings}
+    return merged
 
 
 @api_router.post("/finance/company-settings")
@@ -16444,17 +16446,43 @@ async def update_company_settings(request: Request):
     body = await request.json()
     now = datetime.now(timezone.utc)
     
-    # Validate and update
+    # Get existing settings
+    existing = await db.finance_company_settings.find_one({}, {"_id": 0}) or {}
+    
+    # Validate and update - comprehensive fields
     settings = {
-        "company_name": body.get("company_name", COMPANY_SETTINGS_DEFAULT["company_name"]),
-        "company_tagline": body.get("company_tagline", ""),
-        "company_address": body.get("company_address", ""),
-        "company_phone": body.get("company_phone", ""),
-        "company_email": body.get("company_email", ""),
-        "company_gstin": body.get("company_gstin", ""),
-        "authorized_signatory": body.get("authorized_signatory", "Authorized Signatory"),
-        "logo_base64": body.get("logo_base64"),
-        "primary_color": body.get("primary_color", "#2563eb"),
+        # Company Identity
+        "legal_name": body.get("legal_name", existing.get("legal_name", COMPANY_SETTINGS_DEFAULT["legal_name"])),
+        "brand_name": body.get("brand_name", existing.get("brand_name", "")),
+        "tagline": body.get("tagline", existing.get("tagline", "")),
+        "gstin": body.get("gstin", existing.get("gstin", "")),
+        "pan": body.get("pan", existing.get("pan", "")),
+        
+        # Address (Structured)
+        "address_line1": body.get("address_line1", existing.get("address_line1", "")),
+        "address_line2": body.get("address_line2", existing.get("address_line2", "")),
+        "city": body.get("city", existing.get("city", "")),
+        "state": body.get("state", existing.get("state", "")),
+        "pincode": body.get("pincode", existing.get("pincode", "")),
+        "country": body.get("country", existing.get("country", "India")),
+        
+        # Contact & Digital
+        "primary_email": body.get("primary_email", existing.get("primary_email", "")),
+        "secondary_email": body.get("secondary_email", existing.get("secondary_email", "")),
+        "phone": body.get("phone", existing.get("phone", "")),
+        "website": body.get("website", existing.get("website", "")),
+        
+        # Branding
+        "logo_base64": body.get("logo_base64", existing.get("logo_base64")),
+        "favicon_base64": body.get("favicon_base64", existing.get("favicon_base64")),
+        "primary_color": body.get("primary_color", existing.get("primary_color", "#1f2937")),
+        "secondary_color": body.get("secondary_color", existing.get("secondary_color", "#6b7280")),
+        
+        # Document Settings
+        "authorized_signatory": body.get("authorized_signatory", existing.get("authorized_signatory", "Authorized Signatory")),
+        "receipt_footer_note": body.get("receipt_footer_note", existing.get("receipt_footer_note", "This is a system-generated receipt.")),
+        
+        # Metadata
         "updated_by": user.user_id,
         "updated_at": now
     }
