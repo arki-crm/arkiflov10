@@ -15576,6 +15576,806 @@ async def get_safe_spend_recommendation(request: Request):
     }
 
 
+# ============================================================================
+# ============ PAYMENT & RECEIPT SYSTEM (PHASE 4) ============================
+# ============================================================================
+# Flexible payment schedules, receipts, invoices, refunds, cancellations
+# ALL permission-based via Admin checkboxes - NO hardcoded role logic
+
+# Default payment stages (can be customized per project)
+DEFAULT_PAYMENT_STAGES = [
+    {"stage_name": "Booking Amount", "percentage": None, "fixed_amount": 25000, "trigger": "booking", "order": 1},
+    {"stage_name": "After Design Finalization", "percentage": 50, "fixed_amount": None, "trigger": "design_complete", "order": 2},
+    {"stage_name": "After Production Completion", "percentage": 45, "fixed_amount": None, "trigger": "production_complete", "order": 3}
+]
+
+# Payment modes
+PAYMENT_MODES = ["cash", "bank_transfer", "upi", "cheque", "card", "other"]
+
+
+class PaymentStageCreate(BaseModel):
+    stage_name: str
+    percentage: Optional[float] = None  # Either percentage or fixed_amount
+    fixed_amount: Optional[float] = None
+    trigger: Optional[str] = None  # booking, design_complete, production_complete, custom
+    order: int = 1
+
+class PaymentScheduleUpdate(BaseModel):
+    stages: List[dict]  # List of payment stages
+
+class ReceiptCreate(BaseModel):
+    project_id: str
+    amount: float
+    payment_mode: str
+    account_id: str
+    stage_name: Optional[str] = None  # Which payment stage this is for
+    notes: Optional[str] = None
+    payment_date: Optional[str] = None  # ISO date string
+
+class RefundCreate(BaseModel):
+    project_id: str
+    amount: float
+    refund_type: str  # full, partial, forfeited
+    reason: str
+    account_id: str
+    notes: Optional[str] = None
+
+
+# ============ PAYMENT SCHEDULE ============
+
+@api_router.get("/finance/payment-schedule/{project_id}")
+async def get_payment_schedule(project_id: str, request: Request):
+    """Get payment schedule for a project"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_project_finance"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get project
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Check if custom schedule exists
+    schedule = await db.finance_payment_schedules.find_one(
+        {"project_id": project_id},
+        {"_id": 0}
+    )
+    
+    contract_value = project.get("project_value", 0) or 0
+    
+    if schedule:
+        stages = schedule.get("stages", [])
+    else:
+        # Use default schedule
+        stages = []
+        for s in DEFAULT_PAYMENT_STAGES:
+            stage = s.copy()
+            if stage["percentage"]:
+                stage["calculated_amount"] = round(contract_value * stage["percentage"] / 100, 0)
+            else:
+                stage["calculated_amount"] = stage["fixed_amount"]
+            stages.append(stage)
+    
+    # Calculate amounts for percentage-based stages
+    for stage in stages:
+        if stage.get("percentage") and not stage.get("calculated_amount"):
+            stage["calculated_amount"] = round(contract_value * stage["percentage"] / 100, 0)
+        elif stage.get("fixed_amount") and not stage.get("calculated_amount"):
+            stage["calculated_amount"] = stage["fixed_amount"]
+    
+    # Get receipts for this project to determine paid status
+    receipts = await db.finance_receipts.find(
+        {"project_id": project_id, "status": {"$ne": "cancelled"}},
+        {"_id": 0}
+    ).to_list(100)
+    
+    total_received = sum(r.get("amount", 0) for r in receipts)
+    
+    # Mark stages as paid
+    running_total = 0
+    for stage in stages:
+        stage_amount = stage.get("calculated_amount", 0)
+        if running_total + stage_amount <= total_received:
+            stage["status"] = "paid"
+            stage["paid_amount"] = stage_amount
+        elif running_total < total_received:
+            stage["status"] = "partial"
+            stage["paid_amount"] = total_received - running_total
+        else:
+            stage["status"] = "pending"
+            stage["paid_amount"] = 0
+        running_total += stage_amount
+    
+    return {
+        "project_id": project_id,
+        "contract_value": contract_value,
+        "is_custom": schedule is not None,
+        "stages": stages,
+        "total_expected": sum(s.get("calculated_amount", 0) for s in stages),
+        "total_received": total_received,
+        "balance_remaining": contract_value - total_received
+    }
+
+
+@api_router.put("/finance/payment-schedule/{project_id}")
+async def update_payment_schedule(project_id: str, update: PaymentScheduleUpdate, request: Request):
+    """Update payment schedule for a project - permission controlled"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Check permission - NOT role
+    if not has_permission(user_doc, "finance.edit_payment_schedule"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.edit_payment_schedule permission")
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    schedule_doc = {
+        "project_id": project_id,
+        "stages": update.stages,
+        "is_custom": True,
+        "updated_by": user.user_id,
+        "updated_by_name": user.name,
+        "updated_at": now
+    }
+    
+    await db.finance_payment_schedules.update_one(
+        {"project_id": project_id},
+        {"$set": schedule_doc, "$setOnInsert": {"created_at": now}},
+        upsert=True
+    )
+    
+    return {"success": True, "message": "Payment schedule updated"}
+
+
+@api_router.post("/finance/payment-schedule/{project_id}/reset")
+async def reset_payment_schedule(project_id: str, request: Request):
+    """Reset to default payment schedule"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.edit_payment_schedule"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    await db.finance_payment_schedules.delete_one({"project_id": project_id})
+    return {"success": True, "message": "Payment schedule reset to default"}
+
+
+# ============ RECEIPTS ============
+
+@api_router.get("/finance/receipts")
+async def list_receipts(
+    request: Request,
+    project_id: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    limit: int = 100
+):
+    """List receipts with optional filters"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_receipts"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.view_receipts permission")
+    
+    query = {"status": {"$ne": "cancelled"}}
+    if project_id:
+        query["project_id"] = project_id
+    if from_date:
+        query["payment_date"] = {"$gte": from_date}
+    if to_date:
+        if "payment_date" in query:
+            query["payment_date"]["$lte"] = to_date
+        else:
+            query["payment_date"] = {"$lte": to_date}
+    
+    receipts = await db.finance_receipts.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    
+    # Enrich with project and account info
+    for r in receipts:
+        project = await db.projects.find_one({"project_id": r.get("project_id")}, {"_id": 0, "pid": 1, "project_name": 1, "client_name": 1})
+        if project:
+            r["pid"] = (project.get("pid") or "").replace("ARKI-", "")
+            r["project_name"] = project.get("project_name")
+            r["client_name"] = project.get("client_name")
+        account = await db.accounting_accounts.find_one({"account_id": r.get("account_id")}, {"_id": 0, "account_name": 1})
+        if account:
+            r["account_name"] = account.get("account_name")
+    
+    return receipts
+
+
+@api_router.get("/finance/receipts/{receipt_id}")
+async def get_receipt(receipt_id: str, request: Request):
+    """Get a single receipt"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_receipts"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    receipt = await db.finance_receipts.find_one({"receipt_id": receipt_id}, {"_id": 0})
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    
+    # Enrich
+    project = await db.projects.find_one({"project_id": receipt.get("project_id")}, {"_id": 0})
+    if project:
+        receipt["project"] = {
+            "pid": (project.get("pid") or "").replace("ARKI-", ""),
+            "project_name": project.get("project_name"),
+            "client_name": project.get("client_name"),
+            "contract_value": project.get("project_value", 0)
+        }
+    
+    account = await db.accounting_accounts.find_one({"account_id": receipt.get("account_id")}, {"_id": 0})
+    if account:
+        receipt["account_name"] = account.get("account_name")
+    
+    # Get total received for this project
+    all_receipts = await db.finance_receipts.find(
+        {"project_id": receipt.get("project_id"), "status": {"$ne": "cancelled"}},
+        {"_id": 0, "amount": 1}
+    ).to_list(100)
+    total_received = sum(r.get("amount", 0) for r in all_receipts)
+    receipt["total_received"] = total_received
+    receipt["balance_remaining"] = (project.get("project_value", 0) or 0) - total_received
+    
+    return receipt
+
+
+@api_router.post("/finance/receipts")
+async def create_receipt(receipt: ReceiptCreate, request: Request):
+    """Create a payment receipt - permission controlled"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.add_receipt"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.add_receipt permission")
+    
+    # Validate project
+    project = await db.projects.find_one({"project_id": receipt.project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Validate account
+    account = await db.accounting_accounts.find_one({"account_id": receipt.account_id})
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    # Validate payment mode
+    if receipt.payment_mode not in PAYMENT_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid payment mode. Must be one of: {', '.join(PAYMENT_MODES)}")
+    
+    now = datetime.now(timezone.utc)
+    payment_date = receipt.payment_date or now.strftime("%Y-%m-%d")
+    
+    # Generate receipt number (RCP-YYYYMMDD-XXXX)
+    date_part = now.strftime("%Y%m%d")
+    count = await db.finance_receipts.count_documents({"receipt_number": {"$regex": f"^RCP-{date_part}"}})
+    receipt_number = f"RCP-{date_part}-{count + 1:04d}"
+    
+    # Calculate totals
+    existing_receipts = await db.finance_receipts.find(
+        {"project_id": receipt.project_id, "status": {"$ne": "cancelled"}},
+        {"_id": 0, "amount": 1}
+    ).to_list(100)
+    total_before = sum(r.get("amount", 0) for r in existing_receipts)
+    contract_value = project.get("project_value", 0) or 0
+    
+    receipt_doc = {
+        "receipt_id": f"rcp_{secrets.token_hex(4)}",
+        "receipt_number": receipt_number,
+        "project_id": receipt.project_id,
+        "amount": receipt.amount,
+        "payment_mode": receipt.payment_mode,
+        "account_id": receipt.account_id,
+        "stage_name": receipt.stage_name,
+        "payment_date": payment_date,
+        "notes": receipt.notes,
+        "status": "active",
+        "total_before": total_before,
+        "total_after": total_before + receipt.amount,
+        "balance_remaining": contract_value - total_before - receipt.amount,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now
+    }
+    
+    # Also create a cashbook transaction (inflow)
+    txn_doc = {
+        "transaction_id": f"txn_{secrets.token_hex(4)}",
+        "transaction_type": "inflow",
+        "amount": receipt.amount,
+        "mode": receipt.payment_mode,
+        "category_id": None,  # Customer payment
+        "account_id": receipt.account_id,
+        "project_id": receipt.project_id,
+        "paid_to": None,
+        "received_from": project.get("client_name"),
+        "remarks": f"Payment receipt {receipt_number} - {receipt.stage_name or 'Customer Payment'}",
+        "receipt_id": receipt_doc["receipt_id"],
+        "is_verified": False,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.finance_receipts.insert_one(receipt_doc)
+    await db.accounting_transactions.insert_one(txn_doc)
+    
+    receipt_doc.pop("_id", None)
+    return receipt_doc
+
+
+@api_router.post("/finance/receipts/{receipt_id}/cancel")
+async def cancel_receipt(receipt_id: str, reason: str, request: Request):
+    """Cancel a receipt"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.issue_refund"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    receipt = await db.finance_receipts.find_one({"receipt_id": receipt_id})
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    
+    if receipt.get("status") == "cancelled":
+        raise HTTPException(status_code=400, detail="Receipt already cancelled")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.finance_receipts.update_one(
+        {"receipt_id": receipt_id},
+        {"$set": {
+            "status": "cancelled",
+            "cancelled_by": user.user_id,
+            "cancelled_by_name": user.name,
+            "cancelled_at": now,
+            "cancellation_reason": reason
+        }}
+    )
+    
+    # Also cancel the linked transaction
+    await db.accounting_transactions.update_one(
+        {"receipt_id": receipt_id},
+        {"$set": {"is_cancelled": True, "cancelled_at": now, "cancellation_reason": reason}}
+    )
+    
+    return {"success": True, "message": "Receipt cancelled"}
+
+
+# ============ REFUNDS ============
+
+@api_router.get("/finance/refunds")
+async def list_refunds(request: Request, project_id: Optional[str] = None):
+    """List refunds"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_receipts"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if project_id:
+        query["project_id"] = project_id
+    
+    refunds = await db.finance_refunds.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return refunds
+
+
+@api_router.post("/finance/refunds")
+async def create_refund(refund: RefundCreate, request: Request):
+    """Create a refund - permission controlled"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.issue_refund"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.issue_refund permission")
+    
+    project = await db.projects.find_one({"project_id": refund.project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Validate refund type
+    if refund.refund_type not in ["full", "partial", "forfeited"]:
+        raise HTTPException(status_code=400, detail="Invalid refund type")
+    
+    # Get total received
+    receipts = await db.finance_receipts.find(
+        {"project_id": refund.project_id, "status": {"$ne": "cancelled"}},
+        {"_id": 0, "amount": 1}
+    ).to_list(100)
+    total_received = sum(r.get("amount", 0) for r in receipts)
+    
+    # Validate refund amount
+    if refund.refund_type != "forfeited" and refund.amount > total_received:
+        raise HTTPException(status_code=400, detail="Refund amount cannot exceed total received")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Generate refund number
+    date_part = now.strftime("%Y%m%d")
+    count = await db.finance_refunds.count_documents({"refund_number": {"$regex": f"^REF-{date_part}"}})
+    refund_number = f"REF-{date_part}-{count + 1:04d}"
+    
+    refund_doc = {
+        "refund_id": f"ref_{secrets.token_hex(4)}",
+        "refund_number": refund_number,
+        "project_id": refund.project_id,
+        "amount": refund.amount if refund.refund_type != "forfeited" else 0,
+        "forfeited_amount": total_received if refund.refund_type == "forfeited" else (total_received - refund.amount if refund.refund_type == "partial" else 0),
+        "refund_type": refund.refund_type,
+        "reason": refund.reason,
+        "account_id": refund.account_id,
+        "notes": refund.notes,
+        "total_received_before": total_received,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now
+    }
+    
+    # Create outflow transaction for actual refund
+    if refund.refund_type != "forfeited" and refund.amount > 0:
+        txn_doc = {
+            "transaction_id": f"txn_{secrets.token_hex(4)}",
+            "transaction_type": "outflow",
+            "amount": refund.amount,
+            "mode": "bank_transfer",
+            "category_id": None,
+            "account_id": refund.account_id,
+            "project_id": refund.project_id,
+            "paid_to": project.get("client_name"),
+            "remarks": f"Refund {refund_number} - {refund.reason}",
+            "refund_id": refund_doc["refund_id"],
+            "is_verified": False,
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.accounting_transactions.insert_one(txn_doc)
+    
+    await db.finance_refunds.insert_one(refund_doc)
+    refund_doc.pop("_id", None)
+    
+    return refund_doc
+
+
+# ============ INVOICES (GST - CONDITIONAL) ============
+
+@api_router.get("/finance/invoices")
+async def list_invoices(request: Request, project_id: Optional[str] = None):
+    """List invoices"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_receipts"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if project_id:
+        query["project_id"] = project_id
+    
+    invoices = await db.finance_invoices.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    # Enrich with project info
+    for inv in invoices:
+        project = await db.projects.find_one({"project_id": inv.get("project_id")}, {"_id": 0, "pid": 1, "project_name": 1, "client_name": 1})
+        if project:
+            inv["pid"] = (project.get("pid") or "").replace("ARKI-", "")
+            inv["project_name"] = project.get("project_name")
+            inv["client_name"] = project.get("client_name")
+    
+    return invoices
+
+
+@api_router.post("/finance/invoices")
+async def create_invoice(project_id: str, request: Request, include_gst: bool = True):
+    """Create an invoice - permission controlled, NOT automatic"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.create_invoice"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.create_invoice permission")
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Check if project is GST applicable (if not, warn)
+    is_gst_project = project.get("is_gst_applicable", False)
+    if include_gst and not is_gst_project:
+        # Allow but warn
+        pass
+    
+    # Get total receipts (advances to adjust)
+    receipts = await db.finance_receipts.find(
+        {"project_id": project_id, "status": {"$ne": "cancelled"}},
+        {"_id": 0}
+    ).to_list(100)
+    total_advances = sum(r.get("amount", 0) for r in receipts)
+    
+    contract_value = project.get("project_value", 0) or 0
+    
+    # Calculate GST if applicable
+    gst_rate = 18  # Standard GST rate
+    if include_gst and is_gst_project:
+        base_amount = contract_value / (1 + gst_rate / 100)
+        cgst = base_amount * (gst_rate / 2) / 100
+        sgst = base_amount * (gst_rate / 2) / 100
+        total_gst = cgst + sgst
+    else:
+        base_amount = contract_value
+        cgst = 0
+        sgst = 0
+        total_gst = 0
+    
+    now = datetime.now(timezone.utc)
+    
+    # Generate invoice number
+    date_part = now.strftime("%Y%m%d")
+    count = await db.finance_invoices.count_documents({"invoice_number": {"$regex": f"^INV-{date_part}"}})
+    invoice_number = f"INV-{date_part}-{count + 1:04d}"
+    
+    invoice_doc = {
+        "invoice_id": f"inv_{secrets.token_hex(4)}",
+        "invoice_number": invoice_number,
+        "project_id": project_id,
+        "contract_value": contract_value,
+        "base_amount": round(base_amount, 2),
+        "cgst": round(cgst, 2),
+        "sgst": round(sgst, 2),
+        "total_gst": round(total_gst, 2),
+        "gross_amount": contract_value,
+        "advances_received": total_advances,
+        "balance_due": contract_value - total_advances,
+        "is_gst_applicable": is_gst_project and include_gst,
+        "gst_rate": gst_rate if (is_gst_project and include_gst) else 0,
+        "status": "generated",
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now
+    }
+    
+    await db.finance_invoices.insert_one(invoice_doc)
+    invoice_doc.pop("_id", None)
+    
+    return invoice_doc
+
+
+# ============ PROJECT GST FLAG ============
+
+@api_router.put("/finance/projects/{project_id}/gst-status")
+async def update_project_gst_status(project_id: str, is_gst_applicable: bool, request: Request):
+    """Mark a project as GST applicable or not"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.create_invoice"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    result = await db.projects.update_one(
+        {"project_id": project_id},
+        {"$set": {"is_gst_applicable": is_gst_applicable}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    return {"success": True, "message": f"GST status updated to {is_gst_applicable}"}
+
+
+# ============ PROJECT PAYMENT SUMMARY ============
+
+@api_router.get("/finance/project-payment-summary/{project_id}")
+async def get_project_payment_summary(project_id: str, request: Request):
+    """Get complete payment summary for a project"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_project_finance"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    project = await db.projects.find_one({"project_id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    contract_value = project.get("project_value", 0) or 0
+    
+    # Get receipts
+    receipts = await db.finance_receipts.find(
+        {"project_id": project_id, "status": {"$ne": "cancelled"}},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(100)
+    
+    total_received = sum(r.get("amount", 0) for r in receipts)
+    
+    # Get refunds
+    refunds = await db.finance_refunds.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).to_list(100)
+    
+    total_refunded = sum(r.get("amount", 0) for r in refunds)
+    total_forfeited = sum(r.get("forfeited_amount", 0) for r in refunds)
+    
+    # Get invoices
+    invoices = await db.finance_invoices.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).to_list(10)
+    
+    # Calculate recognized vs unearned
+    # For simplicity: recognize revenue based on project stage completion
+    # This could be customized based on business rules
+    advance_unearned = total_received - total_refunded  # All received is advance until invoiced
+    
+    net_received = total_received - total_refunded
+    balance_remaining = contract_value - net_received
+    
+    return {
+        "project": {
+            "project_id": project_id,
+            "pid": (project.get("pid") or "").replace("ARKI-", ""),
+            "project_name": project.get("project_name"),
+            "client_name": project.get("client_name"),
+            "status": project.get("status"),
+            "is_gst_applicable": project.get("is_gst_applicable", False)
+        },
+        "contract_value": contract_value,
+        "total_received": total_received,
+        "total_refunded": total_refunded,
+        "total_forfeited": total_forfeited,
+        "net_received": net_received,
+        "advance_unearned": advance_unearned,
+        "balance_remaining": balance_remaining,
+        "is_fully_paid": balance_remaining <= 0,
+        "receipts": receipts,
+        "refunds": refunds,
+        "invoices": invoices,
+        "receipt_count": len(receipts),
+        "has_invoice": len(invoices) > 0
+    }
+
+
+# ============ CANCELLATION ============
+
+@api_router.post("/finance/projects/{project_id}/cancel")
+async def cancel_project_financially(
+    project_id: str, 
+    refund_type: str,  # full, partial, forfeited
+    refund_amount: Optional[float] = 0,
+    reason: str = "Project Cancelled",
+    account_id: Optional[str] = None,
+    request: Request = None
+):
+    """Handle project cancellation from finance perspective"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.mark_cancellation"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.mark_cancellation permission")
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get total received
+    receipts = await db.finance_receipts.find(
+        {"project_id": project_id, "status": {"$ne": "cancelled"}},
+        {"_id": 0, "amount": 1}
+    ).to_list(100)
+    total_received = sum(r.get("amount", 0) for r in receipts)
+    
+    now = datetime.now(timezone.utc)
+    
+    # Create refund if applicable
+    if refund_type in ["full", "partial"] and (refund_amount or refund_type == "full"):
+        actual_refund = total_received if refund_type == "full" else refund_amount
+        
+        if actual_refund > total_received:
+            raise HTTPException(status_code=400, detail="Refund cannot exceed total received")
+        
+        if not account_id:
+            # Get default account
+            default_account = await db.accounting_accounts.find_one({"is_active": True})
+            if not default_account:
+                raise HTTPException(status_code=400, detail="No account specified for refund")
+            account_id = default_account.get("account_id")
+        
+        # Create refund record
+        date_part = now.strftime("%Y%m%d")
+        count = await db.finance_refunds.count_documents({"refund_number": {"$regex": f"^REF-{date_part}"}})
+        refund_number = f"REF-{date_part}-{count + 1:04d}"
+        
+        refund_doc = {
+            "refund_id": f"ref_{secrets.token_hex(4)}",
+            "refund_number": refund_number,
+            "project_id": project_id,
+            "amount": actual_refund,
+            "forfeited_amount": total_received - actual_refund,
+            "refund_type": refund_type,
+            "reason": reason,
+            "account_id": account_id,
+            "notes": "Project cancellation",
+            "total_received_before": total_received,
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "created_at": now
+        }
+        
+        await db.finance_refunds.insert_one(refund_doc)
+        
+        # Create outflow transaction
+        if actual_refund > 0:
+            txn_doc = {
+                "transaction_id": f"txn_{secrets.token_hex(4)}",
+                "transaction_type": "outflow",
+                "amount": actual_refund,
+                "mode": "bank_transfer",
+                "category_id": None,
+                "account_id": account_id,
+                "project_id": project_id,
+                "paid_to": project.get("client_name"),
+                "remarks": f"Refund {refund_number} - {reason}",
+                "refund_id": refund_doc["refund_id"],
+                "is_verified": False,
+                "created_by": user.user_id,
+                "created_by_name": user.name,
+                "created_at": now,
+                "updated_at": now
+            }
+            await db.accounting_transactions.insert_one(txn_doc)
+    elif refund_type == "forfeited":
+        # No refund, booking forfeited
+        refund_doc = {
+            "refund_id": f"ref_{secrets.token_hex(4)}",
+            "refund_number": f"REF-{now.strftime('%Y%m%d')}-FORF",
+            "project_id": project_id,
+            "amount": 0,
+            "forfeited_amount": total_received,
+            "refund_type": "forfeited",
+            "reason": reason,
+            "account_id": None,
+            "notes": "Booking forfeited - no refund",
+            "total_received_before": total_received,
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "created_at": now
+        }
+        await db.finance_refunds.insert_one(refund_doc)
+    
+    # Mark project as cancelled in finance
+    await db.finance_project_decisions.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            "is_cancelled": True,
+            "cancelled_at": now,
+            "cancelled_by": user.user_id,
+            "cancelled_by_name": user.name,
+            "cancellation_reason": reason,
+            "cancellation_refund_type": refund_type
+        }},
+        upsert=True
+    )
+    
+    return {
+        "success": True,
+        "message": f"Project cancellation processed - {refund_type}",
+        "total_received": total_received,
+        "refund_amount": refund_amount if refund_type == "partial" else (total_received if refund_type == "full" else 0),
+        "forfeited_amount": 0 if refund_type == "full" else (total_received - (refund_amount or 0))
+    }
+
+
 # ============ HEALTH CHECK ============
 
 @api_router.get("/")
