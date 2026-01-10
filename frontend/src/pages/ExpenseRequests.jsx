@@ -587,12 +587,12 @@ const ExpenseRequests = () => {
           <div className="space-y-4">
             <div>
               <Label>Project (Optional)</Label>
-              <Select value={newRequest.project_id} onValueChange={(v) => setNewRequest(p => ({ ...p, project_id: v }))}>
+              <Select value={newRequest.project_id} onValueChange={(v) => setNewRequest(p => ({ ...p, project_id: v === 'none' ? '' : v }))}>
                 <SelectTrigger data-testid="project-select">
                   <SelectValue placeholder="Select project..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No Project</SelectItem>
+                  <SelectItem value="none">No Project</SelectItem>
                   {projects.map((p) => (
                     <SelectItem key={p.project_id} value={p.project_id}>
                       {p.pid?.replace('ARKI-', '')} - {p.project_name}
@@ -618,12 +618,12 @@ const ExpenseRequests = () => {
             
             <div>
               <Label>Vendor (Optional)</Label>
-              <Select value={newRequest.vendor_id} onValueChange={(v) => setNewRequest(p => ({ ...p, vendor_id: v }))}>
+              <Select value={newRequest.vendor_id} onValueChange={(v) => setNewRequest(p => ({ ...p, vendor_id: v === 'none' ? '' : v }))}>
                 <SelectTrigger data-testid="vendor-select">
                   <SelectValue placeholder="Select vendor..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No Vendor</SelectItem>
+                  <SelectItem value="none">No Vendor</SelectItem>
                   {vendors.map((v) => (
                     <SelectItem key={v.vendor_id} value={v.vendor_id}>{v.vendor_name}</SelectItem>
                   ))}
