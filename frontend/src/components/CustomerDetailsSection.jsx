@@ -64,7 +64,7 @@ const CustomerDetailsSection = ({
   const customerRequirements = isProject ? data?.client_requirements : data?.customer_requirements;
   const source = isProject ? data?.lead_source : data?.source;
   const budget = data?.budget;
-  const pid = data?.pid;
+  const pid = data?.pid?.replace('ARKI-', '') || null;
 
   const startEditing = () => {
     setEditData({
