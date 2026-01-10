@@ -342,7 +342,7 @@ const ServiceRequests = () => {
                   value={newRequest.pid}
                   onChange={(e) => setNewRequest(prev => ({ ...prev, pid: e.target.value }))}
                   onBlur={(e) => handlePIDLookup(e.target.value)}
-                  placeholder="ARKI-PID-XXXXX"
+                  placeholder="PID-XXXXX"
                 />
               </div>
               <div>
