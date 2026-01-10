@@ -314,10 +314,12 @@ Customer payment receipts with server-side PDF generation.
 ### Features Implemented:
 - [x] **Receipts Management** - List, create, view payment receipts
 - [x] **PDF Receipt Generation** - Server-side using ReportLab (lightweight Python)
-- [x] **Company Settings** - Configurable company name, logo, authorized signatory
+- [x] **Premium PDF Design** - Clean, corporate style with proper typography hierarchy
+- [x] **Company Settings** - Configurable company name, address, GSTIN, logo, primary_color, authorized signatory
 - [x] **Auto Receipt Numbers** - Format: RCP-YYYYMMDD-XXXX
 - [x] **Cashbook Integration** - Receipts auto-create inflow transactions
 - [x] **Balance Tracking** - Contract value, total received, balance remaining
+- [x] **Project Finance Receipts Section** - View all receipts for a project in Project Finance Detail page
 
 ### Receipt PDF Contents:
 - Company Name (Arki Dots)
