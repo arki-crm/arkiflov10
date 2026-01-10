@@ -298,6 +298,40 @@ const ProjectFinanceDetail = () => {
     }
   };
 
+  // Receipt handlers
+  const handleViewReceipt = async (receiptId) => {
+    try {
+      const res = await axios.get(`${API}/finance/receipts/${receiptId}`, { withCredentials: true });
+      setViewReceipt(res.data);
+    } catch (error) {
+      toast.error('Failed to load receipt details');
+    }
+  };
+
+  const handleDownloadPDF = async (receiptId, receiptNumber) => {
+    try {
+      toast.info('Generating PDF...');
+      const res = await axios.get(`${API}/finance/receipts/${receiptId}/pdf`, {
+        withCredentials: true,
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Receipt_${receiptNumber}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('PDF downloaded');
+    } catch (error) {
+      console.error('PDF download error:', error);
+      toast.error('Failed to download PDF');
+    }
+  };
+
   if (!hasPermission('finance.view_project_finance')) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
