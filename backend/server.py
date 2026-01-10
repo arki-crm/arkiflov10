@@ -1372,6 +1372,13 @@ DEFAULT_ROLE_PERMISSIONS = {
         "academy.view", "academy.manage",
         "admin.view_reports"
     ],
+    "OperationLead": [
+        # Ground-level execution role - assigned projects only
+        "projects.view",
+        # Can update delivery, installation, handover milestones only
+        "milestones.update.delivery", "milestones.update.installation", "milestones.update.handover",
+        "academy.view"
+    ],
     "Technician": [
         "service.view", "service.update",
         "academy.view"
