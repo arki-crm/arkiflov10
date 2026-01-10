@@ -390,10 +390,51 @@ Customer payment receipts with server-side PDF generation.
 - [ ] Backend Refactoring (break down 15,000+ line server.py)
 
 ### P2 - Upcoming Tasks (Real-World Accounting Flow)
-- [ ] **Payment Schedule Editor** - Modify percentages, add/rename stages per project
-- [ ] **Invoice Creation Flow** - For GST-applicable projects
-- [ ] **Refund & Cancellation Flow** - Full/partial refunds, project cancellations
+- [x] **Payment Schedule Editor** - ✅ COMPLETED (Jan 2026)
+- [x] **Invoice Creation Flow** - ✅ COMPLETED (Jan 2026)
+- [x] **Refund & Cancellation Flow** - ✅ COMPLETED (Jan 2026)
 - [ ] Finance Overview Dashboard
+
+---
+
+## ✅ P1 Finance & Payment Core - COMPLETED Jan 2026
+
+### Payment Schedule Editor
+- View payment stages per project with Expected/Received/Status
+- Edit Schedule mode for Admin/Founder only
+- Add/remove/modify stages with percentage or fixed amount
+- **Lock stages** that have received payments (cannot remove)
+- Calculate totals against contract value
+- Route: `/finance/project-finance/{project_id}` (section)
+
+### Invoice Creation Flow (GST Projects)
+- Create GST invoices for applicable projects only
+- Auto-calculate CGST + SGST at 9% each (18% total)
+- Adjust for advances received
+- Generate professional PDF invoice
+- Route: `/finance/invoices`
+- API: `GET/POST /api/finance/invoices`, `GET /api/finance/invoices/{id}/pdf`
+
+### Refund & Cancellation Flow
+- **Full Refund** - Return entire amount to customer
+- **Partial Refund** - Return portion, keep rest
+- **Forfeited** - No refund issued (cancellation charges)
+- Creates outflow transaction in cashbook
+- Fully traceable with reason and notes
+- Route: `/finance/refunds`
+- API: `GET/POST /api/finance/refunds`
+
+### Sidebar Finance Menu (Updated)
+- Overview
+- Cash Book
+- Receipts
+- **Invoices** (new)
+- **Refunds** (new)
+- Project Finance
+- Daily Closing
+- Monthly Snapshot
+
+---
 
 ### P3 - Future Features (Accounting Phase 2)
 - [ ] Account Masters Admin UI
