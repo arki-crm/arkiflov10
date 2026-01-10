@@ -158,6 +158,37 @@ A new, isolated Accounting module has been built alongside the frozen CRM.
 - [x] **Date Navigation** - Navigate between days with prev/next buttons
 - [x] **CRM Project Linking** - Link expenses to CRM projects (read-only integration)
 
+---
+
+## ✅ Project Finance Control (Phase 3) - COMPLETED Jan 2026
+
+Project-level financial intelligence to answer: "How much can I safely take out?"
+
+### Features Implemented:
+- [x] **Vendor Mapping** - Plan costs before spending (Vendor, Category, Amount, Notes)
+- [x] **Vendor Categories** - Modular, Non-Modular, Installation, Transport, Other
+- [x] **Auto-Locking** - Vendor mappings locked when spending/production starts
+- [x] **Actual vs Planned Comparison** - Auto-pulls from Cashbook, groups by category
+- [x] **Financial Summary Card** - Contract Value, Received, Planned, Actual, Liability, Surplus
+- [x] **Over-Budget Warnings** - Highlights when Actual > Planned
+- [x] **Recent Transactions** - Shows Cashbook entries linked to project
+- [x] **Audit Trail** - Edit history tracked for vendor mappings
+
+### Permissions:
+| Permission Key | Description |
+|---------------|-------------|
+| `finance.view_project_finance` | View project financial summaries |
+| `finance.edit_vendor_mapping` | Add/edit/delete vendor mappings |
+
+### Project Finance API Endpoints:
+- `GET /api/finance/project-finance` - List projects with financial data
+- `GET /api/finance/project-finance/{project_id}` - Project detail with summary
+- `GET /api/finance/vendor-mappings/{project_id}` - Get vendor mappings
+- `POST /api/finance/vendor-mappings` - Create vendor mapping
+- `PUT /api/finance/vendor-mappings/{mapping_id}` - Update mapping
+- `DELETE /api/finance/vendor-mappings/{mapping_id}` - Delete mapping
+- `GET /api/finance/vendor-categories` - Get category list
+
 ### Finance Permissions:
 | Permission Key | Description |
 |---------------|-------------|
