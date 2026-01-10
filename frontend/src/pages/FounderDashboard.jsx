@@ -4,6 +4,7 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/button';
 import { 
   Loader2, 
   AlertTriangle,
@@ -15,9 +16,14 @@ import {
   ShieldAlert,
   ShieldX,
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  Bell,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Calendar,
+  Target
 } from 'lucide-react';
-import { Button } from '../components/ui/button';
 import { cn } from '../lib/utils';
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -35,16 +41,22 @@ const FounderDashboard = () => {
   const { hasPermission, user } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [safeSpend, setSafeSpend] = useState(null);
+  const [alerts, setAlerts] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API}/finance/founder-dashboard`, {
-        withCredentials: true
-      });
-      setData(res.data);
+      const [dashRes, safeSpendRes, alertsRes] = await Promise.all([
+        axios.get(`${API}/finance/founder-dashboard`, { withCredentials: true }),
+        axios.get(`${API}/finance/safe-spend`, { withCredentials: true }),
+        axios.get(`${API}/finance/alerts`, { withCredentials: true })
+      ]);
+      setData(dashRes.data);
+      setSafeSpend(safeSpendRes.data);
+      setAlerts(alertsRes.data);
       setLastUpdated(new Date());
     } catch (error) {
       console.error('Failed to fetch founder dashboard:', error);
@@ -55,12 +67,10 @@ const FounderDashboard = () => {
 
   useEffect(() => {
     fetchData();
-    // Auto refresh every 5 minutes
     const interval = setInterval(fetchData, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Check permission
   if (!hasPermission('finance.founder_dashboard') && user?.role !== 'Admin') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -96,10 +106,24 @@ const FounderDashboard = () => {
 
   const HealthIcon = healthColors[data.health]?.icon || ShieldCheck;
 
+  const alertIcons = {
+    critical: XCircle,
+    high: AlertTriangle,
+    medium: AlertCircle,
+    low: Bell
+  };
+
+  const alertColors = {
+    critical: 'text-red-400 bg-red-500/20',
+    high: 'text-amber-400 bg-amber-500/20',
+    medium: 'text-blue-400 bg-blue-500/20',
+    low: 'text-slate-400 bg-slate-500/20'
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 text-white p-6" data-testid="founder-dashboard">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold" style={{ fontFamily: 'Manrope, sans-serif' }}>
             Financial Overview
@@ -126,150 +150,271 @@ const FounderDashboard = () => {
         </div>
       </div>
 
-      {/* Health Status Banner */}
-      <Card className={cn(
-        "mb-8 border-0",
-        data.health === 'healthy' && "bg-gradient-to-r from-green-900/50 to-green-800/30",
-        data.health === 'warning' && "bg-gradient-to-r from-amber-900/50 to-amber-800/30",
-        data.health === 'critical' && "bg-gradient-to-r from-red-900/50 to-red-800/30"
-      )}>
-        <CardContent className="p-6 flex items-center gap-4">
-          <div className={cn(
-            "w-16 h-16 rounded-full flex items-center justify-center",
-            healthColors[data.health]?.bg
-          )}>
-            <HealthIcon className="w-8 h-8 text-white" />
+      {/* Alerts Banner */}
+      {alerts && alerts.summary && (alerts.summary.critical > 0 || alerts.summary.high > 0) && (
+        <div className="mb-6 bg-red-900/30 border border-red-700 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400" />
+            <span className="text-red-300 font-medium">
+              {alerts.summary.critical + alerts.summary.high} urgent alerts require attention
+            </span>
           </div>
-          <div>
-            <h2 className={cn("text-2xl font-bold capitalize", healthColors[data.health]?.text)}>
-              {data.health}
-            </h2>
-            <p className="text-slate-300">{data.health_message}</p>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
 
-      {/* Main Numbers - The Answer */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        {/* Total Cash Available */}
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                <Wallet className="w-5 h-5 text-blue-400" />
-              </div>
-              <span className="text-slate-400 text-sm">Total Cash Available</span>
+      {/* Health Status + Safe Spend Answer */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Health Status */}
+        <Card className={cn(
+          "border-0",
+          data.health === 'healthy' && "bg-gradient-to-r from-green-900/50 to-green-800/30",
+          data.health === 'warning' && "bg-gradient-to-r from-amber-900/50 to-amber-800/30",
+          data.health === 'critical' && "bg-gradient-to-r from-red-900/50 to-red-800/30"
+        )}>
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className={cn(
+              "w-16 h-16 rounded-full flex items-center justify-center",
+              healthColors[data.health]?.bg
+            )}>
+              <HealthIcon className="w-8 h-8 text-white" />
             </div>
-            <p className="text-3xl font-bold text-white">
-              {formatCurrency(data.total_cash_available)}
-            </p>
-            <div className="mt-4 space-y-2">
-              {data.account_balances?.map((acc, idx) => (
-                <div key={idx} className="flex justify-between text-sm">
-                  <span className="text-slate-400">{acc.account_name}</span>
-                  <span className="text-slate-300">{formatCurrency(acc.balance)}</span>
-                </div>
-              ))}
+            <div>
+              <h2 className={cn("text-2xl font-bold capitalize", healthColors[data.health]?.text)}>
+                {data.health}
+              </h2>
+              <p className="text-slate-300">{data.health_message}</p>
             </div>
           </CardContent>
         </Card>
 
-        {/* Locked Commitments */}
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                <Lock className="w-5 h-5 text-amber-400" />
-              </div>
-              <span className="text-slate-400 text-sm">Locked Commitments</span>
-            </div>
-            <p className="text-3xl font-bold text-amber-400">
-              {formatCurrency(data.total_locked_commitments)}
-            </p>
-            <p className="text-xs text-slate-500 mt-2">
-              Total planned vendor costs across all projects
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Safe Surplus - THE ANSWER */}
+        {/* THE ANSWER - Can I Spend? */}
         <Card className={cn(
           "border-2",
-          data.safe_surplus >= 0 
+          safeSpend?.can_spend_safely 
             ? "bg-green-900/30 border-green-600" 
             : "bg-red-900/30 border-red-600"
         )}>
           <CardContent className="p-6">
-            <div className="flex items-center gap-3 mb-3">
-              <div className={cn(
-                "w-10 h-10 rounded-lg flex items-center justify-center",
-                data.safe_surplus >= 0 ? "bg-green-500/20" : "bg-red-500/20"
-              )}>
-                {data.safe_surplus >= 0 
-                  ? <TrendingUp className="w-5 h-5 text-green-400" />
-                  : <TrendingDown className="w-5 h-5 text-red-400" />
-                }
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-slate-400 text-sm mb-1">Can you spend safely today?</p>
+                <p className={cn(
+                  "text-3xl font-bold",
+                  safeSpend?.can_spend_safely ? "text-green-400" : "text-red-400"
+                )}>
+                  {safeSpend?.can_spend_safely ? "YES" : "NO"}
+                </p>
               </div>
-              <span className="text-slate-400 text-sm">Safe Surplus</span>
+              <div className="text-right">
+                <p className="text-slate-400 text-xs">Daily Safe Limit</p>
+                <p className="text-2xl font-bold text-white">
+                  {formatCurrency(safeSpend?.daily_safe_spend)}
+                </p>
+              </div>
             </div>
-            <p className={cn(
-              "text-4xl font-bold",
-              data.safe_surplus >= 0 ? "text-green-400" : "text-red-400"
-            )}>
-              {formatCurrency(data.safe_surplus)}
-            </p>
-            <p className="text-sm text-slate-400 mt-2">
-              {data.safe_surplus >= 0 
-                ? "Amount you can safely use" 
-                : "You're over-committed"
-              }
-            </p>
+            {safeSpend?.warnings?.length > 0 && (
+              <div className="mt-4 space-y-1">
+                {safeSpend.warnings.map((w, i) => (
+                  <p key={i} className="text-xs text-amber-400">⚠️ {w}</p>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Month to Date */}
-      <Card className="bg-slate-800/50 border-slate-700 mb-8">
-        <CardHeader className="border-b border-slate-700">
-          <CardTitle className="text-lg text-white">
-            Month to Date — {data.month_to_date?.month}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-3 gap-6">
-            <div>
-              <p className="text-xs text-green-400 mb-1 flex items-center gap-1">
-                <TrendingUp className="w-3 h-3" /> Received
-              </p>
-              <p className="text-2xl font-bold text-green-400">
-                {formatCurrency(data.month_to_date?.received)}
-              </p>
+      {/* Main Numbers */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Wallet className="w-4 h-4 text-blue-400" />
+              <span className="text-slate-400 text-xs">Total Cash</span>
             </div>
-            <div>
-              <p className="text-xs text-red-400 mb-1 flex items-center gap-1">
-                <TrendingDown className="w-3 h-3" /> Spent
-              </p>
-              <p className="text-2xl font-bold text-red-400">
-                {formatCurrency(data.month_to_date?.spent)}
-              </p>
+            <p className="text-2xl font-bold text-white">
+              {formatCurrency(data.total_cash_available)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Lock className="w-4 h-4 text-amber-400" />
+              <span className="text-slate-400 text-xs">Commitments</span>
             </div>
-            <div>
-              <p className="text-xs text-slate-400 mb-1">Net</p>
-              <p className={cn(
-                "text-2xl font-bold",
-                data.month_to_date?.net >= 0 ? "text-green-400" : "text-red-400"
+            <p className="text-2xl font-bold text-amber-400">
+              {formatCurrency(safeSpend?.remaining_commitments)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="w-4 h-4 text-green-400" />
+              <span className="text-slate-400 text-xs">Safe Surplus</span>
+            </div>
+            <p className={cn(
+              "text-2xl font-bold",
+              data.safe_surplus >= 0 ? "text-green-400" : "text-red-400"
+            )}>
+              {formatCurrency(data.safe_surplus)}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Calendar className="w-4 h-4 text-slate-400" />
+              <span className="text-slate-400 text-xs">Monthly Budget Left</span>
+            </div>
+            <p className="text-2xl font-bold text-white">
+              {formatCurrency(safeSpend?.remaining_monthly_budget)}
+            </p>
+            <p className="text-xs text-slate-500">{safeSpend?.days_remaining} days left</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Month to Date + Recommended Limits */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardHeader className="border-b border-slate-700 pb-3">
+            <CardTitle className="text-lg text-white">
+              Month to Date — {data.month_to_date?.month}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs text-green-400 mb-1 flex items-center gap-1">
+                  <TrendingUp className="w-3 h-3" /> Received
+                </p>
+                <p className="text-xl font-bold text-green-400">
+                  {formatCurrency(data.month_to_date?.received)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-red-400 mb-1 flex items-center gap-1">
+                  <TrendingDown className="w-3 h-3" /> Spent
+                </p>
+                <p className="text-xl font-bold text-red-400">
+                  {formatCurrency(data.month_to_date?.spent)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 mb-1">Net</p>
+                <p className={cn(
+                  "text-xl font-bold",
+                  data.month_to_date?.net >= 0 ? "text-green-400" : "text-red-400"
+                )}>
+                  {data.month_to_date?.net >= 0 ? '+' : ''}{formatCurrency(data.month_to_date?.net)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardHeader className="border-b border-slate-700 pb-3">
+            <CardTitle className="text-lg text-white flex items-center gap-2">
+              <Target className="w-5 h-5" />
+              Spending Limits
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400 text-sm">Monthly Average</span>
+              <span className="text-white font-medium">{formatCurrency(safeSpend?.monthly_average_spend)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400 text-sm">Recommended Limit</span>
+              <span className="text-blue-400 font-medium">{formatCurrency(safeSpend?.recommended_monthly_limit)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400 text-sm">Spent This Month</span>
+              <span className={cn(
+                "font-medium",
+                safeSpend?.month_to_date_spent > safeSpend?.recommended_monthly_limit ? "text-red-400" : "text-white"
               )}>
-                {data.month_to_date?.net >= 0 ? '+' : ''}{formatCurrency(data.month_to_date?.net)}
-              </p>
+                {formatCurrency(safeSpend?.month_to_date_spent)}
+              </span>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+              <div 
+                className={cn(
+                  "h-full transition-all",
+                  safeSpend?.month_to_date_spent > safeSpend?.recommended_monthly_limit 
+                    ? "bg-red-500" 
+                    : "bg-green-500"
+                )}
+                style={{ 
+                  width: `${Math.min(100, (safeSpend?.month_to_date_spent / safeSpend?.recommended_monthly_limit) * 100)}%` 
+                }}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Alerts & Signals */}
+      {alerts && alerts.alerts?.length > 0 && (
+        <Card className="bg-slate-800/50 border-slate-700 mb-6">
+          <CardHeader className="border-b border-slate-700 pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg text-white flex items-center gap-2">
+                <Bell className="w-5 h-5" />
+                Alerts & Signals
+              </CardTitle>
+              <div className="flex gap-2">
+                {alerts.summary?.critical > 0 && (
+                  <Badge className="bg-red-500/20 text-red-400">{alerts.summary.critical} Critical</Badge>
+                )}
+                {alerts.summary?.high > 0 && (
+                  <Badge className="bg-amber-500/20 text-amber-400">{alerts.summary.high} High</Badge>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-slate-700 max-h-64 overflow-y-auto">
+              {alerts.alerts.slice(0, 10).map((alert, idx) => {
+                const AlertIcon = alertIcons[alert.severity] || Bell;
+                return (
+                  <div key={idx} className="p-4 hover:bg-slate-800/50">
+                    <div className="flex items-start gap-3">
+                      <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", alertColors[alert.severity])}>
+                        <AlertIcon className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-white font-medium text-sm">{alert.title}</p>
+                        <p className="text-slate-400 text-xs mt-0.5">{alert.message}</p>
+                      </div>
+                      {alert.project_id && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => navigate(`/finance/project-finance/${alert.project_id}`)}
+                          className="text-blue-400 hover:text-blue-300"
+                        >
+                          View
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Risky Projects */}
       {data.risky_projects?.length > 0 && (
         <Card className="bg-slate-800/50 border-slate-700">
-          <CardHeader className="border-b border-slate-700">
+          <CardHeader className="border-b border-slate-700 pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg text-white flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
@@ -309,9 +454,7 @@ const FounderDashboard = () => {
                           {project.risk_level === 'red' ? 'At Risk' : 'Tight'}
                         </Badge>
                         {project.is_over_budget && (
-                          <Badge variant="destructive" className="text-xs">
-                            Over Budget
-                          </Badge>
+                          <Badge variant="destructive" className="text-xs">Over Budget</Badge>
                         )}
                       </div>
                       <p className="font-medium text-white">{project.project_name}</p>
@@ -334,12 +477,12 @@ const FounderDashboard = () => {
         </Card>
       )}
 
-      {/* No Risky Projects */}
-      {data.risky_projects?.length === 0 && (
+      {/* No Issues */}
+      {(!data.risky_projects || data.risky_projects.length === 0) && (!alerts || alerts.alerts?.length === 0) && (
         <Card className="bg-green-900/20 border-green-800">
           <CardContent className="p-8 text-center">
-            <ShieldCheck className="w-12 h-12 text-green-400 mx-auto mb-4" />
-            <p className="text-green-400 font-medium">All projects are financially healthy</p>
+            <CheckCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
+            <p className="text-green-400 font-medium">All systems healthy. No alerts.</p>
           </CardContent>
         </Card>
       )}
