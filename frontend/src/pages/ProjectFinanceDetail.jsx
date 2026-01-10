@@ -805,6 +805,225 @@ const ProjectFinanceDetail = () => {
         </CardContent>
       </Card>
 
+      {/* Payment Schedule Section */}
+      {paymentSchedule && (
+        <Card className="border-slate-200" data-testid="payment-schedule-section">
+          <CardHeader className="border-b border-slate-200">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-indigo-600" />
+                Payment Schedule
+                {paymentSchedule.is_custom && (
+                  <Badge variant="outline" className="text-xs ml-2">Custom</Badge>
+                )}
+              </CardTitle>
+              {isAdmin && hasPermission('finance.edit_payment_schedule') && !isScheduleEditing && (
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={startEditingSchedule}
+                  data-testid="edit-schedule-btn"
+                >
+                  <Pencil className="w-4 h-4 mr-1" />
+                  Edit Schedule
+                </Button>
+              )}
+              {isScheduleEditing && (
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={cancelEditingSchedule}
+                    disabled={scheduleSubmitting}
+                  >
+                    <X className="w-4 h-4 mr-1" />
+                    Cancel
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={savePaymentSchedule}
+                    disabled={scheduleSubmitting}
+                    data-testid="save-schedule-btn"
+                  >
+                    {scheduleSubmitting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
+                    Save
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {!isScheduleEditing ? (
+              // View Mode
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">#</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Stage</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">%</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Expected</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Received</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {paymentSchedule.stages.map((stage, index) => (
+                      <tr key={index} className="hover:bg-slate-50" data-testid={`schedule-stage-${index}`}>
+                        <td className="px-4 py-3 text-sm text-slate-500">{stage.order}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {stage.status === 'paid' && <Lock className="w-3 h-3 text-green-600" />}
+                            <span className="font-medium text-slate-900">{stage.stage_name}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm text-slate-600">
+                          {stage.percentage ? `${stage.percentage}%` : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-slate-900">
+                          {formatCurrency(stage.calculated_amount)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={cn(
+                            "font-medium",
+                            stage.paid_amount > 0 ? "text-green-600" : "text-slate-400"
+                          )}>
+                            {formatCurrency(stage.paid_amount)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Badge 
+                            variant="outline" 
+                            className={cn(
+                              "text-xs",
+                              stage.status === 'paid' && "bg-green-50 text-green-700 border-green-200",
+                              stage.status === 'partial' && "bg-amber-50 text-amber-700 border-amber-200",
+                              stage.status === 'pending' && "bg-slate-50 text-slate-600 border-slate-200"
+                            )}
+                          >
+                            {stage.status === 'paid' ? 'Paid' : stage.status === 'partial' ? 'Partial' : 'Pending'}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-100">
+                    <tr>
+                      <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-slate-700">Total</td>
+                      <td className="px-4 py-3 text-right font-bold text-slate-900">
+                        {formatCurrency(paymentSchedule.total_expected)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-green-600">
+                        {formatCurrency(paymentSchedule.total_received)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="text-xs text-slate-500">
+                          Balance: {formatCurrency(paymentSchedule.balance_remaining)}
+                        </span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            ) : (
+              // Edit Mode
+              <div className="p-4 space-y-4">
+                <div className="text-sm text-slate-500 bg-amber-50 p-3 rounded-lg">
+                  <AlertTriangle className="w-4 h-4 inline mr-1 text-amber-600" />
+                  Stages with payments cannot be removed. Edit percentages or add new stages.
+                </div>
+                <div className="space-y-3">
+                  {editedSchedule.map((stage, index) => {
+                    const isLocked = stage.status === 'paid' || stage.paid_amount > 0;
+                    return (
+                      <div 
+                        key={index} 
+                        className={cn(
+                          "p-3 border rounded-lg",
+                          isLocked ? "bg-slate-50 border-slate-200" : "bg-white border-slate-200"
+                        )}
+                        data-testid={`edit-stage-${index}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm text-slate-400 w-6">{stage.order}.</span>
+                          <Input
+                            value={stage.stage_name}
+                            onChange={(e) => handleScheduleStageChange(index, 'stage_name', e.target.value)}
+                            placeholder="Stage name"
+                            className="flex-1"
+                            disabled={isLocked}
+                            data-testid={`stage-name-input-${index}`}
+                          />
+                          <div className="flex items-center gap-2 w-32">
+                            <Input
+                              type="number"
+                              value={stage.percentage || ''}
+                              onChange={(e) => handleScheduleStageChange(index, 'percentage', e.target.value)}
+                              placeholder="%"
+                              className="w-16"
+                              disabled={isLocked}
+                              data-testid={`stage-pct-input-${index}`}
+                            />
+                            <span className="text-slate-400">%</span>
+                          </div>
+                          <div className="w-32 text-right text-sm">
+                            <span className="text-slate-600">{formatCurrency(stage.calculated_amount)}</span>
+                          </div>
+                          {isLocked ? (
+                            <Lock className="w-4 h-4 text-green-600" title="Locked - has payments" />
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => removeScheduleStage(index)}
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                              data-testid={`remove-stage-btn-${index}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                        {isLocked && (
+                          <div className="mt-2 text-xs text-green-600 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            Paid: {formatCurrency(stage.paid_amount)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <Button 
+                  variant="outline" 
+                  onClick={addScheduleStage}
+                  className="w-full border-dashed"
+                  data-testid="add-stage-btn"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Stage
+                </Button>
+                <div className="flex justify-between items-center pt-3 border-t">
+                  <span className="text-sm text-slate-600">Contract Value:</span>
+                  <span className="font-bold text-slate-900">{formatCurrency(paymentSchedule.contract_value)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-600">Schedule Total:</span>
+                  <span className={cn(
+                    "font-bold",
+                    Math.abs(editedSchedule.reduce((sum, s) => sum + (s.calculated_amount || 0), 0) - paymentSchedule.contract_value) > 1 
+                      ? "text-amber-600" 
+                      : "text-green-600"
+                  )}>
+                    {formatCurrency(editedSchedule.reduce((sum, s) => sum + (s.calculated_amount || 0), 0))}
+                  </span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Vendor Mapping Section */}
       <Card className="border-slate-200">
         <CardHeader className="border-b border-slate-200">
