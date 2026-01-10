@@ -1074,6 +1074,160 @@ const ProjectFinanceDetail = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Project Receipts Section */}
+      {hasPermission('finance.view_receipts') && (
+        <Card className="border-slate-200">
+          <CardHeader className="border-b border-slate-200">
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-green-600" />
+              Receipts (This Project)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {projectReceipts.length === 0 ? (
+              <div className="p-8 text-center">
+                <Receipt className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500">No receipts recorded for this project yet</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Receipt #</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Date</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-slate-500 uppercase">Amount</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Mode</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Account</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {projectReceipts.map((receipt) => (
+                      <tr key={receipt.receipt_id} className="hover:bg-slate-50" data-testid={`project-receipt-${receipt.receipt_id}`}>
+                        <td className="px-4 py-3">
+                          <span className="font-mono text-sm text-blue-600">{receipt.receipt_number}</span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{formatDate(receipt.payment_date)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="font-semibold text-green-600">{formatCurrency(receipt.amount)}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant="outline" className="text-xs capitalize">{receipt.payment_mode?.replace('_', ' ')}</Badge>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{receipt.account_name}</td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleViewReceipt(receipt.receipt_id)}
+                              data-testid={`view-project-receipt-${receipt.receipt_id}`}
+                            >
+                              <Eye className="w-4 h-4 text-slate-500" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleDownloadPDF(receipt.receipt_id, receipt.receipt_number)}
+                              data-testid={`download-project-receipt-${receipt.receipt_id}`}
+                            >
+                              <Download className="w-4 h-4 text-blue-600" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-100">
+                    <tr>
+                      <td colSpan={2} className="px-4 py-3 text-sm font-semibold text-slate-700">Total Received</td>
+                      <td className="px-4 py-3 text-sm font-bold text-green-600 text-right">
+                        {formatCurrency(projectReceipts.reduce((sum, r) => sum + (r.amount || 0), 0))}
+                      </td>
+                      <td colSpan={3}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* View Receipt Dialog */}
+      <Dialog open={!!viewReceipt} onOpenChange={(open) => !open && setViewReceipt(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-green-600" />
+              Receipt {viewReceipt?.receipt_number}
+            </DialogTitle>
+          </DialogHeader>
+          {viewReceipt && (
+            <div className="space-y-4 py-4">
+              <div className="p-4 bg-green-50 rounded-lg text-center">
+                <p className="text-3xl font-bold text-green-600">{formatCurrency(viewReceipt.amount)}</p>
+                <p className="text-sm text-green-700 mt-1">Payment Received</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-slate-500">Date</p>
+                  <p className="font-medium">{formatDate(viewReceipt.payment_date)}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Mode</p>
+                  <p className="font-medium capitalize">{viewReceipt.payment_mode?.replace('_', ' ')}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Account</p>
+                  <p className="font-medium">{viewReceipt.account_name}</p>
+                </div>
+                <div>
+                  <p className="text-slate-500">Stage</p>
+                  <p className="font-medium">{viewReceipt.stage_name || '-'}</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-lg">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-slate-600">Contract Value</span>
+                  <span className="font-medium">{formatCurrency(viewReceipt.project?.contract_value)}</span>
+                </div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-slate-600">Total Received</span>
+                  <span className="font-medium text-green-600">{formatCurrency(viewReceipt.total_received)}</span>
+                </div>
+                <div className="flex justify-between text-sm pt-2 border-t">
+                  <span className="text-slate-700 font-medium">Balance Remaining</span>
+                  <span className="font-bold">{formatCurrency(viewReceipt.balance_remaining)}</span>
+                </div>
+              </div>
+
+              {viewReceipt.notes && (
+                <div>
+                  <p className="text-slate-500 text-sm">Notes</p>
+                  <p className="text-sm">{viewReceipt.notes}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewReceipt(null)}>Close</Button>
+            {viewReceipt && (
+              <Button 
+                onClick={() => handleDownloadPDF(viewReceipt.receipt_id, viewReceipt.receipt_number)}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download PDF
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
