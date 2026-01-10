@@ -143,13 +143,68 @@ The core CRM pipeline has been stabilized and is ready for manual end-to-end tes
 
 ---
 
+## ✅ Accounting/Finance Module (Phase 1) - COMPLETED Jan 2026
+
+A new, isolated Accounting module has been built alongside the frozen CRM.
+
+### Features Implemented:
+- [x] **Cash Book / Day Book** - Log and view daily financial transactions
+- [x] **Account Management** - Bank accounts and cash-in-hand with opening balances
+- [x] **Category Management** - Configurable expense categories
+- [x] **Daily Closing & Locking** - Permanently lock a day's transactions
+- [x] **Permission-Based Access** - Uses `finance.*` permissions, not role names
+- [x] **Account Balance Cards** - Real-time balance display per account
+- [x] **Day Summary** - Total In, Total Out, Net for selected date
+- [x] **Date Navigation** - Navigate between days with prev/next buttons
+- [x] **CRM Project Linking** - Link expenses to CRM projects (read-only integration)
+
+### Finance Permissions:
+| Permission Key | Description |
+|---------------|-------------|
+| `finance.view_dashboard` | View finance overview |
+| `finance.view_cashbook` | View daily cash book |
+| `finance.add_transaction` | Create new entries |
+| `finance.edit_transaction` | Modify entries (unlocked days only) |
+| `finance.delete_transaction` | Remove entries (unlocked days only) |
+| `finance.verify_transaction` | Mark transactions as verified |
+| `finance.close_day` | Lock daily entries permanently |
+| `finance.view_reports` | Access financial reports |
+| `finance.manage_accounts` | Add/edit bank and cash accounts |
+| `finance.manage_categories` | Add/edit expense categories |
+
+### Finance API Endpoints:
+- `GET /api/accounting/accounts` - List accounts
+- `POST /api/accounting/accounts` - Create account
+- `GET /api/accounting/categories` - List categories  
+- `POST /api/accounting/categories` - Create category
+- `GET /api/accounting/transactions?date=YYYY-MM-DD` - Get transactions
+- `POST /api/accounting/transactions` - Create transaction
+- `GET /api/accounting/daily-summary/{date}` - Daily summary with balances
+- `POST /api/accounting/close-day/{date}` - Lock day's books
+- `GET /api/accounting/reports/account-balances` - Account balances report
+- `GET /api/accounting/reports/category-summary` - Category summary report
+
+### Test Data:
+- **Petty Cash**: ₹47,500 (Cash-in-Hand)
+- **Bank of Baroda - Current**: ₹500,000 (Company Bank Primary)
+- Categories: Project Expenses, Office Expenses, Sales & Marketing, Travel/TA, Site Expenses, Miscellaneous
+
+---
+
 ## Deferred Tasks (Post-Testing)
 
 ### P1 - After Testing Stabilization
 - [ ] Python Linting Cleanup (server.py)
-- [ ] Backend Refactoring (break down 11,000+ line server.py)
+- [ ] Backend Refactoring (break down 13,000+ line server.py)
 
-### P2 - Future Features
+### P2 - Future Features (Accounting Phase 2)
+- [ ] Account Masters Admin UI
+- [ ] Category Masters Admin UI  
+- [ ] Transaction Edit/Delete functionality
+- [ ] Basic Reports UI (Daily, Project-wise, Category-wise)
+- [ ] Transaction verification workflow
+
+### P3 - Future Features (CRM)
 - [ ] ProductionOpsDashboard UI implementation
 - [ ] Quick Add button on main dashboard
 - [ ] Drag-and-drop for stage changes
