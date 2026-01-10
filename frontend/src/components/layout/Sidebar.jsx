@@ -46,6 +46,7 @@ const financeSubItems = [
   { path: '/finance/cashbook', label: 'Cash Book', icon: Wallet },
   { path: '/finance/receipts', label: 'Receipts', icon: Receipt },
   { path: '/finance/invoices', label: 'Invoices', icon: FileText },
+  { path: '/finance/refunds', label: 'Refunds', icon: RefreshCw },
   { path: '/finance/project-finance', label: 'Project Finance', icon: FolderKanban },
   { path: '/finance/daily-closing', label: 'Daily Closing', icon: CalendarCheck },
   { path: '/finance/monthly-snapshot', label: 'Monthly Snapshot', icon: CalendarRange },
