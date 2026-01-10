@@ -3831,10 +3831,22 @@ def update_timeline_on_stage_change(timeline: list, old_stage: str, new_stage: s
 
 @api_router.get("/leads")
 async def list_leads(request: Request, status: Optional[str] = None, search: Optional[str] = None):
-    """List leads based on role permissions - shows only actual leads (not pre-sales)"""
+    """List leads based on permission - shows only actual leads (not pre-sales)"""
     user = await get_current_user(request)
     
-    # Build query based on role - ONLY show leads (not presales)
+    # Get user document for permission check
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not user_doc:
+        raise HTTPException(status_code=403, detail="User not found")
+    
+    # Permission-based access check
+    has_view_all = has_permission(user_doc, "leads.view_all")
+    has_view = has_permission(user_doc, "leads.view")
+    
+    if not has_view_all and not has_view:
+        raise HTTPException(status_code=403, detail="Access denied - no leads permission")
+    
+    # Build query - ONLY show leads (not presales)
     # lead_type = "lead" means it's a proper lead (either direct created or promoted from presales)
     query = {
         "is_converted": False,
@@ -3844,13 +3856,40 @@ async def list_leads(request: Request, status: Optional[str] = None, search: Opt
         ]
     }
     
-    if user.role == "Designer":
-        # Designer sees only leads assigned to them
-        query["designer_id"] = user.user_id
-    elif user.role == "PreSales":
-        # PreSales sees only their assigned leads
-        query["assigned_to"] = user.user_id
-    # Admin and Manager see all leads
+    # If user has leads.view but NOT leads.view_all, filter to assigned/collaborated leads only
+    if has_view and not has_view_all:
+        query["$and"] = [
+            query.pop("$or"),  # Keep the lead_type filter
+            {
+                "$or": [
+                    {"assigned_to": user.user_id},
+                    {"designer_id": user.user_id},
+                    {"collaborators": {"$elemMatch": {"user_id": user.user_id}}}
+                ]
+            }
+        ]
+        query["$or"] = query["$and"][0]  # Restore the lead_type $or
+        del query["$and"]
+        # Rebuild query properly
+        query = {
+            "is_converted": False,
+            "$and": [
+                {
+                    "$or": [
+                        {"lead_type": "lead"},
+                        {"lead_type": {"$exists": False}, "stage": {"$nin": ["New", "Contacted", "Waiting", "Qualified", "Dropped"]}}
+                    ]
+                },
+                {
+                    "$or": [
+                        {"assigned_to": user.user_id},
+                        {"designer_id": user.user_id},
+                        {"collaborators": {"$elemMatch": {"user_id": user.user_id}}}
+                    ]
+                }
+            ]
+        }
+    # If has_view_all, no additional filter needed (sees all leads)
     
     # Status filter
     if status and status != "all":
