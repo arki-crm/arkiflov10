@@ -16620,6 +16620,7 @@ async def generate_receipt_pdf(receipt_id: str, request: Request):
     gstin = settings.get("gstin", "")
     authorized_signatory = settings.get("authorized_signatory", "Authorized Signatory")
     footer_note = settings.get("receipt_footer_note", "This is a system-generated receipt.")
+    logo_base64 = settings.get("logo_base64", None)
     
     # Receipt date formatting
     receipt_date = receipt.get("payment_date", "")
@@ -16629,16 +16630,46 @@ async def generate_receipt_pdf(receipt_id: str, request: Request):
     receipt_number = receipt.get("receipt_number", "N/A")
     
     # ============ HEADER SECTION ============
-    # Company name and tagline
-    story.append(Paragraph(
-        f"<b>{company_name}</b>",
-        ParagraphStyle('CompName', fontName='Helvetica-Bold', fontSize=14, textColor=text_dark, leading=16)
-    ))
+    # Company name + tagline on left, Logo on right
+    
+    # Prepare logo if available
+    logo_element = None
+    if logo_base64:
+        try:
+            # Handle data URI format (data:image/png;base64,...)
+            if logo_base64.startswith('data:'):
+                # Extract base64 data after the comma
+                logo_data = logo_base64.split(',', 1)[1]
+            else:
+                logo_data = logo_base64
+            
+            logo_bytes = base64.b64decode(logo_data)
+            logo_buffer = BytesIO(logo_bytes)
+            logo_element = Image(logo_buffer, width=20*mm, height=12*mm)
+            logo_element.hAlign = 'RIGHT'
+        except Exception as e:
+            # Silently fail - no broken image, just skip logo
+            logo_element = None
+    
+    # Build header with company info left, logo right
+    company_text = f"<b>{company_name}</b>"
     if tagline:
-        story.append(Paragraph(
-            tagline,
-            ParagraphStyle('Tagline', fontName='Helvetica', fontSize=8, textColor=text_light, leading=10)
-        ))
+        company_text += f"<br/><font color='#9ca3af' size='8'>{tagline}</font>"
+    
+    company_para = Paragraph(company_text, ParagraphStyle('CompName', fontName='Helvetica-Bold', fontSize=14, textColor=text_dark, leading=18))
+    
+    if logo_element:
+        header_data = [[company_para, logo_element]]
+        header_table = Table(header_data, colWidths=[140*mm, 30*mm])
+        header_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+        ]))
+        story.append(header_table)
+    else:
+        story.append(company_para)
+    
     story.append(Spacer(1, 6*mm))
     
     # Thin separator line
