@@ -92,6 +92,9 @@ const ProjectDetails = () => {
   const [completedSubStages, setCompletedSubStages] = useState([]);
   const [percentageSubStages, setPercentageSubStages] = useState({});
   
+  // User milestone permissions (per-group)
+  const [userMilestonePermissions, setUserMilestonePermissions] = useState({});
+  
   // Files and Notes state
   const [files, setFiles] = useState([]);
   const [notes, setNotes] = useState([]);
