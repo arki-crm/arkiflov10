@@ -1244,6 +1244,7 @@ VALID_ROLES = [
     "Designer",               # Assigned leads/projects, sales stages, design Kanban, meetings, files
     "DesignManager",          # All designers' tasks, delays, drawings, meetings, bottlenecks
     "ProductionOpsManager",   # Validation, kick-off, production, delivery, installation, handover
+    "OperationLead",          # Ground-level execution: delivery, installation, handover milestones
     "Technician"              # Service requests, visit completion, SLA tracking
 ]
 
