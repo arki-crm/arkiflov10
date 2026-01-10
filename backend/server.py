@@ -1245,7 +1245,9 @@ VALID_ROLES = [
     "DesignManager",          # All designers' tasks, delays, drawings, meetings, bottlenecks
     "ProductionOpsManager",   # Validation, kick-off, production, delivery, installation, handover
     "OperationLead",          # Ground-level execution: delivery, installation, handover milestones
-    "Technician"              # Service requests, visit completion, SLA tracking
+    "Technician",             # Service requests, visit completion, SLA tracking
+    "Accountant",             # Finance: add/view transactions, basic reports
+    "SeniorAccountant"        # Finance: verify transactions, all reports, manage categories
 ]
 
 # ============ PERMISSION SYSTEM ============
