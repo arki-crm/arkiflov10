@@ -12941,6 +12941,803 @@ async def delete_academy_file(filename: str, request: Request):
     return {"success": True, "message": "File deleted"}
 
 
+
+# ============================================================================
+# ============ ACCOUNTING MODULE (PHASE 1) - ISOLATED FROM CRM ===============
+# ============================================================================
+# This module is completely separate from CRM functionality.
+# It only READs Project data (PID, Name, Customer) for expense linking.
+# NO modifications to CRM collections or logic.
+
+# Pydantic Models for Accounting
+class AccountCreate(BaseModel):
+    account_name: str
+    account_type: str  # "bank" or "cash"
+    bank_name: Optional[str] = None
+    branch: Optional[str] = None
+    category: str  # "Company Bank (Primary)", "Company Bank (Secondary)", "Cash-in-Hand"
+    opening_balance: float = 0.0
+    is_active: bool = True
+
+class AccountUpdate(BaseModel):
+    account_name: Optional[str] = None
+    bank_name: Optional[str] = None
+    branch: Optional[str] = None
+    category: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class CategoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    is_active: bool = True
+
+class TransactionCreate(BaseModel):
+    transaction_date: str  # ISO date string
+    transaction_type: str  # "inflow" or "outflow"
+    amount: float
+    mode: str  # "cash", "bank_transfer", "upi", "cheque"
+    category_id: str
+    account_id: str
+    project_id: Optional[str] = None  # Link to CRM project (read-only)
+    paid_to: Optional[str] = None  # Vendor/Person name
+    remarks: str
+    attachment_url: Optional[str] = None
+
+class TransactionUpdate(BaseModel):
+    transaction_type: Optional[str] = None
+    amount: Optional[float] = None
+    mode: Optional[str] = None
+    category_id: Optional[str] = None
+    account_id: Optional[str] = None
+    project_id: Optional[str] = None
+    paid_to: Optional[str] = None
+    remarks: Optional[str] = None
+    attachment_url: Optional[str] = None
+
+
+# ============ ACCOUNTING: ACCOUNTS MASTER ============
+
+@api_router.get("/accounting/accounts")
+async def list_accounting_accounts(request: Request):
+    """List all accounting accounts (bank/cash)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_dashboard") and not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance view permission")
+    
+    accounts = await db.accounting_accounts.find({}, {"_id": 0}).to_list(100)
+    return accounts
+
+
+@api_router.post("/accounting/accounts")
+async def create_accounting_account(account: AccountCreate, request: Request):
+    """Create a new accounting account (Admin only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.manage_accounts"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.manage_accounts permission")
+    
+    now = datetime.now(timezone.utc)
+    account_id = f"acc_{uuid.uuid4().hex[:8]}"
+    
+    new_account = {
+        "account_id": account_id,
+        "account_name": account.account_name,
+        "account_type": account.account_type,
+        "bank_name": account.bank_name,
+        "branch": account.branch,
+        "category": account.category,
+        "opening_balance": account.opening_balance,
+        "current_balance": account.opening_balance,
+        "is_active": account.is_active,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "updated_at": now.isoformat()
+    }
+    
+    await db.accounting_accounts.insert_one(new_account)
+    
+    # Log audit entry
+    audit_entry = {
+        "audit_id": f"audit_{uuid.uuid4().hex[:8]}",
+        "action": "account_created",
+        "entity_type": "accounting_account",
+        "entity_id": account_id,
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "details": f"Created account: {account.account_name}",
+        "timestamp": now.isoformat()
+    }
+    await db.accounting_audit_log.insert_one(audit_entry)
+    
+    return {**new_account, "_id": None}
+
+
+@api_router.put("/accounting/accounts/{account_id}")
+async def update_accounting_account(account_id: str, account: AccountUpdate, request: Request):
+    """Update an accounting account"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.manage_accounts"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.manage_accounts permission")
+    
+    existing = await db.accounting_accounts.find_one({"account_id": account_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    now = datetime.now(timezone.utc)
+    update_dict = {"updated_at": now.isoformat()}
+    
+    for field in ["account_name", "bank_name", "branch", "category", "is_active"]:
+        value = getattr(account, field, None)
+        if value is not None:
+            update_dict[field] = value
+    
+    await db.accounting_accounts.update_one(
+        {"account_id": account_id},
+        {"$set": update_dict}
+    )
+    
+    updated = await db.accounting_accounts.find_one({"account_id": account_id}, {"_id": 0})
+    return updated
+
+
+@api_router.put("/accounting/accounts/{account_id}/opening-balance")
+async def set_opening_balance(account_id: str, request: Request):
+    """Set opening balance for an account (Admin only, with audit log)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.set_opening_balance"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.set_opening_balance permission")
+    
+    body = await request.json()
+    new_balance = body.get("opening_balance")
+    
+    if new_balance is None:
+        raise HTTPException(status_code=400, detail="opening_balance is required")
+    
+    existing = await db.accounting_accounts.find_one({"account_id": account_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Account not found")
+    
+    old_balance = existing.get("opening_balance", 0)
+    now = datetime.now(timezone.utc)
+    
+    # Calculate balance difference and update current balance
+    balance_diff = new_balance - old_balance
+    new_current = existing.get("current_balance", old_balance) + balance_diff
+    
+    await db.accounting_accounts.update_one(
+        {"account_id": account_id},
+        {"$set": {
+            "opening_balance": new_balance,
+            "current_balance": new_current,
+            "updated_at": now.isoformat()
+        }}
+    )
+    
+    # Audit log
+    audit_entry = {
+        "audit_id": f"audit_{uuid.uuid4().hex[:8]}",
+        "action": "opening_balance_set",
+        "entity_type": "accounting_account",
+        "entity_id": account_id,
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "details": f"Changed opening balance from {old_balance} to {new_balance}",
+        "old_value": old_balance,
+        "new_value": new_balance,
+        "timestamp": now.isoformat()
+    }
+    await db.accounting_audit_log.insert_one(audit_entry)
+    
+    updated = await db.accounting_accounts.find_one({"account_id": account_id}, {"_id": 0})
+    return {"success": True, "account": updated}
+
+
+# ============ ACCOUNTING: EXPENSE CATEGORIES ============
+
+@api_router.get("/accounting/categories")
+async def list_accounting_categories(request: Request):
+    """List all expense categories"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_dashboard") and not has_permission(user_doc, "finance.add_transaction"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance permission")
+    
+    categories = await db.accounting_categories.find({}, {"_id": 0}).to_list(100)
+    
+    # If no categories exist, create defaults
+    if not categories:
+        default_categories = [
+            {"name": "Project Expenses", "description": "Expenses linked to specific projects"},
+            {"name": "Office Expenses", "description": "General office running costs"},
+            {"name": "Sales & Marketing", "description": "Marketing and promotional expenses"},
+            {"name": "Travel / TA", "description": "Travel and transportation allowances"},
+            {"name": "Site Expenses", "description": "On-site operational costs"},
+            {"name": "Miscellaneous", "description": "Other uncategorized expenses"}
+        ]
+        
+        now = datetime.now(timezone.utc)
+        for cat in default_categories:
+            cat_id = f"cat_{uuid.uuid4().hex[:8]}"
+            await db.accounting_categories.insert_one({
+                "category_id": cat_id,
+                "name": cat["name"],
+                "description": cat["description"],
+                "is_active": True,
+                "created_at": now.isoformat()
+            })
+        
+        categories = await db.accounting_categories.find({}, {"_id": 0}).to_list(100)
+    
+    return categories
+
+
+@api_router.post("/accounting/categories")
+async def create_accounting_category(category: CategoryCreate, request: Request):
+    """Create a new expense category"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.manage_categories"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.manage_categories permission")
+    
+    now = datetime.now(timezone.utc)
+    cat_id = f"cat_{uuid.uuid4().hex[:8]}"
+    
+    new_category = {
+        "category_id": cat_id,
+        "name": category.name,
+        "description": category.description,
+        "is_active": category.is_active,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id
+    }
+    
+    await db.accounting_categories.insert_one(new_category)
+    return {**new_category, "_id": None}
+
+
+@api_router.put("/accounting/categories/{category_id}")
+async def update_accounting_category(category_id: str, request: Request):
+    """Update an expense category"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.manage_categories"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.manage_categories permission")
+    
+    body = await request.json()
+    
+    existing = await db.accounting_categories.find_one({"category_id": category_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    update_dict = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for field in ["name", "description", "is_active"]:
+        if field in body:
+            update_dict[field] = body[field]
+    
+    await db.accounting_categories.update_one(
+        {"category_id": category_id},
+        {"$set": update_dict}
+    )
+    
+    updated = await db.accounting_categories.find_one({"category_id": category_id}, {"_id": 0})
+    return updated
+
+
+# ============ ACCOUNTING: TRANSACTIONS (CASH BOOK / DAY BOOK) ============
+
+@api_router.get("/accounting/transactions")
+async def list_transactions(
+    request: Request,
+    date: Optional[str] = None,
+    account_id: Optional[str] = None,
+    category_id: Optional[str] = None,
+    project_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """List transactions (Cash Book view)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook") and not has_permission(user_doc, "finance.view_bankbook"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance view permission")
+    
+    query = {}
+    
+    if date:
+        query["transaction_date"] = {"$regex": f"^{date}"}
+    elif start_date or end_date:
+        date_filter = {}
+        if start_date:
+            date_filter["$gte"] = start_date
+        if end_date:
+            date_filter["$lte"] = end_date
+        if date_filter:
+            query["transaction_date"] = date_filter
+    
+    if account_id:
+        query["account_id"] = account_id
+    if category_id:
+        query["category_id"] = category_id
+    if project_id:
+        query["project_id"] = project_id
+    
+    transactions = await db.accounting_transactions.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    
+    accounts = {a["account_id"]: a for a in await db.accounting_accounts.find({}, {"_id": 0}).to_list(100)}
+    categories = {c["category_id"]: c for c in await db.accounting_categories.find({}, {"_id": 0}).to_list(100)}
+    
+    for txn in transactions:
+        txn["account_name"] = accounts.get(txn.get("account_id"), {}).get("account_name", "Unknown")
+        txn["category_name"] = categories.get(txn.get("category_id"), {}).get("name", "Unknown")
+        
+        if txn.get("project_id"):
+            project = await db.projects.find_one(
+                {"project_id": txn["project_id"]},
+                {"_id": 0, "pid": 1, "project_name": 1, "client_name": 1}
+            )
+            if project:
+                txn["project_pid"] = project.get("pid", "").replace("ARKI-", "")
+                txn["project_name"] = project.get("project_name", "")
+                txn["client_name"] = project.get("client_name", "")
+    
+    return transactions
+
+
+@api_router.post("/accounting/transactions")
+async def create_transaction(txn: TransactionCreate, request: Request):
+    """Create a new transaction entry"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.add_transaction"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.add_transaction permission")
+    
+    if not txn.remarks or not txn.remarks.strip():
+        raise HTTPException(status_code=400, detail="Remarks is required")
+    
+    if txn.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+    
+    txn_date = txn.transaction_date[:10]
+    daily_closing = await db.accounting_daily_closings.find_one({"date": txn_date, "is_locked": True})
+    if daily_closing:
+        raise HTTPException(status_code=400, detail=f"Day {txn_date} is locked. Cannot add transactions.")
+    
+    account = await db.accounting_accounts.find_one({"account_id": txn.account_id})
+    if not account:
+        raise HTTPException(status_code=400, detail="Invalid account")
+    
+    category = await db.accounting_categories.find_one({"category_id": txn.category_id})
+    if not category:
+        raise HTTPException(status_code=400, detail="Invalid category")
+    
+    if txn.project_id:
+        project = await db.projects.find_one({"project_id": txn.project_id})
+        if not project:
+            raise HTTPException(status_code=400, detail="Invalid project ID")
+    
+    now = datetime.now(timezone.utc)
+    txn_id = f"txn_{uuid.uuid4().hex[:8]}"
+    
+    new_txn = {
+        "transaction_id": txn_id,
+        "transaction_date": txn.transaction_date,
+        "transaction_type": txn.transaction_type,
+        "amount": txn.amount,
+        "mode": txn.mode,
+        "category_id": txn.category_id,
+        "account_id": txn.account_id,
+        "project_id": txn.project_id,
+        "paid_to": txn.paid_to,
+        "remarks": txn.remarks,
+        "attachment_url": txn.attachment_url,
+        "is_verified": False,
+        "verified_by": None,
+        "verified_at": None,
+        "created_at": now.isoformat(),
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "updated_at": now.isoformat()
+    }
+    
+    await db.accounting_transactions.insert_one(new_txn)
+    
+    balance_change = txn.amount if txn.transaction_type == "inflow" else -txn.amount
+    await db.accounting_accounts.update_one(
+        {"account_id": txn.account_id},
+        {"$inc": {"current_balance": balance_change}}
+    )
+    
+    return {**new_txn, "_id": None}
+
+
+@api_router.put("/accounting/transactions/{transaction_id}")
+async def update_transaction(transaction_id: str, txn: TransactionUpdate, request: Request):
+    """Update a transaction (only if day is not locked)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.edit_transaction"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.edit_transaction permission")
+    
+    existing = await db.accounting_transactions.find_one({"transaction_id": transaction_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    txn_date = existing.get("transaction_date", "")[:10]
+    daily_closing = await db.accounting_daily_closings.find_one({"date": txn_date, "is_locked": True})
+    if daily_closing:
+        raise HTTPException(status_code=400, detail=f"Day {txn_date} is locked. Cannot edit transactions.")
+    
+    now = datetime.now(timezone.utc)
+    update_dict = {"updated_at": now.isoformat()}
+    
+    old_amount = existing.get("amount", 0)
+    old_type = existing.get("transaction_type")
+    old_account_id = existing.get("account_id")
+    
+    for field in ["transaction_type", "amount", "mode", "category_id", "account_id", "project_id", "paid_to", "remarks", "attachment_url"]:
+        value = getattr(txn, field, None)
+        if value is not None:
+            update_dict[field] = value
+    
+    await db.accounting_transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": update_dict}
+    )
+    
+    new_amount = update_dict.get("amount", old_amount)
+    new_type = update_dict.get("transaction_type", old_type)
+    new_account_id = update_dict.get("account_id", old_account_id)
+    
+    old_balance_change = old_amount if old_type == "inflow" else -old_amount
+    await db.accounting_accounts.update_one(
+        {"account_id": old_account_id},
+        {"$inc": {"current_balance": -old_balance_change}}
+    )
+    
+    new_balance_change = new_amount if new_type == "inflow" else -new_amount
+    await db.accounting_accounts.update_one(
+        {"account_id": new_account_id},
+        {"$inc": {"current_balance": new_balance_change}}
+    )
+    
+    updated = await db.accounting_transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    return updated
+
+
+@api_router.delete("/accounting/transactions/{transaction_id}")
+async def delete_transaction(transaction_id: str, request: Request):
+    """Delete a transaction (only if day is not locked)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.delete_transaction"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.delete_transaction permission")
+    
+    existing = await db.accounting_transactions.find_one({"transaction_id": transaction_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    txn_date = existing.get("transaction_date", "")[:10]
+    daily_closing = await db.accounting_daily_closings.find_one({"date": txn_date, "is_locked": True})
+    if daily_closing:
+        raise HTTPException(status_code=400, detail=f"Day {txn_date} is locked. Cannot delete transactions.")
+    
+    old_amount = existing.get("amount", 0)
+    old_type = existing.get("transaction_type")
+    old_account_id = existing.get("account_id")
+    
+    old_balance_change = old_amount if old_type == "inflow" else -old_amount
+    await db.accounting_accounts.update_one(
+        {"account_id": old_account_id},
+        {"$inc": {"current_balance": -old_balance_change}}
+    )
+    
+    await db.accounting_transactions.delete_one({"transaction_id": transaction_id})
+    
+    return {"success": True, "message": "Transaction deleted"}
+
+
+@api_router.put("/accounting/transactions/{transaction_id}/verify")
+async def verify_transaction(transaction_id: str, request: Request):
+    """Verify a transaction"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.verify_transaction"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.verify_transaction permission")
+    
+    existing = await db.accounting_transactions.find_one({"transaction_id": transaction_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.accounting_transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "is_verified": True,
+            "verified_by": user.user_id,
+            "verified_by_name": user.name,
+            "verified_at": now.isoformat()
+        }}
+    )
+    
+    updated = await db.accounting_transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    return updated
+
+
+# ============ ACCOUNTING: DAILY CLOSING ============
+
+@api_router.get("/accounting/daily-summary/{date}")
+async def get_daily_summary(date: str, request: Request):
+    """Get daily summary with opening/closing balances"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.view_cashbook permission")
+    
+    accounts = await db.accounting_accounts.find({"is_active": True}, {"_id": 0}).to_list(100)
+    
+    transactions = await db.accounting_transactions.find(
+        {"transaction_date": {"$regex": f"^{date}"}},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    total_inflow = sum(t["amount"] for t in transactions if t.get("transaction_type") == "inflow")
+    total_outflow = sum(t["amount"] for t in transactions if t.get("transaction_type") == "outflow")
+    
+    account_summaries = []
+    for acc in accounts:
+        acc_txns = [t for t in transactions if t.get("account_id") == acc["account_id"]]
+        acc_inflow = sum(t["amount"] for t in acc_txns if t.get("transaction_type") == "inflow")
+        acc_outflow = sum(t["amount"] for t in acc_txns if t.get("transaction_type") == "outflow")
+        
+        day_net = acc_inflow - acc_outflow
+        opening_balance = acc["current_balance"] - day_net
+        closing_balance = acc["current_balance"]
+        
+        account_summaries.append({
+            "account_id": acc["account_id"],
+            "account_name": acc["account_name"],
+            "account_type": acc["account_type"],
+            "opening_balance": opening_balance,
+            "inflow": acc_inflow,
+            "outflow": acc_outflow,
+            "closing_balance": closing_balance
+        })
+    
+    daily_closing = await db.accounting_daily_closings.find_one({"date": date})
+    
+    return {
+        "date": date,
+        "is_locked": daily_closing.get("is_locked", False) if daily_closing else False,
+        "locked_by": daily_closing.get("locked_by_name") if daily_closing else None,
+        "locked_at": daily_closing.get("locked_at") if daily_closing else None,
+        "total_inflow": total_inflow,
+        "total_outflow": total_outflow,
+        "net_change": total_inflow - total_outflow,
+        "transaction_count": len(transactions),
+        "accounts": account_summaries
+    }
+
+
+@api_router.post("/accounting/close-day/{date}")
+async def close_day(date: str, request: Request):
+    """Lock a day's transactions (Admin only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.close_day"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.close_day permission")
+    
+    existing = await db.accounting_daily_closings.find_one({"date": date})
+    if existing and existing.get("is_locked"):
+        raise HTTPException(status_code=400, detail=f"Day {date} is already locked")
+    
+    now = datetime.now(timezone.utc)
+    
+    transactions = await db.accounting_transactions.find(
+        {"transaction_date": {"$regex": f"^{date}"}},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    total_inflow = sum(t["amount"] for t in transactions if t.get("transaction_type") == "inflow")
+    total_outflow = sum(t["amount"] for t in transactions if t.get("transaction_type") == "outflow")
+    
+    closing_record = {
+        "date": date,
+        "is_locked": True,
+        "locked_by": user.user_id,
+        "locked_by_name": user.name,
+        "locked_at": now.isoformat(),
+        "summary": {
+            "total_inflow": total_inflow,
+            "total_outflow": total_outflow,
+            "transaction_count": len(transactions)
+        }
+    }
+    
+    if existing:
+        await db.accounting_daily_closings.update_one(
+            {"date": date},
+            {"$set": closing_record}
+        )
+    else:
+        await db.accounting_daily_closings.insert_one(closing_record)
+    
+    audit_entry = {
+        "audit_id": f"audit_{uuid.uuid4().hex[:8]}",
+        "action": "day_closed",
+        "entity_type": "daily_closing",
+        "entity_id": date,
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "details": f"Closed day {date} with {len(transactions)} transactions",
+        "timestamp": now.isoformat()
+    }
+    await db.accounting_audit_log.insert_one(audit_entry)
+    
+    return {"success": True, "message": f"Day {date} has been locked", "closing": closing_record}
+
+
+# ============ ACCOUNTING: REPORTS ============
+
+@api_router.get("/accounting/reports/project-expenses")
+async def report_project_expenses(request: Request, project_id: Optional[str] = None):
+    """Get project-wise expense summary"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_reports"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.view_reports permission")
+    
+    query = {"project_id": {"$ne": None}}
+    if project_id:
+        query["project_id"] = project_id
+    
+    transactions = await db.accounting_transactions.find(query, {"_id": 0}).to_list(10000)
+    
+    project_map = {}
+    for txn in transactions:
+        pid = txn.get("project_id")
+        if pid not in project_map:
+            project_map[pid] = {"project_id": pid, "inflow": 0, "outflow": 0, "transactions": []}
+        
+        if txn.get("transaction_type") == "inflow":
+            project_map[pid]["inflow"] += txn.get("amount", 0)
+        else:
+            project_map[pid]["outflow"] += txn.get("amount", 0)
+        
+        project_map[pid]["transactions"].append(txn)
+    
+    result = []
+    for pid, data in project_map.items():
+        project = await db.projects.find_one(
+            {"project_id": pid},
+            {"_id": 0, "pid": 1, "project_name": 1, "client_name": 1}
+        )
+        if project:
+            data["project_pid"] = project.get("pid", "").replace("ARKI-", "")
+            data["project_name"] = project.get("project_name", "")
+            data["client_name"] = project.get("client_name", "")
+        data["net"] = data["inflow"] - data["outflow"]
+        result.append(data)
+    
+    return result
+
+
+@api_router.get("/accounting/reports/category-summary")
+async def report_category_summary(
+    request: Request,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """Get category-wise expense summary"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_reports"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.view_reports permission")
+    
+    query = {}
+    if start_date or end_date:
+        date_filter = {}
+        if start_date:
+            date_filter["$gte"] = start_date
+        if end_date:
+            date_filter["$lte"] = end_date
+        query["transaction_date"] = date_filter
+    
+    transactions = await db.accounting_transactions.find(query, {"_id": 0}).to_list(10000)
+    categories = {c["category_id"]: c for c in await db.accounting_categories.find({}, {"_id": 0}).to_list(100)}
+    
+    cat_map = {}
+    for txn in transactions:
+        cat_id = txn.get("category_id")
+        if cat_id not in cat_map:
+            cat_info = categories.get(cat_id, {})
+            cat_map[cat_id] = {
+                "category_id": cat_id,
+                "category_name": cat_info.get("name", "Unknown"),
+                "inflow": 0,
+                "outflow": 0,
+                "count": 0
+            }
+        
+        if txn.get("transaction_type") == "inflow":
+            cat_map[cat_id]["inflow"] += txn.get("amount", 0)
+        else:
+            cat_map[cat_id]["outflow"] += txn.get("amount", 0)
+        cat_map[cat_id]["count"] += 1
+    
+    result = list(cat_map.values())
+    for r in result:
+        r["net"] = r["inflow"] - r["outflow"]
+    
+    return sorted(result, key=lambda x: x["outflow"], reverse=True)
+
+
+@api_router.get("/accounting/reports/account-balances")
+async def report_account_balances(request: Request):
+    """Get current balance of all accounts"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_reports"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.view_reports permission")
+    
+    accounts = await db.accounting_accounts.find({}, {"_id": 0}).to_list(100)
+    
+    total_balance = sum(a.get("current_balance", 0) for a in accounts if a.get("is_active"))
+    
+    return {
+        "accounts": accounts,
+        "total_balance": total_balance
+    }
+
+
+@api_router.get("/accounting/projects-list")
+async def get_projects_for_accounting(request: Request, search: Optional[str] = None):
+    """Get list of projects for expense linking (READ ONLY from CRM)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.add_transaction"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if search:
+        query["$or"] = [
+            {"pid": {"$regex": search, "$options": "i"}},
+            {"project_name": {"$regex": search, "$options": "i"}},
+            {"client_name": {"$regex": search, "$options": "i"}}
+        ]
+    
+    projects = await db.projects.find(
+        query,
+        {"_id": 0, "project_id": 1, "pid": 1, "project_name": 1, "client_name": 1}
+    ).to_list(500)
+    
+    for p in projects:
+        p["pid_display"] = p.get("pid", "").replace("ARKI-", "")
+    
+    return projects
+
+
 # ============ HEALTH CHECK ============
 
 @api_router.get("/")
