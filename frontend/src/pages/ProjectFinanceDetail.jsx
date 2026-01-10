@@ -362,6 +362,250 @@ const ProjectFinanceDetail = () => {
         </div>
       )}
 
+      {/* Frozen Banner */}
+      {decisions?.spending_frozen && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-3">
+          <Snowflake className="w-5 h-5 text-blue-600" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-blue-800">Spending Frozen</p>
+            <p className="text-xs text-blue-600">
+              Frozen by {decisions.frozen_by_name} on {formatDate(decisions.frozen_at)}
+            </p>
+          </div>
+          {isAdmin && (
+            <Button size="sm" variant="outline" onClick={handleUnfreezeSpending} className="border-blue-300 text-blue-700">
+              Unfreeze
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Decision Shortcuts - Admin Only */}
+      {isAdmin && (
+        <Card className="border-slate-200">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm font-medium text-slate-700">Quick Actions:</span>
+              {!decisions?.spending_frozen ? (
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={handleFreezeSpending}
+                  className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                >
+                  <Snowflake className="w-4 h-4 mr-1" />
+                  Freeze Spending
+                </Button>
+              ) : (
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={handleUnfreezeSpending}
+                  className="border-green-300 text-green-700 hover:bg-green-50"
+                >
+                  <CheckCircle className="w-4 h-4 mr-1" />
+                  Unfreeze
+                </Button>
+              )}
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={handleAllowOverrun}
+                className="border-amber-300 text-amber-700 hover:bg-amber-50"
+              >
+                <TrendingUp className="w-4 h-4 mr-1" />
+                Allow Overrun
+              </Button>
+              {!decisions?.is_exceptional && (
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={handleMarkExceptional}
+                  className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                >
+                  <ShieldCheck className="w-4 h-4 mr-1" />
+                  Mark Exceptional
+                </Button>
+              )}
+              {summary.has_overspend && (
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={() => setIsOverrunDialogOpen(true)}
+                  className="border-red-300 text-red-700 hover:bg-red-50"
+                >
+                  <FileWarning className="w-4 h-4 mr-1" />
+                  Explain Overrun
+                </Button>
+              )}
+            </div>
+            {decisions?.is_exceptional && (
+              <div className="mt-3 p-2 bg-purple-50 rounded-lg text-xs text-purple-700">
+                <ShieldCheck className="w-3 h-3 inline mr-1" />
+                Marked as exceptional: {decisions.exceptional_reason}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Cost Intelligence */}
+      {intelligence && intelligence.benchmark?.similar_project_count > 0 && (
+        <Card className={cn(
+          "border-slate-200",
+          intelligence.benchmark.is_abnormal && "border-amber-300 bg-amber-50/50"
+        )}>
+          <CardHeader className="border-b border-slate-200 pb-3">
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-slate-600" />
+              Cost Benchmark
+              {intelligence.benchmark.is_abnormal && (
+                <Badge variant="outline" className="border-amber-400 text-amber-600 ml-2">
+                  Deviation Detected
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Similar Projects</p>
+                <p className="text-lg font-semibold text-slate-900">{intelligence.benchmark.similar_project_count}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Avg Planned Ratio</p>
+                <p className="text-lg font-semibold text-slate-900">{intelligence.benchmark.avg_planned_ratio}%</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Your Planned Ratio</p>
+                <p className={cn(
+                  "text-lg font-semibold",
+                  Math.abs(intelligence.benchmark.planned_deviation) > 20 ? "text-amber-600" : "text-slate-900"
+                )}>
+                  {intelligence.current_project.planned_ratio}%
+                  <span className="text-xs ml-1">
+                    ({intelligence.benchmark.planned_deviation > 0 ? '+' : ''}{intelligence.benchmark.planned_deviation}%)
+                  </span>
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-1">Your Actual Ratio</p>
+                <p className={cn(
+                  "text-lg font-semibold",
+                  Math.abs(intelligence.benchmark.actual_deviation) > 20 ? "text-amber-600" : "text-slate-900"
+                )}>
+                  {intelligence.current_project.actual_ratio}%
+                </p>
+              </div>
+            </div>
+            {intelligence.benchmark.abnormal_reason && (
+              <div className="mt-3 p-2 bg-amber-100 rounded-lg text-sm text-amber-700">
+                <AlertTriangle className="w-4 h-4 inline mr-1" />
+                {intelligence.benchmark.abnormal_reason}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Overrun Attributions */}
+      {attributions.length > 0 && (
+        <Card className="border-slate-200">
+          <CardHeader className="border-b border-slate-200 pb-3">
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <FileWarning className="w-5 h-5 text-amber-500" />
+              Overrun Explanations
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="space-y-3">
+              {attributions.map((attr) => (
+                <div key={attr.attribution_id} className="p-3 bg-slate-50 rounded-lg">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <Badge variant="outline" className="text-xs mb-1">{attr.responsible_category}</Badge>
+                      <p className="font-medium text-slate-900">{attr.reason}</p>
+                      {attr.notes && <p className="text-sm text-slate-600 mt-1">{attr.notes}</p>}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-red-600">{formatCurrency(attr.overrun_amount)}</p>
+                      <p className="text-xs text-slate-500">{attr.logged_by_name}</p>
+                      <p className="text-xs text-slate-400">{formatDate(attr.created_at)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Overrun Attribution Dialog */}
+      <Dialog open={isOverrunDialogOpen} onOpenChange={setIsOverrunDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Explain Overrun</DialogTitle>
+            <DialogDescription>
+              Document why this project exceeded planned costs.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label>Reason *</Label>
+              <Select value={overrunForm.reason} onValueChange={(v) => setOverrunForm(prev => ({ ...prev, reason: v }))}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select reason" />
+                </SelectTrigger>
+                <SelectContent>
+                  {overrunOptions.reasons.map(r => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Responsible Category *</Label>
+              <Select value={overrunForm.responsible_category} onValueChange={(v) => setOverrunForm(prev => ({ ...prev, responsible_category: v }))}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {overrunOptions.responsible_categories.map(c => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Overrun Amount (₹)</Label>
+              <Input
+                type="number"
+                value={overrunForm.overrun_amount}
+                onChange={(e) => setOverrunForm(prev => ({ ...prev, overrun_amount: e.target.value }))}
+                placeholder={`${summary.actual_cost - summary.planned_cost}`}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Textarea
+                value={overrunForm.notes}
+                onChange={(e) => setOverrunForm(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Additional details..."
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsOverrunDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddAttribution} disabled={submitting}>
+              {submitting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Financial Summary Card - THE MOST IMPORTANT SCREEN */}
       <Card className="border-slate-200 bg-gradient-to-r from-slate-900 to-slate-800 text-white">
         <CardHeader className="pb-2">
