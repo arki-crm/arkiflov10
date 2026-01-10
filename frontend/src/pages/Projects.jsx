@@ -185,6 +185,9 @@ const Projects = () => {
       if (activeFilter !== 'all') {
         params.append('stage', activeFilter);
       }
+      if (timeFilter !== 'all') {
+        params.append('time_filter', timeFilter);
+      }
       
       const response = await axios.get(`${API}/projects?${params.toString()}`, {
         withCredentials: true
@@ -201,7 +204,7 @@ const Projects = () => {
   useEffect(() => {
     fetchProjects();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeFilter]);
+  }, [activeFilter, timeFilter]);
 
   // Client-side search filtering
   const filteredProjects = useMemo(() => {
