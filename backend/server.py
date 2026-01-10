@@ -1373,7 +1373,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.verify_transaction", "finance.close_day", "finance.view_reports",
         "finance.manage_accounts", "finance.manage_categories", "finance.set_opening_balance",
         "finance.import_data", "finance.export_data",
-        "finance.view_project_finance", "finance.edit_vendor_mapping"
+        "finance.view_project_finance", "finance.edit_vendor_mapping",
+        "finance.daily_closing", "finance.monthly_snapshot", "finance.founder_dashboard"
     ],
     "PreSales": [
         "presales.view", "presales.create", "presales.update", "presales.convert",
