@@ -14805,6 +14805,767 @@ async def get_project_surplus_status(request: Request):
     }
 
 
+# ============================================================================
+# ============ ACCOUNTING GOVERNANCE & DECISION LAYER (PHASE 3+) =============
+# ============================================================================
+# - Spending Approval Rules (soft control)
+# - Overrun Attribution
+# - Historical Cost Intelligence
+# - Alerts & Signals
+# - Decision Shortcuts (Freeze, Allow Overrun)
+
+# Approval status for transactions
+APPROVAL_STATUSES = ["pending", "approved", "rejected"]
+
+# Overrun attribution reasons
+OVERRUN_REASONS = [
+    "Vendor Price Increase",
+    "Design Change Request",
+    "Site Condition Issue",
+    "Material Quality Upgrade",
+    "Scope Addition",
+    "Internal Miss / Error",
+    "Market Rate Change",
+    "Emergency Requirement",
+    "Other"
+]
+
+# Responsible categories for overruns
+OVERRUN_RESPONSIBLE = [
+    "Vendor",
+    "Design Team",
+    "Site Team",
+    "Client Request",
+    "Management Decision",
+    "External Factor"
+]
+
+
+# ============ SPENDING APPROVAL RULES ============
+
+class ApprovalRuleCreate(BaseModel):
+    rule_name: str
+    category_id: Optional[str] = None  # If null, applies to all categories
+    threshold_amount: float  # Above this amount requires approval
+    applies_to_cash: bool = True
+    applies_to_bank: bool = True
+    is_active: bool = True
+
+class ApprovalRuleUpdate(BaseModel):
+    rule_name: Optional[str] = None
+    threshold_amount: Optional[float] = None
+    applies_to_cash: Optional[bool] = None
+    applies_to_bank: Optional[bool] = None
+    is_active: Optional[bool] = None
+
+
+@api_router.get("/finance/approval-rules")
+async def get_approval_rules(request: Request):
+    """Get all spending approval rules"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_dashboard"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    rules = await db.finance_approval_rules.find({}, {"_id": 0}).to_list(100)
+    return rules
+
+
+@api_router.post("/finance/approval-rules")
+async def create_approval_rule(rule: ApprovalRuleCreate, request: Request):
+    """Create a new approval rule - Admin/Founder only"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can create approval rules")
+    
+    now = datetime.now(timezone.utc)
+    new_rule = {
+        "rule_id": f"rule_{secrets.token_hex(4)}",
+        "rule_name": rule.rule_name,
+        "category_id": rule.category_id,
+        "threshold_amount": rule.threshold_amount,
+        "applies_to_cash": rule.applies_to_cash,
+        "applies_to_bank": rule.applies_to_bank,
+        "is_active": rule.is_active,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.finance_approval_rules.insert_one(new_rule)
+    new_rule.pop("_id", None)
+    return new_rule
+
+
+@api_router.put("/finance/approval-rules/{rule_id}")
+async def update_approval_rule(rule_id: str, update: ApprovalRuleUpdate, request: Request):
+    """Update an approval rule"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can update approval rules")
+    
+    existing = await db.finance_approval_rules.find_one({"rule_id": rule_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    
+    update_data = {k: v for k, v in update.model_dump().items() if v is not None}
+    if update_data:
+        update_data["updated_at"] = datetime.now(timezone.utc)
+        await db.finance_approval_rules.update_one({"rule_id": rule_id}, {"$set": update_data})
+    
+    updated = await db.finance_approval_rules.find_one({"rule_id": rule_id}, {"_id": 0})
+    return updated
+
+
+@api_router.delete("/finance/approval-rules/{rule_id}")
+async def delete_approval_rule(rule_id: str, request: Request):
+    """Delete an approval rule"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can delete approval rules")
+    
+    result = await db.finance_approval_rules.delete_one({"rule_id": rule_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    
+    return {"success": True, "message": "Rule deleted"}
+
+
+# ============ TRANSACTION APPROVAL ============
+
+@api_router.get("/finance/pending-approvals")
+async def get_pending_approvals(request: Request):
+    """Get transactions pending approval"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_dashboard"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    pending = await db.accounting_transactions.find(
+        {"approval_status": "pending"},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    # Enrich with category and account names
+    categories = {c["category_id"]: c for c in await db.accounting_categories.find({}, {"_id": 0}).to_list(100)}
+    accounts = {a["account_id"]: a for a in await db.accounting_accounts.find({}, {"_id": 0}).to_list(100)}
+    
+    for txn in pending:
+        txn["category_name"] = categories.get(txn.get("category_id"), {}).get("name", "Unknown")
+        txn["account_name"] = accounts.get(txn.get("account_id"), {}).get("account_name", "Unknown")
+    
+    return pending
+
+
+@api_router.post("/finance/transactions/{transaction_id}/approve")
+async def approve_transaction(transaction_id: str, request: Request):
+    """Approve a pending transaction - Admin/Founder only"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can approve transactions")
+    
+    txn = await db.accounting_transactions.find_one({"transaction_id": transaction_id})
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    if txn.get("approval_status") != "pending":
+        raise HTTPException(status_code=400, detail="Transaction is not pending approval")
+    
+    now = datetime.now(timezone.utc)
+    await db.accounting_transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "approval_status": "approved",
+            "approved_by": user.user_id,
+            "approved_by_name": user.name,
+            "approved_at": now
+        }}
+    )
+    
+    return {"success": True, "message": "Transaction approved"}
+
+
+@api_router.post("/finance/transactions/{transaction_id}/reject")
+async def reject_transaction(transaction_id: str, reason: str, request: Request):
+    """Reject a pending transaction - Admin/Founder only"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can reject transactions")
+    
+    txn = await db.accounting_transactions.find_one({"transaction_id": transaction_id})
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    now = datetime.now(timezone.utc)
+    await db.accounting_transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "approval_status": "rejected",
+            "rejected_by": user.user_id,
+            "rejected_by_name": user.name,
+            "rejected_at": now,
+            "rejection_reason": reason
+        }}
+    )
+    
+    return {"success": True, "message": "Transaction rejected"}
+
+
+# ============ OVERRUN ATTRIBUTION ============
+
+class OverrunAttributionCreate(BaseModel):
+    project_id: str
+    reason: str  # From OVERRUN_REASONS
+    responsible_category: str  # From OVERRUN_RESPONSIBLE
+    notes: Optional[str] = None
+    overrun_amount: float
+
+@api_router.get("/finance/overrun-reasons")
+async def get_overrun_reasons(request: Request):
+    """Get list of overrun reasons and responsible categories"""
+    await get_current_user(request)
+    return {
+        "reasons": OVERRUN_REASONS,
+        "responsible_categories": OVERRUN_RESPONSIBLE
+    }
+
+
+@api_router.get("/finance/overrun-attributions/{project_id}")
+async def get_project_overrun_attributions(project_id: str, request: Request):
+    """Get overrun attributions for a project"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_project_finance"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    attributions = await db.finance_overrun_attributions.find(
+        {"project_id": project_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return attributions
+
+
+@api_router.post("/finance/overrun-attributions")
+async def create_overrun_attribution(attr: OverrunAttributionCreate, request: Request):
+    """Record an overrun attribution"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.edit_vendor_mapping"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Validate reason
+    if attr.reason not in OVERRUN_REASONS:
+        raise HTTPException(status_code=400, detail=f"Invalid reason. Must be one of: {', '.join(OVERRUN_REASONS)}")
+    
+    if attr.responsible_category not in OVERRUN_RESPONSIBLE:
+        raise HTTPException(status_code=400, detail=f"Invalid responsible category")
+    
+    now = datetime.now(timezone.utc)
+    attribution = {
+        "attribution_id": f"attr_{secrets.token_hex(4)}",
+        "project_id": attr.project_id,
+        "reason": attr.reason,
+        "responsible_category": attr.responsible_category,
+        "notes": attr.notes,
+        "overrun_amount": attr.overrun_amount,
+        "logged_by": user.user_id,
+        "logged_by_name": user.name,
+        "created_at": now
+    }
+    
+    await db.finance_overrun_attributions.insert_one(attribution)
+    attribution.pop("_id", None)
+    
+    return attribution
+
+
+# ============ HISTORICAL COST INTELLIGENCE ============
+
+@api_router.get("/finance/cost-intelligence/{project_id}")
+async def get_project_cost_intelligence(project_id: str, request: Request):
+    """Get cost intelligence comparing to similar projects"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_project_finance"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get current project
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    project_value = project.get("project_value", 0) or 0
+    
+    # Get vendor mappings for current project
+    vm_list = await db.finance_vendor_mappings.find({"project_id": project_id}, {"_id": 0}).to_list(100)
+    current_planned = sum(v.get("planned_amount", 0) for v in vm_list)
+    
+    # Get actual spend
+    actual_pipeline = [
+        {"$match": {"project_id": project_id, "transaction_type": "outflow"}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+    ]
+    actual_result = await db.accounting_transactions.aggregate(actual_pipeline).to_list(1)
+    current_actual = actual_result[0]["total"] if actual_result else 0
+    
+    # Find similar projects (by value range ±30%)
+    value_min = project_value * 0.7
+    value_max = project_value * 1.3
+    
+    similar_projects = await db.projects.find({
+        "project_id": {"$ne": project_id},
+        "project_value": {"$gte": value_min, "$lte": value_max},
+        "pid": {"$exists": True, "$ne": None}
+    }, {"_id": 0, "project_id": 1, "pid": 1, "project_name": 1, "project_value": 1}).to_list(20)
+    
+    # Calculate stats for similar projects
+    similar_stats = []
+    total_planned_ratio = 0
+    total_actual_ratio = 0
+    count = 0
+    
+    for sp in similar_projects:
+        sp_vm = await db.finance_vendor_mappings.find({"project_id": sp["project_id"]}, {"_id": 0}).to_list(100)
+        sp_planned = sum(v.get("planned_amount", 0) for v in sp_vm)
+        
+        sp_actual_pipeline = [
+            {"$match": {"project_id": sp["project_id"], "transaction_type": "outflow"}},
+            {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+        ]
+        sp_actual_result = await db.accounting_transactions.aggregate(sp_actual_pipeline).to_list(1)
+        sp_actual = sp_actual_result[0]["total"] if sp_actual_result else 0
+        
+        sp_value = sp.get("project_value", 0) or 1
+        planned_ratio = sp_planned / sp_value if sp_value > 0 else 0
+        actual_ratio = sp_actual / sp_value if sp_value > 0 else 0
+        
+        if sp_planned > 0 or sp_actual > 0:
+            similar_stats.append({
+                "project_id": sp["project_id"],
+                "pid": (sp.get("pid") or "").replace("ARKI-", ""),
+                "project_name": sp.get("project_name"),
+                "project_value": sp_value,
+                "planned_cost": sp_planned,
+                "actual_cost": sp_actual,
+                "planned_ratio": round(planned_ratio * 100, 1),
+                "actual_ratio": round(actual_ratio * 100, 1)
+            })
+            total_planned_ratio += planned_ratio
+            total_actual_ratio += actual_ratio
+            count += 1
+    
+    # Calculate averages
+    avg_planned_ratio = (total_planned_ratio / count * 100) if count > 0 else 0
+    avg_actual_ratio = (total_actual_ratio / count * 100) if count > 0 else 0
+    
+    current_planned_ratio = (current_planned / project_value * 100) if project_value > 0 else 0
+    current_actual_ratio = (current_actual / project_value * 100) if project_value > 0 else 0
+    
+    # Calculate deviation from average
+    planned_deviation = current_planned_ratio - avg_planned_ratio
+    actual_deviation = current_actual_ratio - avg_actual_ratio
+    
+    # Flag abnormal entries (>20% deviation)
+    is_abnormal = abs(planned_deviation) > 20 or abs(actual_deviation) > 20
+    
+    return {
+        "current_project": {
+            "project_id": project_id,
+            "project_value": project_value,
+            "planned_cost": current_planned,
+            "actual_cost": current_actual,
+            "planned_ratio": round(current_planned_ratio, 1),
+            "actual_ratio": round(current_actual_ratio, 1)
+        },
+        "benchmark": {
+            "similar_project_count": count,
+            "avg_planned_ratio": round(avg_planned_ratio, 1),
+            "avg_actual_ratio": round(avg_actual_ratio, 1),
+            "planned_deviation": round(planned_deviation, 1),
+            "actual_deviation": round(actual_deviation, 1),
+            "is_abnormal": is_abnormal,
+            "abnormal_reason": (
+                "Planned cost significantly higher than average" if planned_deviation > 20 else
+                "Planned cost significantly lower than average" if planned_deviation < -20 else
+                "Actual cost significantly higher than average" if actual_deviation > 20 else
+                "Actual cost significantly lower than average" if actual_deviation < -20 else
+                None
+            )
+        },
+        "similar_projects": similar_stats[:5]  # Top 5
+    }
+
+
+# ============ ALERTS & SIGNALS ============
+
+@api_router.get("/finance/alerts")
+async def get_finance_alerts(request: Request):
+    """Get active finance alerts (not notifications spam - just signals)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_dashboard"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    alerts = []
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # 1. Projects exceeding planned cost
+    projects = await db.projects.find({"pid": {"$exists": True}}, {"_id": 0}).to_list(500)
+    for p in projects:
+        project_id = p.get("project_id")
+        vm_list = await db.finance_vendor_mappings.find({"project_id": project_id}, {"_id": 0}).to_list(100)
+        planned = sum(v.get("planned_amount", 0) for v in vm_list)
+        
+        if planned > 0:
+            actual_pipeline = [
+                {"$match": {"project_id": project_id, "transaction_type": "outflow"}},
+                {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+            ]
+            actual_result = await db.accounting_transactions.aggregate(actual_pipeline).to_list(1)
+            actual = actual_result[0]["total"] if actual_result else 0
+            
+            if actual > planned:
+                alerts.append({
+                    "type": "project_overrun",
+                    "severity": "high",
+                    "title": f"Project {(p.get('pid') or '').replace('ARKI-', '')} over budget",
+                    "message": f"Actual ₹{actual:,.0f} exceeds planned ₹{planned:,.0f}",
+                    "project_id": project_id,
+                    "project_name": p.get("project_name"),
+                    "overrun_amount": actual - planned,
+                    "overrun_percent": round((actual - planned) / planned * 100, 1)
+                })
+    
+    # 2. Cash balance below safe limit (less than 20% of locked commitments)
+    accounts = await db.accounting_accounts.find({"is_active": True}, {"_id": 0}).to_list(100)
+    total_cash = 0
+    for acc in accounts:
+        opening = acc.get("opening_balance", 0)
+        txn_pipeline = [
+            {"$match": {"account_id": acc.get("account_id")}},
+            {"$group": {
+                "_id": None,
+                "inflow": {"$sum": {"$cond": [{"$eq": ["$transaction_type", "inflow"]}, "$amount", 0]}},
+                "outflow": {"$sum": {"$cond": [{"$eq": ["$transaction_type", "outflow"]}, "$amount", 0]}}
+            }}
+        ]
+        result = await db.accounting_transactions.aggregate(txn_pipeline).to_list(1)
+        inflow = result[0]["inflow"] if result else 0
+        outflow = result[0]["outflow"] if result else 0
+        total_cash += opening + inflow - outflow
+    
+    vendor_mappings = await db.finance_vendor_mappings.find({}, {"_id": 0}).to_list(1000)
+    total_locked = sum(vm.get("planned_amount", 0) for vm in vendor_mappings)
+    
+    safe_limit = total_locked * 0.2
+    if total_cash < safe_limit:
+        alerts.append({
+            "type": "low_cash",
+            "severity": "critical",
+            "title": "Cash balance critically low",
+            "message": f"Total cash ₹{total_cash:,.0f} is below safe limit ₹{safe_limit:,.0f}",
+            "cash_available": total_cash,
+            "safe_limit": safe_limit
+        })
+    
+    # 3. Pending approvals
+    pending_count = await db.accounting_transactions.count_documents({"approval_status": "pending"})
+    if pending_count > 0:
+        alerts.append({
+            "type": "pending_approvals",
+            "severity": "medium",
+            "title": f"{pending_count} transactions awaiting approval",
+            "message": "Review pending transactions in the approval queue",
+            "count": pending_count
+        })
+    
+    # 4. Unattributed overruns
+    overrun_projects = [a for a in alerts if a["type"] == "project_overrun"]
+    for op in overrun_projects:
+        attr_count = await db.finance_overrun_attributions.count_documents({"project_id": op["project_id"]})
+        if attr_count == 0:
+            alerts.append({
+                "type": "unattributed_overrun",
+                "severity": "medium",
+                "title": f"Overrun not explained for {op['project_name']}",
+                "message": "Please attribute the cost overrun for accountability",
+                "project_id": op["project_id"]
+            })
+    
+    # Sort by severity
+    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    alerts.sort(key=lambda x: severity_order.get(x["severity"], 4))
+    
+    return {
+        "alerts": alerts,
+        "summary": {
+            "critical": len([a for a in alerts if a["severity"] == "critical"]),
+            "high": len([a for a in alerts if a["severity"] == "high"]),
+            "medium": len([a for a in alerts if a["severity"] == "medium"]),
+            "low": len([a for a in alerts if a["severity"] == "low"])
+        }
+    }
+
+
+# ============ DECISION SHORTCUTS ============
+
+@api_router.post("/finance/projects/{project_id}/freeze-spending")
+async def freeze_project_spending(project_id: str, request: Request):
+    """Freeze all spending for a project - Admin/Founder only"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can freeze project spending")
+    
+    project = await db.projects.find_one({"project_id": project_id})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Store freeze decision
+    await db.finance_project_decisions.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            "project_id": project_id,
+            "spending_frozen": True,
+            "frozen_by": user.user_id,
+            "frozen_by_name": user.name,
+            "frozen_at": now,
+            "updated_at": now
+        }},
+        upsert=True
+    )
+    
+    return {"success": True, "message": f"Spending frozen for project {project.get('pid')}"}
+
+
+@api_router.post("/finance/projects/{project_id}/unfreeze-spending")
+async def unfreeze_project_spending(project_id: str, request: Request):
+    """Unfreeze spending for a project - Admin/Founder only"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can unfreeze project spending")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.finance_project_decisions.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            "spending_frozen": False,
+            "unfrozen_by": user.user_id,
+            "unfrozen_by_name": user.name,
+            "unfrozen_at": now,
+            "updated_at": now
+        }}
+    )
+    
+    return {"success": True, "message": "Spending unfrozen"}
+
+
+@api_router.post("/finance/projects/{project_id}/allow-overrun")
+async def allow_project_overrun(project_id: str, additional_amount: float, reason: str, request: Request):
+    """Allow one-time overrun for a project - Admin/Founder only"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can allow overruns")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Record the decision
+    await db.finance_project_decisions.update_one(
+        {"project_id": project_id},
+        {
+            "$set": {"updated_at": now},
+            "$push": {
+                "overrun_allowances": {
+                    "allowed_amount": additional_amount,
+                    "reason": reason,
+                    "allowed_by": user.user_id,
+                    "allowed_by_name": user.name,
+                    "allowed_at": now
+                }
+            }
+        },
+        upsert=True
+    )
+    
+    return {"success": True, "message": f"Overrun of ₹{additional_amount:,.0f} allowed"}
+
+
+@api_router.post("/finance/projects/{project_id}/mark-exceptional")
+async def mark_project_exceptional(project_id: str, reason: str, request: Request):
+    """Mark a project as exceptional case - Admin/Founder only"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can mark projects as exceptional")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.finance_project_decisions.update_one(
+        {"project_id": project_id},
+        {"$set": {
+            "is_exceptional": True,
+            "exceptional_reason": reason,
+            "marked_exceptional_by": user.user_id,
+            "marked_exceptional_by_name": user.name,
+            "marked_exceptional_at": now,
+            "updated_at": now
+        }},
+        upsert=True
+    )
+    
+    return {"success": True, "message": "Project marked as exceptional case"}
+
+
+@api_router.get("/finance/projects/{project_id}/decisions")
+async def get_project_decisions(project_id: str, request: Request):
+    """Get all decisions made for a project"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_project_finance"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    decisions = await db.finance_project_decisions.find_one(
+        {"project_id": project_id},
+        {"_id": 0}
+    )
+    
+    return decisions or {"project_id": project_id, "spending_frozen": False, "is_exceptional": False}
+
+
+# ============ SAFE SPEND CALCULATOR ============
+
+@api_router.get("/finance/safe-spend")
+async def get_safe_spend_recommendation(request: Request):
+    """Get recommended safe spend limit - Founder view"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin" and not has_permission(user_doc, "finance.founder_dashboard"):
+        raise HTTPException(status_code=403, detail="Access denied - Founder only")
+    
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # Get total cash
+    accounts = await db.accounting_accounts.find({"is_active": True}, {"_id": 0}).to_list(100)
+    total_cash = 0
+    for acc in accounts:
+        opening = acc.get("opening_balance", 0)
+        txn_pipeline = [
+            {"$match": {"account_id": acc.get("account_id")}},
+            {"$group": {
+                "_id": None,
+                "inflow": {"$sum": {"$cond": [{"$eq": ["$transaction_type", "inflow"]}, "$amount", 0]}},
+                "outflow": {"$sum": {"$cond": [{"$eq": ["$transaction_type", "outflow"]}, "$amount", 0]}}
+            }}
+        ]
+        result = await db.accounting_transactions.aggregate(txn_pipeline).to_list(1)
+        inflow = result[0]["inflow"] if result else 0
+        outflow = result[0]["outflow"] if result else 0
+        total_cash += opening + inflow - outflow
+    
+    # Get total locked
+    vendor_mappings = await db.finance_vendor_mappings.find({}, {"_id": 0}).to_list(1000)
+    total_locked = sum(vm.get("planned_amount", 0) for vm in vendor_mappings)
+    
+    # Get actual spent on planned
+    actual_pipeline = [
+        {"$match": {"transaction_type": "outflow", "project_id": {"$exists": True, "$ne": None}}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+    ]
+    actual_result = await db.accounting_transactions.aggregate(actual_pipeline).to_list(1)
+    total_spent_on_projects = actual_result[0]["total"] if actual_result else 0
+    
+    # Calculate remaining commitments
+    remaining_commitments = max(0, total_locked - total_spent_on_projects)
+    
+    # Safe surplus
+    safe_surplus = total_cash - remaining_commitments
+    
+    # Monthly average outflow
+    three_months_ago = now - timedelta(days=90)
+    monthly_avg_pipeline = [
+        {"$match": {"transaction_type": "outflow", "created_at": {"$gte": three_months_ago}}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+    ]
+    monthly_avg_result = await db.accounting_transactions.aggregate(monthly_avg_pipeline).to_list(1)
+    three_month_outflow = monthly_avg_result[0]["total"] if monthly_avg_result else 0
+    monthly_avg = three_month_outflow / 3
+    
+    # Days remaining in month
+    import calendar
+    _, days_in_month = calendar.monthrange(now.year, now.month)
+    days_remaining = days_in_month - now.day + 1
+    
+    # This month's spent
+    mtd_pipeline = [
+        {"$match": {"transaction_type": "outflow", "created_at": {"$gte": month_start}}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}}
+    ]
+    mtd_result = await db.accounting_transactions.aggregate(mtd_pipeline).to_list(1)
+    mtd_spent = mtd_result[0]["total"] if mtd_result else 0
+    
+    # Recommended monthly limit (based on avg + 10% buffer)
+    recommended_monthly = monthly_avg * 1.1
+    remaining_monthly_budget = max(0, recommended_monthly - mtd_spent)
+    
+    # Daily safe spend
+    daily_safe = remaining_monthly_budget / days_remaining if days_remaining > 0 else 0
+    
+    # Warning flags
+    warnings = []
+    if safe_surplus < 0:
+        warnings.append("You are over-committed. Reduce spending or increase collections.")
+    elif safe_surplus < monthly_avg * 0.5:
+        warnings.append("Safe surplus is low. Exercise caution.")
+    
+    if mtd_spent > recommended_monthly:
+        warnings.append(f"This month's spending already exceeds recommended limit.")
+    
+    return {
+        "total_cash": total_cash,
+        "remaining_commitments": remaining_commitments,
+        "safe_surplus": safe_surplus,
+        "monthly_average_spend": round(monthly_avg, 0),
+        "recommended_monthly_limit": round(recommended_monthly, 0),
+        "month_to_date_spent": mtd_spent,
+        "remaining_monthly_budget": round(remaining_monthly_budget, 0),
+        "daily_safe_spend": round(daily_safe, 0),
+        "days_remaining": days_remaining,
+        "warnings": warnings,
+        "can_spend_safely": safe_surplus > 0 and remaining_monthly_budget > 0
+    }
+
+
 # ============ HEALTH CHECK ============
 
 @api_router.get("/")
