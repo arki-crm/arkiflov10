@@ -847,47 +847,52 @@ const LeadDetails = () => {
     }
   };
 
-  // Permission checks
+  // Permission checks - use hasPermission instead of role-based
   const canChangeStage = () => {
     if (!user || !lead) return false;
-    if (user.role === 'Designer') return false;
-    if (user.role === 'Admin' || user.role === 'SalesManager') return true;
-    if (user.role === 'PreSales') {
-      return lead.assigned_to === user.user_id;
-    }
-    return false;
+    // Check leads.update permission
+    if (!hasPermission('leads.update')) return false;
+    // If user has leads.view_all, they can update any lead
+    if (hasPermission('leads.view_all')) return true;
+    // Otherwise, check if assigned/collaborating
+    const isAssigned = lead.assigned_to === user.user_id || lead.designer_id === user.user_id;
+    const isCollaborator = (lead.collaborators || []).some(c => c.user_id === user.user_id);
+    return isAssigned || isCollaborator;
   };
 
   const canAssignDesigner = () => {
-    return user?.role === 'Admin' || user?.role === 'SalesManager';
+    // Requires leads.update permission
+    return hasPermission('leads.update');
   };
 
   const canConvert = () => {
-    return user?.role === 'Admin' || user?.role === 'SalesManager';
+    // Requires leads.convert permission (typically Admin/SalesManager)
+    return hasPermission('leads.convert');
   };
   
   // Can edit customer details
   const canEditCustomerDetails = () => {
     if (!user || !lead) return false;
-    // Admin/SalesManager can always edit
-    if (user.role === 'Admin' || user.role === 'SalesManager') return true;
-    // PreSales can edit their own leads BEFORE qualified
-    if (user.role === 'PreSales') {
-      return lead.assigned_to === user.user_id && lead.status !== 'Qualified';
-    }
-    // Designer cannot edit
-    return false;
+    // Check leads.update permission
+    if (!hasPermission('leads.update')) return false;
+    // If user has leads.view_all, they can edit any lead
+    if (hasPermission('leads.view_all')) return true;
+    // Otherwise, check if assigned/collaborating
+    const isAssigned = lead.assigned_to === user.user_id || lead.designer_id === user.user_id;
+    const isCollaborator = (lead.collaborators || []).some(c => c.user_id === user.user_id);
+    return isAssigned || isCollaborator;
   };
   
   // Hold/Activate/Deactivate permission checks
   const canHold = () => {
     if (!user) return false;
-    return ['Admin', 'Manager', 'SalesManager', 'Designer'].includes(user.role);
+    return hasPermission('leads.update');
   };
   
   const canActivateOrDeactivate = () => {
     if (!user) return false;
-    return ['Admin', 'Manager', 'SalesManager'].includes(user.role);
+    // Only Admin/SalesManager can deactivate (more destructive action)
+    return hasPermission('leads.view_all');
   };
   
   // Handle hold status actions
