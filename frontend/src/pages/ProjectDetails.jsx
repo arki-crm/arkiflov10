@@ -596,7 +596,7 @@ const ProjectDetails = () => {
                 className="inline-flex items-center rounded-md bg-slate-900 px-2.5 py-1 text-sm font-mono font-bold text-white"
                 data-testid="project-pid-badge"
               >
-                {project.pid}
+                {project.pid.replace('ARKI-', '')}
               </span>
             )}
             <h1 
@@ -633,7 +633,7 @@ const ProjectDetails = () => {
             )}
           </div>
           <p className="text-slate-500 mt-1">
-            {project?.pid && <span className="font-medium text-slate-700">{project.pid} • </span>}
+            {project?.pid && <span className="font-medium text-slate-700">{project.pid.replace('ARKI-', '')} • </span>}
             Client: {project?.client_name} • Last updated {formatRelativeTime(project?.updated_at)}
           </p>
         </div>
