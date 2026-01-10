@@ -3621,8 +3621,18 @@ async def get_available_users(request: Request):
     """Get list of all users (for adding collaborators)"""
     user = await get_current_user(request)
     
-    if user.role not in ["Admin", "Manager"]:
-        raise HTTPException(status_code=403, detail="Admin or Manager access required")
+    # Get user document for permission check
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not user_doc:
+        raise HTTPException(status_code=403, detail="User not found")
+    
+    # Allow if Admin OR has projects.manage_collaborators permission
+    # Also allow specific manager roles for backward compatibility
+    allowed_roles = ["Admin", "SalesManager", "DesignManager", "ProductionOpsManager"]
+    has_manage_collaborators = has_permission(user_doc, "projects.manage_collaborators")
+    
+    if user.role not in allowed_roles and not has_manage_collaborators:
+        raise HTTPException(status_code=403, detail="Access denied - cannot manage collaborators")
     
     users = await db.users.find({}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "picture": 1}).to_list(1000)
     return users
