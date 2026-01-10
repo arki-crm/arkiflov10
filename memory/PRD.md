@@ -430,9 +430,72 @@ Customer payment receipts with server-side PDF generation.
 - Receipts
 - **Invoices** (new)
 - **Refunds** (new)
+- **Expense Requests** (new)
 - Project Finance
 - Daily Closing
 - Monthly Snapshot
+
+---
+
+## ✅ Leak-Proof Spend Control System - COMPLETED Jan 2026
+
+A comprehensive expense authorization system ensuring every financial transaction is tracked, owned, and auditable.
+
+### Features Implemented:
+- [x] **Expense Authorization Flow** - Mandatory request/approval before cashbook entry
+- [x] **Spend Ownership** - Every expense has a designated owner responsible for closure
+- [x] **Refund & Return Tracking** - Track pending refunds with statuses and alerts
+- [x] **Controlled Cashbook** - Entries only from approved expenses (no manual free-entry for expenses)
+- [x] **Over-Budget Detection** - Flags expenses exceeding project planned budget
+- [x] **Visibility Dashboard** - Money at risk, open expenses, pending refunds on Founder Dashboard
+- [x] **Activity Logging** - Complete audit trail of all expense actions
+
+### Expense Request Statuses:
+| Status | Description |
+|--------|-------------|
+| `pending_approval` | Submitted, waiting for approver |
+| `approved` | Approved, ready to be recorded in cashbook |
+| `rejected` | Rejected by approver |
+| `recorded` | Recorded in cashbook (transaction created) |
+| `refund_pending` | Expense returned/cancelled, refund awaited |
+| `closed` | Fully settled |
+
+### New Permissions:
+| Permission | Description |
+|------------|-------------|
+| `finance.create_expense_request` | Request expenses for approval |
+| `finance.approve_expense` | Approve or reject expense requests |
+| `finance.record_expense` | Record approved expenses in cashbook |
+| `finance.allow_over_budget` | Approve expenses exceeding project budget |
+| `finance.view_expense_requests` | View expense request list |
+| `finance.track_refunds` | Track pending refunds and returns |
+
+### New API Endpoints:
+- `GET /api/finance/expense-requests` - List all expense requests (with filters)
+- `GET /api/finance/expense-requests/{id}` - Get expense request details
+- `POST /api/finance/expense-requests` - Create new expense request
+- `PUT /api/finance/expense-requests/{id}` - Update pending request
+- `POST /api/finance/expense-requests/{id}/approve` - Approve or reject
+- `POST /api/finance/expense-requests/{id}/record` - Record in cashbook
+- `POST /api/finance/expense-requests/{id}/mark-refund-pending` - Mark refund pending
+- `POST /api/finance/expense-requests/{id}/record-refund` - Record refund received
+- `POST /api/finance/expense-requests/{id}/close` - Close expense
+- `PUT /api/finance/expense-requests/{id}/reassign-owner` - Reassign ownership
+- `GET /api/finance/expense-requests/stats/summary` - Dashboard summary stats
+
+### New Pages:
+- `/finance/expense-requests` - Expense Requests management page
+
+### Key Data Model (`finance_expense_requests`):
+- `request_id`, `request_number` (EXP-YYYYMMDD-XXXX)
+- `project_id`, `category_id`, `vendor_id` (optional)
+- `amount`, `description`, `urgency`
+- `status`, `is_over_budget`, `budget_info`
+- `requester_id/name`, `owner_id/name`
+- `approved_by/at`, `rejected_by/at`, `recorded_by/at`
+- `transaction_id` (link to cashbook when recorded)
+- `refund_status`, `refund_expected_amount`, `refund_received_amount`
+- `activity_log` (array of actions)
 
 ---
 
