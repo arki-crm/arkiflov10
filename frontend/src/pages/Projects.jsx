@@ -292,17 +292,36 @@ const Projects = () => {
         )}
       </div>
 
-      {/* Search Bar */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <Input
-          type="text"
-          placeholder="Search by project, client, or phone..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 bg-white border-slate-200 focus:border-blue-500"
-          data-testid="projects-search-input"
-        />
+      {/* Search Bar and Time Filter */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input
+            type="text"
+            placeholder="Search by project, client, or phone..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 bg-white border-slate-200 focus:border-blue-500"
+            data-testid="projects-search-input"
+          />
+        </div>
+        
+        {/* Time Filter */}
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-slate-400" />
+          <Select value={timeFilter} onValueChange={setTimeFilter}>
+            <SelectTrigger className="w-[150px] bg-white border-slate-200" data-testid="time-filter-select">
+              <SelectValue placeholder="Time Period" />
+            </SelectTrigger>
+            <SelectContent>
+              {TIME_FILTERS.map((filter) => (
+                <SelectItem key={filter.key} value={filter.key} data-testid={`time-filter-${filter.key}`}>
+                  {filter.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Filter Tabs */}
