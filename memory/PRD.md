@@ -267,6 +267,46 @@ Financial control and visibility for the founder without complex accounting.
 
 ---
 
+## ✅ Accounting Governance & Decision Layer (Phase 3++) - COMPLETED Jan 2026
+
+Turn accounting data into actionable decisions and leak prevention.
+
+### Features Implemented:
+- [x] **Safe Spend Panel** - Daily safe limit, monthly budget tracking, warnings
+- [x] **Spending Approval Rules** - Soft control for high-value transactions
+- [x] **Overrun Attribution** - Document reasons when actual > planned
+- [x] **Cost Intelligence** - Compare with similar projects, flag abnormal entries
+- [x] **Alerts & Signals** - Project overruns, low cash, pending approvals
+- [x] **Decision Shortcuts** - Freeze/Unfreeze, Allow Overrun, Mark Exceptional
+- [x] **Project Decisions Log** - Track all governance decisions
+
+### Decision Shortcuts (Admin Only):
+| Action | Description |
+|--------|-------------|
+| Freeze Spending | Block all new expenses for a project |
+| Unfreeze | Re-enable spending |
+| Allow Overrun | One-time approval for exceeding planned |
+| Mark Exceptional | Flag project as special case |
+| Explain Overrun | Record attribution for budget exceedance |
+
+### Overrun Attribution Options:
+- **Reasons**: Vendor Price Increase, Design Change Request, Site Issue, Material Upgrade, Scope Addition, Internal Miss, Market Rate Change, Emergency, Other
+- **Responsible**: Vendor, Design Team, Site Team, Client Request, Management, External Factor
+
+### New API Endpoints:
+- `GET /api/finance/safe-spend` - Daily/monthly spending limits
+- `GET /api/finance/alerts` - Active alerts and signals
+- `GET /api/finance/approval-rules` - Spending approval rules
+- `POST /api/finance/transactions/{id}/approve` - Approve transaction
+- `GET /api/finance/cost-intelligence/{project_id}` - Benchmark comparison
+- `GET /api/finance/overrun-reasons` - Overrun options
+- `POST /api/finance/overrun-attributions` - Record attribution
+- `POST /api/finance/projects/{id}/freeze-spending` - Freeze project
+- `POST /api/finance/projects/{id}/allow-overrun` - Allow overrun
+- `POST /api/finance/projects/{id}/mark-exceptional` - Mark exceptional
+
+---
+
 ## Deferred Tasks (Post-Testing)
 
 ### P1 - After Testing Stabilization
