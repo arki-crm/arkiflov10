@@ -88,12 +88,18 @@ const VENDOR_CATEGORIES = ['Modular', 'Non-Modular', 'Installation', 'Transport'
 const ProjectFinanceDetail = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingMapping, setEditingMapping] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [decisions, setDecisions] = useState(null);
+  const [intelligence, setIntelligence] = useState(null);
+  const [attributions, setAttributions] = useState([]);
+  const [isOverrunDialogOpen, setIsOverrunDialogOpen] = useState(false);
+  const [overrunForm, setOverrunForm] = useState({ reason: '', responsible_category: '', notes: '', overrun_amount: '' });
+  const [overrunOptions, setOverrunOptions] = useState({ reasons: [], responsible_categories: [] });
   
   const [newMapping, setNewMapping] = useState({
     vendor_name: '',
@@ -102,13 +108,23 @@ const ProjectFinanceDetail = () => {
     notes: ''
   });
 
+  const isAdmin = user?.role === 'Admin';
+
   const fetchData = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API}/finance/project-finance/${projectId}`, {
-        withCredentials: true
-      });
-      setData(res.data);
+      const [financeRes, decisionsRes, intelligenceRes, attrRes, overrunRes] = await Promise.all([
+        axios.get(`${API}/finance/project-finance/${projectId}`, { withCredentials: true }),
+        axios.get(`${API}/finance/projects/${projectId}/decisions`, { withCredentials: true }).catch(() => ({ data: {} })),
+        axios.get(`${API}/finance/cost-intelligence/${projectId}`, { withCredentials: true }).catch(() => ({ data: null })),
+        axios.get(`${API}/finance/overrun-attributions/${projectId}`, { withCredentials: true }).catch(() => ({ data: [] })),
+        axios.get(`${API}/finance/overrun-reasons`, { withCredentials: true }).catch(() => ({ data: { reasons: [], responsible_categories: [] } }))
+      ]);
+      setData(financeRes.data);
+      setDecisions(decisionsRes.data);
+      setIntelligence(intelligenceRes.data);
+      setAttributions(attrRes.data);
+      setOverrunOptions(overrunRes.data);
     } catch (error) {
       console.error('Failed to fetch project finance:', error);
       if (error.response?.status === 404) {
