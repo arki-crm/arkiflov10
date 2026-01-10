@@ -261,18 +261,27 @@ export const StagesPanel = ({
               {/* Sub-stages (expandable) */}
               {isExpanded && !isLocked && (
                 <div className="px-3 pb-3">
+                  {/* Permission notice for this group */}
+                  {!canUpdateGroup(group.id) && !isGroupComplete(group) && (
+                    <div className="mb-2 px-2 py-1 bg-slate-100 rounded text-xs text-slate-500 flex items-center gap-1">
+                      <Lock className="w-3 h-3" />
+                      You don&apos;t have permission to update this milestone group
+                    </div>
+                  )}
                   <div className="ml-4 pl-4 border-l-2 border-slate-200 space-y-1">
                     {group.subStages.map((subStage, subIndex) => {
                       const isSubComplete = completedSubStages.includes(subStage.id);
                       const canComplete = canCompleteSubStage(subStage.id, completedSubStages);
-                      const isNextStep = canComplete && canChangeStage;
+                      // Use per-group permission check instead of global canChangeStage
+                      const hasGroupPermission = canUpdateGroup(group.id);
+                      const isNextStep = canComplete && hasGroupPermission && !isProgressionBlocked;
                       const isPercentageType = subStage.type === 'percentage';
                       const currentPct = percentageSubStages[subStage.id] || 0;
 
                       return (
                         <button
                           key={subStage.id}
-                          onClick={() => isNextStep && handleSubStageClick(subStage, group.name)}
+                          onClick={() => isNextStep && handleSubStageClick(subStage, group.name, group.id)}
                           disabled={!isNextStep || isUpdating}
                           className={cn(
                             "w-full flex items-center gap-2 p-2 rounded-md text-left transition-all",
