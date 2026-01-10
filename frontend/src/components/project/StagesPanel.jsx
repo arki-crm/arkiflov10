@@ -356,9 +356,11 @@ export const StagesPanel = ({
         })}
       </div>
 
-      {!canChangeStage && (
+      {/* Permission info footer - only show if user has no permissions at all */}
+      {Object.keys(userMilestonePermissions).length > 0 && 
+       !Object.values(userMilestonePermissions).some(v => v) && (
         <p className="text-xs text-slate-500 mt-4 text-center">
-          You don&apos;t have permission to update milestones
+          You don&apos;t have permission to update any milestones
         </p>
       )}
 
