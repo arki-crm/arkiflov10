@@ -4172,10 +4172,6 @@ async def update_lead_stage(lead_id: str, stage_update: LeadStageUpdate, request
     """Update lead stage - forward-only progression (except Admin)"""
     user = await get_current_user(request)
     
-    # Only Designer, SalesManager, Manager, Admin can change lead stages
-    if user.role not in ["Admin", "Manager", "SalesManager", "Designer"]:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
     if stage_update.stage not in LEAD_STAGES:
         raise HTTPException(status_code=400, detail=f"Invalid stage. Must be one of: {LEAD_STAGES}")
     
@@ -4184,12 +4180,26 @@ async def update_lead_stage(lead_id: str, stage_update: LeadStageUpdate, request
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     
-    # Non-Admin users can only change leads they're assigned to or collaborating on
-    if user.role not in ["Admin", "Manager", "SalesManager"]:
+    # Get user document for permission check
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    if not user_doc:
+        raise HTTPException(status_code=403, detail="User not found")
+    
+    # Permission-based access check (requires leads.update)
+    has_update = has_permission(user_doc, "leads.update")
+    has_view_all = has_permission(user_doc, "leads.view_all")
+    
+    if not has_update:
+        raise HTTPException(status_code=403, detail="Access denied - no leads.update permission")
+    
+    # If user doesn't have view_all, check if they're assigned/collaborating
+    if not has_view_all:
         is_assigned = lead.get("assigned_to") == user.user_id or lead.get("designer_id") == user.user_id
-        is_collaborator = any(c.get("user_id") == user.user_id for c in lead.get("collaborators", []))
+        collaborator_ids = [c.get("user_id") for c in lead.get("collaborators", []) if isinstance(c, dict)]
+        is_collaborator = user.user_id in collaborator_ids
+        
         if not is_assigned and not is_collaborator:
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise HTTPException(status_code=403, detail="Access denied - not assigned to this lead")
     
     old_stage = lead.get("stage", "BC Call Done")
     new_stage = stage_update.stage
