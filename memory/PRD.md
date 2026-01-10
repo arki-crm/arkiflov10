@@ -10,7 +10,7 @@ Build a full-stack CRM application for an interior design company, managing the 
 - **Authentication**: Emergent Google OAuth + Local Password Login (for testing)
 
 ## Current Status: STABLE - Manual Testing Phase
-**As of December 2025**
+**As of January 2026**
 
 The core CRM pipeline has been stabilized and is ready for manual end-to-end testing with real users.
 
@@ -28,15 +28,17 @@ The core CRM pipeline has been stabilized and is ready for manual end-to-end tes
 - [x] Local email/password login for testing
 - [x] Session management with httpOnly cookies
 
-### User Management & Permissions (NEWLY VERIFIED - Dec 2025)
+### User Management & Permissions (Updated Jan 2026)
 - [x] Fine-grained permission-based access control
 - [x] Admin can create new users with local passwords
 - [x] Admin can assign specific permissions to any user
 - [x] Permission checks throughout the application
+- [x] **NEW: Operation Lead role** - ground-level execution for delivery/installation/handover
 
 ### CRM Modules
 - [x] Pre-Sales management
 - [x] Lead management with conversion flow
+- [x] **Lead actions (comments, stage updates)** - permission-based enforcement
 - [x] Project management with multi-stage milestones
 - [x] Files, Notes, Collaborators per project
 - [x] Meetings & Calendar system
@@ -45,9 +47,11 @@ The core CRM pipeline has been stabilized and is ready for manual end-to-end tes
 ### Additional Features
 - [x] Academy module with video/PDF uploads
 - [x] Warranty & Service Requests
+- [x] **Warranty collaborators** - Technicians can be added to warranty requests
 - [x] Global Search
 - [x] Notifications system
 - [x] Reports & Analytics pages
+- [x] **Time-based filters** - This Month, Last Month, This Quarter on Leads & Projects
 
 ---
 
