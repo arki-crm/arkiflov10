@@ -30,7 +30,8 @@ export const StagesPanel = ({
   canChangeStage, 
   isUpdating,
   userRole,
-  holdStatus = 'Active'  // New prop for hold status
+  holdStatus = 'Active',  // Prop for hold status
+  userMilestonePermissions = {}  // New prop: { group_id: boolean }
 }) => {
   const [expandedGroups, setExpandedGroups] = useState(() => {
     // Auto-expand the current active group
@@ -50,6 +51,15 @@ export const StagesPanel = ({
   // Check if progression is blocked due to hold status
   const isProgressionBlocked = holdStatus === 'Hold' || holdStatus === 'Deactivated';
 
+  // Check if user can update a specific milestone group
+  const canUpdateGroup = (groupId) => {
+    // If no permissions object provided, fall back to canChangeStage
+    if (Object.keys(userMilestonePermissions).length === 0) {
+      return canChangeStage;
+    }
+    return userMilestonePermissions[groupId] === true;
+  };
+
   // Update expanded groups when completedSubStages changes
   React.useEffect(() => {
     const currentGroup = getCurrentMilestoneGroup(completedSubStages);
@@ -68,8 +78,9 @@ export const StagesPanel = ({
     }));
   };
 
-  const handleSubStageClick = (subStage, groupName) => {
-    if (!canChangeStage || isUpdating || isProgressionBlocked) return;
+  const handleSubStageClick = (subStage, groupName, groupId) => {
+    // Check permission for this specific group
+    if (!canUpdateGroup(groupId) || isUpdating || isProgressionBlocked) return;
     if (!canCompleteSubStage(subStage.id, completedSubStages)) return;
     
     // Check if this is a percentage-type sub-stage
