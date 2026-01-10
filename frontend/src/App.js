@@ -48,6 +48,9 @@ import ServiceRequests from './pages/ServiceRequests';
 import ServiceRequestDetails from './pages/ServiceRequestDetails';
 import Technicians from './pages/Technicians';
 
+// Finance/Accounting Module
+import CashBook from './pages/CashBook';
+
 import './App.css';
 
 // Router component that handles session_id detection synchronously
@@ -112,6 +115,9 @@ const AppRouter = () => {
         <Route path="/service-requests" element={<ServiceRequests />} />
         <Route path="/service-requests/:id" element={<ServiceRequestDetails />} />
         <Route path="/technicians" element={<Technicians />} />
+        
+        {/* Finance/Accounting Routes */}
+        <Route path="/finance/cashbook" element={<CashBook />} />
       </Route>
 
       {/* Redirect root to dashboard */}
