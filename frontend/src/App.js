@@ -56,6 +56,7 @@ import FounderDashboard from './pages/FounderDashboard';
 import DailyClosing from './pages/DailyClosing';
 import MonthlySnapshot from './pages/MonthlySnapshot';
 import Receipts from './pages/Receipts';
+import CompanyProfile from './pages/CompanyProfile';
 
 import './App.css';
 
