@@ -343,6 +343,100 @@ const ProjectFinanceDetail = () => {
     }
   };
 
+  // Payment Schedule handlers
+  const startEditingSchedule = () => {
+    if (paymentSchedule?.stages) {
+      setEditedSchedule(paymentSchedule.stages.map(s => ({ ...s })));
+      setIsScheduleEditing(true);
+    }
+  };
+
+  const cancelEditingSchedule = () => {
+    setIsScheduleEditing(false);
+    setEditedSchedule([]);
+  };
+
+  const handleScheduleStageChange = (index, field, value) => {
+    const updated = [...editedSchedule];
+    updated[index] = { ...updated[index], [field]: value };
+    
+    // Recalculate amount if percentage changed
+    if (field === 'percentage' && paymentSchedule?.contract_value) {
+      const pct = parseFloat(value) || 0;
+      updated[index].calculated_amount = (pct / 100) * paymentSchedule.contract_value;
+    }
+    if (field === 'fixed_amount') {
+      updated[index].calculated_amount = parseFloat(value) || 0;
+      updated[index].percentage = null;
+    }
+    
+    setEditedSchedule(updated);
+  };
+
+  const addScheduleStage = () => {
+    const newOrder = editedSchedule.length + 1;
+    setEditedSchedule([...editedSchedule, {
+      stage_name: '',
+      percentage: null,
+      fixed_amount: null,
+      trigger: 'custom',
+      order: newOrder,
+      calculated_amount: 0,
+      status: 'pending',
+      paid_amount: 0
+    }]);
+  };
+
+  const removeScheduleStage = (index) => {
+    const stage = editedSchedule[index];
+    if (stage.status === 'paid' || stage.paid_amount > 0) {
+      toast.error('Cannot remove a stage that has payments');
+      return;
+    }
+    const updated = editedSchedule.filter((_, i) => i !== index);
+    // Reorder
+    updated.forEach((s, i) => { s.order = i + 1; });
+    setEditedSchedule(updated);
+  };
+
+  const savePaymentSchedule = async () => {
+    try {
+      setScheduleSubmitting(true);
+      
+      // Validate
+      const totalPct = editedSchedule.reduce((sum, s) => sum + (s.percentage || 0), 0);
+      const hasNames = editedSchedule.every(s => s.stage_name?.trim());
+      
+      if (!hasNames) {
+        toast.error('All stages must have a name');
+        return;
+      }
+      
+      // Prepare data
+      const scheduleData = editedSchedule.map(s => ({
+        stage_name: s.stage_name,
+        percentage: s.percentage,
+        fixed_amount: s.fixed_amount,
+        trigger: s.trigger || 'custom',
+        order: s.order
+      }));
+      
+      await axios.post(`${API}/finance/payment-schedule/${projectId}`, {
+        stages: scheduleData,
+        is_custom: true
+      }, { withCredentials: true });
+      
+      toast.success('Payment schedule updated');
+      setIsScheduleEditing(false);
+      fetchData();
+    } catch (error) {
+      console.error('Failed to save schedule:', error);
+      toast.error(error.response?.data?.detail || 'Failed to save payment schedule');
+    } finally {
+      setScheduleSubmitting(false);
+    }
+  };
+
   if (!hasPermission('finance.view_project_finance')) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
