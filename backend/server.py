@@ -16477,7 +16477,7 @@ async def upload_company_logo(file: UploadFile = File(...), request: Request = N
 
 @api_router.get("/finance/receipts/{receipt_id}/pdf")
 async def generate_receipt_pdf(receipt_id: str, request: Request):
-    """Generate PDF receipt - permission controlled"""
+    """Generate premium PDF receipt - permission controlled"""
     user = await get_current_user(request)
     user_doc = await db.users.find_one({"user_id": user.user_id})
     
@@ -16512,13 +16512,24 @@ async def generate_receipt_pdf(receipt_id: str, request: Request):
     contract_value = project.get("project_value", 0) or 0
     balance_remaining = contract_value - total_received
     
+    # Get primary color from settings (default to professional blue)
+    primary_color = settings.get("primary_color", "#2563eb")
+    try:
+        accent_color = colors.HexColor(primary_color)
+    except:
+        accent_color = colors.HexColor("#2563eb")
+    
+    # Helper to format currency
+    def format_inr(amount):
+        return f"₹{amount:,.0f}"
+    
     # Generate PDF
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
         pagesize=A4,
-        rightMargin=20*mm,
-        leftMargin=20*mm,
+        rightMargin=25*mm,
+        leftMargin=25*mm,
         topMargin=20*mm,
         bottomMargin=20*mm
     )
@@ -16526,200 +16537,283 @@ async def generate_receipt_pdf(receipt_id: str, request: Request):
     styles = getSampleStyleSheet()
     story = []
     
-    # Custom styles
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=18,
-        spaceAfter=2*mm,
-        alignment=1  # Center
-    )
-    subtitle_style = ParagraphStyle(
-        'CustomSubtitle',
+    # ============ PREMIUM STYLES ============
+    # Clean sans-serif typography with proper hierarchy
+    
+    company_name_style = ParagraphStyle(
+        'CompanyName',
         parent=styles['Normal'],
-        fontSize=10,
-        textColor=colors.grey,
-        alignment=1
+        fontName='Helvetica',
+        fontSize=16,
+        textColor=colors.HexColor('#1f2937'),
+        spaceAfter=1*mm,
+        leading=18
     )
-    header_style = ParagraphStyle(
-        'Header',
-        parent=styles['Heading2'],
-        fontSize=14,
-        spaceAfter=5*mm,
-        textColor=colors.HexColor('#1e40af')
+    
+    company_detail_style = ParagraphStyle(
+        'CompanyDetail',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=8,
+        textColor=colors.HexColor('#6b7280'),
+        leading=11
     )
+    
+    receipt_title_style = ParagraphStyle(
+        'ReceiptTitle',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=11,
+        textColor=accent_color,
+        spaceAfter=2*mm,
+        alignment=2  # Right align
+    )
+    
+    section_header_style = ParagraphStyle(
+        'SectionHeader',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=8,
+        textColor=colors.HexColor('#9ca3af'),
+        spaceBefore=8*mm,
+        spaceAfter=3*mm,
+        leading=10
+    )
+    
     label_style = ParagraphStyle(
         'Label',
         parent=styles['Normal'],
+        fontName='Helvetica',
         fontSize=9,
-        textColor=colors.grey
+        textColor=colors.HexColor('#6b7280'),
+        leading=12
     )
+    
     value_style = ParagraphStyle(
         'Value',
         parent=styles['Normal'],
-        fontSize=11,
-        fontName='Helvetica-Bold'
+        fontName='Helvetica',
+        fontSize=9,
+        textColor=colors.HexColor('#1f2937'),
+        leading=12
     )
     
-    # Company Header
+    amount_label_style = ParagraphStyle(
+        'AmountLabel',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=9,
+        textColor=colors.HexColor('#6b7280')
+    )
+    
+    amount_value_style = ParagraphStyle(
+        'AmountValue',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=20,
+        textColor=accent_color
+    )
+    
+    footer_style = ParagraphStyle(
+        'Footer',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=8,
+        textColor=colors.HexColor('#9ca3af'),
+        alignment=1,
+        leading=11
+    )
+    
+    # ============ HEADER SECTION ============
+    # Logo + Company details on left, Receipt info on right
+    
     company_name = settings.get("company_name", "Arki Dots")
-    story.append(Paragraph(company_name, title_style))
-    if settings.get("company_tagline"):
-        story.append(Paragraph(settings["company_tagline"], subtitle_style))
-    story.append(Spacer(1, 5*mm))
+    company_address = settings.get("company_address", "")
+    company_phone = settings.get("company_phone", "")
+    company_email = settings.get("company_email", "")
+    company_gstin = settings.get("company_gstin", "")
     
-    # Receipt Title
-    story.append(Paragraph("PAYMENT RECEIPT", header_style))
-    story.append(Spacer(1, 3*mm))
+    # Build company info text
+    company_info_lines = [f"<b>{company_name}</b>"]
+    if company_address:
+        company_info_lines.append(company_address)
+    contact_parts = []
+    if company_phone:
+        contact_parts.append(company_phone)
+    if company_email:
+        contact_parts.append(company_email)
+    if contact_parts:
+        company_info_lines.append(" | ".join(contact_parts))
+    if company_gstin:
+        company_info_lines.append(f"GSTIN: {company_gstin}")
     
-    # Receipt Info Table
+    company_info_text = "<br/>".join(company_info_lines)
+    
+    # Receipt date formatting
     receipt_date = receipt.get("payment_date", "")
     if isinstance(receipt_date, datetime):
         receipt_date = receipt_date.strftime("%d %b %Y")
     
-    info_data = [
-        ["Receipt Number:", receipt.get("receipt_number", "N/A"), "Date:", receipt_date],
-    ]
-    info_table = Table(info_data, colWidths=[35*mm, 55*mm, 25*mm, 45*mm])
-    info_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('TEXTCOLOR', (0, 0), (0, -1), colors.grey),
-        ('TEXTCOLOR', (2, 0), (2, -1), colors.grey),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3*mm),
-    ]))
-    story.append(info_table)
-    story.append(Spacer(1, 5*mm))
+    receipt_number = receipt.get("receipt_number", "N/A")
     
-    # Horizontal line
-    story.append(Table([['']], colWidths=[170*mm], rowHeights=[0.5*mm]))
-    story[-1].setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#e2e8f0'))]))
-    story.append(Spacer(1, 5*mm))
+    # Header table: Company info left, Receipt info right
+    header_left = Paragraph(company_info_text, company_detail_style)
+    header_right_text = f"<b>Payment Receipt</b><br/>{receipt_number}<br/>{receipt_date}"
+    header_right = Paragraph(header_right_text, receipt_title_style)
     
-    # Customer & Project Details
-    pid_display = (project.get("pid") or "").replace("ARKI-", "")
-    details_data = [
-        ["Customer Name:", project.get("client_name", "N/A")],
-        ["Project ID:", pid_display],
-        ["Project Name:", project.get("project_name", "N/A")],
-    ]
-    details_table = Table(details_data, colWidths=[40*mm, 130*mm])
-    details_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('TEXTCOLOR', (0, 0), (0, -1), colors.grey),
+    header_table = Table(
+        [[header_left, header_right]],
+        colWidths=[100*mm, 60*mm]
+    )
+    header_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2*mm),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
     ]))
-    story.append(details_table)
-    story.append(Spacer(1, 5*mm))
+    story.append(header_table)
+    story.append(Spacer(1, 8*mm))
     
-    # Payment Details
+    # Thin accent line
+    line_table = Table([['']], colWidths=[160*mm], rowHeights=[0.5*mm])
+    line_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), accent_color),
+    ]))
+    story.append(line_table)
+    story.append(Spacer(1, 8*mm))
+    
+    # ============ BILLED TO / PROJECT SECTION ============
+    pid_display = (project.get("pid") or "").replace("ARKI-", "")
+    client_name = project.get("client_name", "N/A")
+    project_name = project.get("project_name", "N/A")
+    
+    # Two-column layout for customer & project
+    billed_to_text = f"""<font color="#9ca3af" size="8">Received From</font><br/>
+<font color="#1f2937" size="10">{client_name}</font><br/>
+<font color="#6b7280" size="8">{project_name}</font>"""
+    
+    project_info_text = f"""<font color="#9ca3af" size="8">Project</font><br/>
+<font color="#1f2937" size="10">{pid_display}</font>"""
+    
+    billed_to = Paragraph(billed_to_text, styles['Normal'])
+    project_info = Paragraph(project_info_text, styles['Normal'])
+    
+    customer_table = Table(
+        [[billed_to, project_info]],
+        colWidths=[100*mm, 60*mm]
+    )
+    customer_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+    ]))
+    story.append(customer_table)
+    story.append(Spacer(1, 10*mm))
+    
+    # ============ PAYMENT DETAILS SECTION ============
+    story.append(Paragraph("Payment Details", section_header_style))
+    
     payment_mode = (receipt.get("payment_mode") or "").replace("_", " ").title()
     stage_name = receipt.get("stage_name") or "Customer Payment"
     
-    payment_data = [
-        ["Payment Description:", stage_name],
-        ["Payment Mode:", payment_mode],
-        ["Account Received Into:", account_name],
+    # Clean two-column layout for payment details
+    payment_details_data = [
+        ["Description", stage_name],
+        ["Payment Mode", payment_mode],
+        ["Account", account_name],
     ]
-    payment_table = Table(payment_data, colWidths=[50*mm, 120*mm])
+    
+    payment_table = Table(payment_details_data, colWidths=[50*mm, 110*mm])
     payment_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('TEXTCOLOR', (0, 0), (0, -1), colors.grey),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica'),
+        ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#6b7280')),
+        ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#1f2937')),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 2*mm),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 2*mm),
+        ('LINEBELOW', (0, 0), (-1, -2), 0.5, colors.HexColor('#f3f4f6')),
     ]))
     story.append(payment_table)
-    story.append(Spacer(1, 8*mm))
+    story.append(Spacer(1, 10*mm))
     
-    # Amount Box
-    def format_inr(amount):
-        return f"₹ {amount:,.0f}"
+    # ============ AMOUNT SECTION ============
+    # Clean, prominent amount display
+    amount = receipt.get("amount", 0)
     
-    amount_data = [
-        ["Amount Paid", format_inr(receipt.get("amount", 0))],
+    amount_section_data = [
+        [Paragraph("Amount Received", amount_label_style), ""],
+        [Paragraph(format_inr(amount), amount_value_style), ""],
     ]
-    amount_table = Table(amount_data, colWidths=[85*mm, 85*mm])
+    
+    amount_table = Table(amount_section_data, colWidths=[120*mm, 40*mm])
     amount_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f0fdf4')),
-        ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
-        ('FONTNAME', (1, 0), (1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (0, 0), 12),
-        ('FONTSIZE', (1, 0), (1, 0), 16),
-        ('TEXTCOLOR', (1, 0), (1, 0), colors.HexColor('#16a34a')),
-        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (-1, -1), 5*mm),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5*mm),
-        ('LEFTPADDING', (0, 0), (-1, -1), 5*mm),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 5*mm),
-        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#86efac')),
+        ('TOPPADDING', (0, 0), (-1, -1), 1*mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1*mm),
     ]))
     story.append(amount_table)
-    story.append(Spacer(1, 5*mm))
+    story.append(Spacer(1, 8*mm))
     
-    # Summary
+    # Light separator
+    sep_table = Table([['']], colWidths=[160*mm], rowHeights=[0.25*mm])
+    sep_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#e5e7eb')),
+    ]))
+    story.append(sep_table)
+    story.append(Spacer(1, 6*mm))
+    
+    # ============ SUMMARY SECTION ============
     summary_data = [
-        ["Contract Value:", format_inr(contract_value)],
-        ["Total Received:", format_inr(total_received)],
-        ["Balance Remaining:", format_inr(balance_remaining)],
+        ["Contract Value", format_inr(contract_value)],
+        ["Total Received", format_inr(total_received)],
+        ["Balance Due", format_inr(balance_remaining)],
     ]
-    summary_table = Table(summary_data, colWidths=[85*mm, 85*mm])
+    
+    summary_table = Table(summary_data, colWidths=[120*mm, 40*mm])
     summary_table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica'),
-        ('FONTNAME', (1, 0), (1, -1), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, -1), 10),
-        ('TEXTCOLOR', (0, 0), (0, -1), colors.grey),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#6b7280')),
+        ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#1f2937')),
         ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2*mm),
-        ('LINEBELOW', (0, -1), (-1, -1), 1, colors.HexColor('#e2e8f0')),
+        ('TOPPADDING', (0, 0), (-1, -1), 1.5*mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1.5*mm),
     ]))
     story.append(summary_table)
-    story.append(Spacer(1, 10*mm))
     
-    # Notes
+    # ============ NOTES SECTION ============
     if receipt.get("notes"):
-        notes_style = ParagraphStyle(
-            'Notes',
-            parent=styles['Normal'],
-            fontSize=9,
-            textColor=colors.grey,
-            leading=12
-        )
-        story.append(Paragraph(f"<b>Notes:</b> {receipt['notes']}", notes_style))
-        story.append(Spacer(1, 5*mm))
+        story.append(Spacer(1, 8*mm))
+        notes_text = f"""<font color="#9ca3af" size="8">Notes</font><br/>
+<font color="#6b7280" size="9">{receipt['notes']}</font>"""
+        story.append(Paragraph(notes_text, styles['Normal']))
     
-    # Footer note
-    footer_note = ParagraphStyle(
-        'FooterNote',
-        parent=styles['Normal'],
-        fontSize=9,
-        textColor=colors.grey,
-        alignment=1
-    )
-    story.append(Spacer(1, 10*mm))
-    story.append(Paragraph("This is a payment receipt.", footer_note))
+    # ============ FOOTER ============
     story.append(Spacer(1, 15*mm))
     
-    # Signature section
+    # Signature line on right
     sig_data = [
+        ["", ""],
+        ["", "____________________________"],
         ["", settings.get("authorized_signatory", "Authorized Signatory")],
-        ["", "_" * 30],
     ]
-    sig_table = Table(sig_data, colWidths=[100*mm, 70*mm])
+    sig_table = Table(sig_data, colWidths=[100*mm, 60*mm])
     sig_table.setStyle(TableStyle([
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('TEXTCOLOR', (1, 2), (1, 2), colors.HexColor('#6b7280')),
         ('ALIGN', (1, 0), (1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
-        ('TOPPADDING', (1, 0), (1, 0), 20*mm),
+        ('TOPPADDING', (1, 1), (1, 1), 15*mm),
     ]))
     story.append(sig_table)
+    
+    story.append(Spacer(1, 10*mm))
+    
+    # System generated note
+    story.append(Paragraph("This is a system-generated receipt.", footer_style))
     
     # Build PDF
     doc.build(story)
@@ -16728,7 +16822,7 @@ async def generate_receipt_pdf(receipt_id: str, request: Request):
     buffer.seek(0)
     pdf_bytes = buffer.getvalue()
     
-    filename = f"Receipt_{receipt.get('receipt_number', 'unknown')}.pdf"
+    filename = f"Receipt_{receipt_number}.pdf"
     
     return Response(
         content=pdf_bytes,
