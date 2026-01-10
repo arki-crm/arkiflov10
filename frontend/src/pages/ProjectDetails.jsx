@@ -818,6 +818,7 @@ const ProjectDetails = () => {
                 isUpdating={isUpdatingStage}
                 userRole={user?.role}
                 holdStatus={project?.hold_status || 'Active'}
+                userMilestonePermissions={userMilestonePermissions}
               />
             </CardContent>
           </Card>
