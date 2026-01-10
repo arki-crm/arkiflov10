@@ -1342,7 +1342,10 @@ AVAILABLE_PERMISSIONS = {
             {"id": "finance.manage_categories", "name": "Manage Categories", "description": "Add/edit expense categories"},
             {"id": "finance.set_opening_balance", "name": "Set Opening Balance", "description": "Set initial account balances"},
             {"id": "finance.import_data", "name": "Import Data", "description": "Import financial data from files"},
-            {"id": "finance.export_data", "name": "Export Data", "description": "Export financial data to files"}
+            {"id": "finance.export_data", "name": "Export Data", "description": "Export financial data to files"},
+            # Phase 3 - Project Finance Control
+            {"id": "finance.view_project_finance", "name": "View Project Finance", "description": "View project financial summaries and vendor mappings"},
+            {"id": "finance.edit_vendor_mapping", "name": "Edit Vendor Mapping", "description": "Add/edit vendor mappings for projects"}
         ]
     }
 }
