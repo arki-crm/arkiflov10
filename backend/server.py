@@ -16376,6 +16376,369 @@ async def cancel_project_financially(
     }
 
 
+# ============ PDF RECEIPT GENERATION ============
+
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import mm, inch
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+from reportlab.pdfgen import canvas
+from io import BytesIO
+import base64
+
+# Company Settings Collection for logo and branding
+COMPANY_SETTINGS_DEFAULT = {
+    "company_name": "Arki Dots",
+    "company_tagline": "Interior Design Excellence",
+    "company_address": "",
+    "company_phone": "",
+    "company_email": "",
+    "company_gstin": "",
+    "authorized_signatory": "Authorized Signatory",
+    "logo_base64": None  # Will store base64-encoded logo
+}
+
+
+@api_router.get("/finance/company-settings")
+async def get_company_settings(request: Request):
+    """Get company settings for receipts/invoices"""
+    user = await get_current_user(request)
+    settings = await db.finance_company_settings.find_one({}, {"_id": 0})
+    if not settings:
+        return COMPANY_SETTINGS_DEFAULT
+    return settings
+
+
+@api_router.post("/finance/company-settings")
+async def update_company_settings(request: Request):
+    """Update company settings - Admin only"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    body = await request.json()
+    now = datetime.now(timezone.utc)
+    
+    # Validate and update
+    settings = {
+        "company_name": body.get("company_name", COMPANY_SETTINGS_DEFAULT["company_name"]),
+        "company_tagline": body.get("company_tagline", ""),
+        "company_address": body.get("company_address", ""),
+        "company_phone": body.get("company_phone", ""),
+        "company_email": body.get("company_email", ""),
+        "company_gstin": body.get("company_gstin", ""),
+        "authorized_signatory": body.get("authorized_signatory", "Authorized Signatory"),
+        "logo_base64": body.get("logo_base64"),
+        "updated_by": user.user_id,
+        "updated_at": now
+    }
+    
+    await db.finance_company_settings.replace_one({}, settings, upsert=True)
+    return {"success": True, "message": "Settings updated"}
+
+
+@api_router.post("/finance/company-settings/logo")
+async def upload_company_logo(file: UploadFile = File(...), request: Request = None):
+    """Upload company logo - Admin only"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    # Validate file type
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image files allowed")
+    
+    # Read and convert to base64
+    content = await file.read()
+    if len(content) > 2 * 1024 * 1024:  # 2MB max
+        raise HTTPException(status_code=400, detail="Logo must be under 2MB")
+    
+    logo_base64 = base64.b64encode(content).decode("utf-8")
+    content_type = file.content_type
+    
+    now = datetime.now(timezone.utc)
+    await db.finance_company_settings.update_one(
+        {},
+        {"$set": {
+            "logo_base64": f"data:{content_type};base64,{logo_base64}",
+            "logo_updated_at": now,
+            "logo_updated_by": user.user_id
+        }},
+        upsert=True
+    )
+    
+    return {"success": True, "message": "Logo uploaded"}
+
+
+@api_router.get("/finance/receipts/{receipt_id}/pdf")
+async def generate_receipt_pdf(receipt_id: str, request: Request):
+    """Generate PDF receipt - permission controlled"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_receipts"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get receipt
+    receipt = await db.finance_receipts.find_one({"receipt_id": receipt_id}, {"_id": 0})
+    if not receipt:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    
+    # Get project details
+    project = await db.projects.find_one({"project_id": receipt.get("project_id")}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get account details
+    account = await db.accounting_accounts.find_one({"account_id": receipt.get("account_id")}, {"_id": 0})
+    account_name = account.get("account_name", "N/A") if account else "N/A"
+    
+    # Get company settings
+    settings = await db.finance_company_settings.find_one({}, {"_id": 0})
+    if not settings:
+        settings = COMPANY_SETTINGS_DEFAULT.copy()
+    
+    # Calculate balance
+    all_receipts = await db.finance_receipts.find(
+        {"project_id": receipt.get("project_id"), "status": {"$ne": "cancelled"}},
+        {"_id": 0, "amount": 1}
+    ).to_list(100)
+    total_received = sum(r.get("amount", 0) for r in all_receipts)
+    contract_value = project.get("project_value", 0) or 0
+    balance_remaining = contract_value - total_received
+    
+    # Generate PDF
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=20*mm,
+        leftMargin=20*mm,
+        topMargin=20*mm,
+        bottomMargin=20*mm
+    )
+    
+    styles = getSampleStyleSheet()
+    story = []
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        spaceAfter=2*mm,
+        alignment=1  # Center
+    )
+    subtitle_style = ParagraphStyle(
+        'CustomSubtitle',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.grey,
+        alignment=1
+    )
+    header_style = ParagraphStyle(
+        'Header',
+        parent=styles['Heading2'],
+        fontSize=14,
+        spaceAfter=5*mm,
+        textColor=colors.HexColor('#1e40af')
+    )
+    label_style = ParagraphStyle(
+        'Label',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.grey
+    )
+    value_style = ParagraphStyle(
+        'Value',
+        parent=styles['Normal'],
+        fontSize=11,
+        fontName='Helvetica-Bold'
+    )
+    
+    # Company Header
+    company_name = settings.get("company_name", "Arki Dots")
+    story.append(Paragraph(company_name, title_style))
+    if settings.get("company_tagline"):
+        story.append(Paragraph(settings["company_tagline"], subtitle_style))
+    story.append(Spacer(1, 5*mm))
+    
+    # Receipt Title
+    story.append(Paragraph("PAYMENT RECEIPT", header_style))
+    story.append(Spacer(1, 3*mm))
+    
+    # Receipt Info Table
+    receipt_date = receipt.get("payment_date", "")
+    if isinstance(receipt_date, datetime):
+        receipt_date = receipt_date.strftime("%d %b %Y")
+    
+    info_data = [
+        ["Receipt Number:", receipt.get("receipt_number", "N/A"), "Date:", receipt_date],
+    ]
+    info_table = Table(info_data, colWidths=[35*mm, 55*mm, 25*mm, 45*mm])
+    info_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.grey),
+        ('TEXTCOLOR', (2, 0), (2, -1), colors.grey),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3*mm),
+    ]))
+    story.append(info_table)
+    story.append(Spacer(1, 5*mm))
+    
+    # Horizontal line
+    story.append(Table([['']], colWidths=[170*mm], rowHeights=[0.5*mm]))
+    story[-1].setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#e2e8f0'))]))
+    story.append(Spacer(1, 5*mm))
+    
+    # Customer & Project Details
+    pid_display = (project.get("pid") or "").replace("ARKI-", "")
+    details_data = [
+        ["Customer Name:", project.get("client_name", "N/A")],
+        ["Project ID:", pid_display],
+        ["Project Name:", project.get("project_name", "N/A")],
+    ]
+    details_table = Table(details_data, colWidths=[40*mm, 130*mm])
+    details_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.grey),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2*mm),
+    ]))
+    story.append(details_table)
+    story.append(Spacer(1, 5*mm))
+    
+    # Payment Details
+    payment_mode = (receipt.get("payment_mode") or "").replace("_", " ").title()
+    stage_name = receipt.get("stage_name") or "Customer Payment"
+    
+    payment_data = [
+        ["Payment Description:", stage_name],
+        ["Payment Mode:", payment_mode],
+        ["Account Received Into:", account_name],
+    ]
+    payment_table = Table(payment_data, colWidths=[50*mm, 120*mm])
+    payment_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.grey),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2*mm),
+    ]))
+    story.append(payment_table)
+    story.append(Spacer(1, 8*mm))
+    
+    # Amount Box
+    def format_inr(amount):
+        return f"₹ {amount:,.0f}"
+    
+    amount_data = [
+        ["Amount Paid", format_inr(receipt.get("amount", 0))],
+    ]
+    amount_table = Table(amount_data, colWidths=[85*mm, 85*mm])
+    amount_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f0fdf4')),
+        ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (1, 0), (1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (0, 0), 12),
+        ('FONTSIZE', (1, 0), (1, 0), 16),
+        ('TEXTCOLOR', (1, 0), (1, 0), colors.HexColor('#16a34a')),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 5*mm),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5*mm),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5*mm),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5*mm),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#86efac')),
+    ]))
+    story.append(amount_table)
+    story.append(Spacer(1, 5*mm))
+    
+    # Summary
+    summary_data = [
+        ["Contract Value:", format_inr(contract_value)],
+        ["Total Received:", format_inr(total_received)],
+        ["Balance Remaining:", format_inr(balance_remaining)],
+    ]
+    summary_table = Table(summary_data, colWidths=[85*mm, 85*mm])
+    summary_table.setStyle(TableStyle([
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica'),
+        ('FONTNAME', (1, 0), (1, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.grey),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2*mm),
+        ('LINEBELOW', (0, -1), (-1, -1), 1, colors.HexColor('#e2e8f0')),
+    ]))
+    story.append(summary_table)
+    story.append(Spacer(1, 10*mm))
+    
+    # Notes
+    if receipt.get("notes"):
+        notes_style = ParagraphStyle(
+            'Notes',
+            parent=styles['Normal'],
+            fontSize=9,
+            textColor=colors.grey,
+            leading=12
+        )
+        story.append(Paragraph(f"<b>Notes:</b> {receipt['notes']}", notes_style))
+        story.append(Spacer(1, 5*mm))
+    
+    # Footer note
+    footer_note = ParagraphStyle(
+        'FooterNote',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.grey,
+        alignment=1
+    )
+    story.append(Spacer(1, 10*mm))
+    story.append(Paragraph("This is a payment receipt.", footer_note))
+    story.append(Spacer(1, 15*mm))
+    
+    # Signature section
+    sig_data = [
+        ["", settings.get("authorized_signatory", "Authorized Signatory")],
+        ["", "_" * 30],
+    ]
+    sig_table = Table(sig_data, colWidths=[100*mm, 70*mm])
+    sig_table.setStyle(TableStyle([
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('ALIGN', (1, 0), (1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
+        ('TOPPADDING', (1, 0), (1, 0), 20*mm),
+    ]))
+    story.append(sig_table)
+    
+    # Build PDF
+    doc.build(story)
+    
+    # Return PDF as downloadable file
+    buffer.seek(0)
+    pdf_bytes = buffer.getvalue()
+    
+    filename = f"Receipt_{receipt.get('receipt_number', 'unknown')}.pdf"
+    
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
 # ============ HEALTH CHECK ============
 
 @api_router.get("/")
