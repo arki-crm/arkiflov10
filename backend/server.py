@@ -12984,21 +12984,66 @@ class AccountCreate(BaseModel):
     account_type: str  # "bank" or "cash"
     bank_name: Optional[str] = None
     branch: Optional[str] = None
-    category: str  # "Company Bank (Primary)", "Company Bank (Secondary)", "Cash-in-Hand"
+    account_number: Optional[str] = None  # For bank accounts
+    ifsc_code: Optional[str] = None
+    category: str  # "operating", "collection", "expense", "petty_cash"
     opening_balance: float = 0.0
+    opening_balance_date: Optional[str] = None  # ISO date when balance was set
     is_active: bool = True
 
 class AccountUpdate(BaseModel):
     account_name: Optional[str] = None
     bank_name: Optional[str] = None
     branch: Optional[str] = None
+    account_number: Optional[str] = None
+    ifsc_code: Optional[str] = None
     category: Optional[str] = None
     is_active: Optional[bool] = None
 
 class CategoryCreate(BaseModel):
     name: str
+    parent_id: Optional[str] = None  # For hierarchy
+    category_type: str = "expense"  # "expense", "income", "project"
     description: Optional[str] = None
     is_active: bool = True
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    parent_id: Optional[str] = None
+    category_type: Optional[str] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+# Vendor Master Models
+class VendorCreate(BaseModel):
+    vendor_name: str
+    vendor_type: str  # "material", "service", "contractor", "technician"
+    contact_person: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    gstin: Optional[str] = None
+    pan: Optional[str] = None
+    bank_account_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_ifsc: Optional[str] = None
+    notes: Optional[str] = None
+    is_active: bool = True
+
+class VendorUpdate(BaseModel):
+    vendor_name: Optional[str] = None
+    vendor_type: Optional[str] = None
+    contact_person: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    gstin: Optional[str] = None
+    pan: Optional[str] = None
+    bank_account_name: Optional[str] = None
+    bank_account_number: Optional[str] = None
+    bank_ifsc: Optional[str] = None
+    notes: Optional[str] = None
+    is_active: Optional[bool] = None
 
 class TransactionCreate(BaseModel):
     transaction_date: str  # ISO date string
