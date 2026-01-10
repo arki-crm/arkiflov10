@@ -562,7 +562,7 @@ const LeadStagesPanel = ({
 const LeadDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [lead, setLead] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
