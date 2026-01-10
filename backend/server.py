@@ -16433,6 +16433,7 @@ async def update_company_settings(request: Request):
         "company_gstin": body.get("company_gstin", ""),
         "authorized_signatory": body.get("authorized_signatory", "Authorized Signatory"),
         "logo_base64": body.get("logo_base64"),
+        "primary_color": body.get("primary_color", "#2563eb"),
         "updated_by": user.user_id,
         "updated_at": now
     }
