@@ -414,6 +414,54 @@ const FounderDashboard = () => {
         </Card>
       )}
 
+      {/* Expense Control Panel */}
+      {expenseStats && (
+        <Card className="bg-slate-800/50 border-slate-700 mb-6">
+          <CardHeader className="border-b border-slate-700 pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg text-white flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5" />
+                Expense Control
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/finance/expense-requests')}
+                className="text-blue-400 hover:text-blue-300"
+              >
+                View All <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-4 gap-4">
+              <div className="bg-amber-900/30 rounded-lg p-3">
+                <p className="text-amber-400 text-xs mb-1">Pending Approval</p>
+                <p className="text-2xl font-bold text-amber-300">{expenseStats.total_pending_approval || 0}</p>
+              </div>
+              <div className="bg-green-900/30 rounded-lg p-3">
+                <p className="text-green-400 text-xs mb-1">Approved (Unrecorded)</p>
+                <p className="text-2xl font-bold text-green-300">{expenseStats.total_approved_unrecorded || 0}</p>
+              </div>
+              <div className="bg-purple-900/30 rounded-lg p-3">
+                <p className="text-purple-400 text-xs mb-1">Pending Refunds</p>
+                <p className="text-2xl font-bold text-purple-300">{expenseStats.pending_refunds_count || 0}</p>
+              </div>
+              <div className="bg-red-900/30 rounded-lg p-3">
+                <p className="text-red-400 text-xs mb-1">Money at Risk</p>
+                <p className="text-2xl font-bold text-red-300">{formatCurrency(expenseStats.money_at_risk || 0)}</p>
+              </div>
+            </div>
+            {expenseStats.over_budget_count > 0 && (
+              <div className="mt-3 flex items-center gap-2 text-red-400 text-sm">
+                <AlertTriangle className="w-4 h-4" />
+                {expenseStats.over_budget_count} over-budget expense requests pending
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Risky Projects */}
       {data.risky_projects?.length > 0 && (
         <Card className="bg-slate-800/50 border-slate-700">
