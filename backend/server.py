@@ -13307,6 +13307,214 @@ async def update_accounting_category(category_id: str, request: Request):
     return updated
 
 
+# ============ ACCOUNTING: VENDOR MASTER ============
+
+@api_router.get("/accounting/vendors")
+async def list_vendors(request: Request, vendor_type: Optional[str] = None, is_active: Optional[bool] = None):
+    """List all vendors with optional filters"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_vendors"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.view_vendors permission")
+    
+    query = {}
+    if vendor_type:
+        query["vendor_type"] = vendor_type
+    if is_active is not None:
+        query["is_active"] = is_active
+    
+    vendors = await db.accounting_vendors.find(query, {"_id": 0}).sort("vendor_name", 1).to_list(500)
+    return vendors
+
+
+@api_router.get("/accounting/vendors/{vendor_id}")
+async def get_vendor(vendor_id: str, request: Request):
+    """Get a single vendor"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_vendors"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    vendor = await db.accounting_vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    return vendor
+
+
+@api_router.post("/accounting/vendors")
+async def create_vendor(vendor: VendorCreate, request: Request):
+    """Create a new vendor"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.manage_vendors"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.manage_vendors permission")
+    
+    now = datetime.now(timezone.utc)
+    vendor_id = f"vendor_{uuid.uuid4().hex[:8]}"
+    
+    new_vendor = {
+        "vendor_id": vendor_id,
+        "vendor_name": vendor.vendor_name,
+        "vendor_type": vendor.vendor_type,
+        "contact_person": vendor.contact_person,
+        "phone": vendor.phone,
+        "email": vendor.email,
+        "address": vendor.address,
+        "gstin": vendor.gstin,
+        "pan": vendor.pan,
+        "bank_account_name": vendor.bank_account_name,
+        "bank_account_number": vendor.bank_account_number,
+        "bank_ifsc": vendor.bank_ifsc,
+        "notes": vendor.notes,
+        "is_active": vendor.is_active,
+        "created_at": now,
+        "created_by": user.user_id,
+        "created_by_name": user.name
+    }
+    
+    await db.accounting_vendors.insert_one(new_vendor)
+    
+    # Audit log
+    await db.accounting_audit_log.insert_one({
+        "action": "vendor_created",
+        "entity_type": "vendor",
+        "entity_id": vendor_id,
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "details": f"Created vendor: {vendor.vendor_name} ({vendor.vendor_type})",
+        "timestamp": now
+    })
+    
+    new_vendor.pop("_id", None)
+    return new_vendor
+
+
+@api_router.put("/accounting/vendors/{vendor_id}")
+async def update_vendor(vendor_id: str, vendor: VendorUpdate, request: Request):
+    """Update a vendor"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.manage_vendors"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.manage_vendors permission")
+    
+    existing = await db.accounting_vendors.find_one({"vendor_id": vendor_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    now = datetime.now(timezone.utc)
+    update_dict = {"updated_at": now, "updated_by": user.user_id}
+    
+    changes = []
+    for field, value in vendor.dict(exclude_unset=True).items():
+        if value is not None and existing.get(field) != value:
+            changes.append(f"{field}: {existing.get(field)} → {value}")
+            update_dict[field] = value
+    
+    if len(update_dict) > 2:  # Has actual changes beyond timestamps
+        await db.accounting_vendors.update_one(
+            {"vendor_id": vendor_id},
+            {"$set": update_dict}
+        )
+        
+        # Audit log
+        await db.accounting_audit_log.insert_one({
+            "action": "vendor_updated",
+            "entity_type": "vendor",
+            "entity_id": vendor_id,
+            "user_id": user.user_id,
+            "user_name": user.name,
+            "details": f"Updated vendor: {existing.get('vendor_name')}. Changes: {'; '.join(changes)}",
+            "changes": changes,
+            "timestamp": now
+        })
+    
+    updated = await db.accounting_vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+    return updated
+
+
+@api_router.delete("/accounting/vendors/{vendor_id}")
+async def deactivate_vendor(vendor_id: str, request: Request):
+    """Soft delete (deactivate) a vendor"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.manage_vendors"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    existing = await db.accounting_vendors.find_one({"vendor_id": vendor_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    now = datetime.now(timezone.utc)
+    await db.accounting_vendors.update_one(
+        {"vendor_id": vendor_id},
+        {"$set": {"is_active": False, "deactivated_at": now, "deactivated_by": user.user_id}}
+    )
+    
+    # Audit log
+    await db.accounting_audit_log.insert_one({
+        "action": "vendor_deactivated",
+        "entity_type": "vendor",
+        "entity_id": vendor_id,
+        "user_id": user.user_id,
+        "user_name": user.name,
+        "details": f"Deactivated vendor: {existing.get('vendor_name')}",
+        "timestamp": now
+    })
+    
+    return {"success": True, "message": "Vendor deactivated"}
+
+
+# ============ AUDIT LOG ENDPOINT ============
+
+@api_router.get("/accounting/audit-log")
+async def get_audit_log(
+    request: Request,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = 100
+):
+    """Get audit log entries - Admin only"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    
+    query = {}
+    if entity_type:
+        query["entity_type"] = entity_type
+    if entity_id:
+        query["entity_id"] = entity_id
+    if user_id:
+        query["user_id"] = user_id
+    if start_date or end_date:
+        date_filter = {}
+        if start_date:
+            date_filter["$gte"] = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+        if end_date:
+            date_filter["$lte"] = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        if date_filter:
+            query["timestamp"] = date_filter
+    
+    logs = await db.accounting_audit_log.find(query, {"_id": 0}).sort("timestamp", -1).to_list(limit)
+    
+    # Convert datetime to ISO string
+    for log in logs:
+        if isinstance(log.get("timestamp"), datetime):
+            log["timestamp"] = log["timestamp"].isoformat()
+    
+    return logs
+
+
 # ============ ACCOUNTING: TRANSACTIONS (CASH BOOK / DAY BOOK) ============
 
 @api_router.get("/accounting/transactions")
