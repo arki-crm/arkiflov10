@@ -1317,3 +1317,26 @@ Evidence layer for finance operations - supporting document uploads for audit co
 - Frontend UI verified
 - Test file: `/app/tests/test_document_attachments.py`
 
+### CashBook Transaction Attachments Fix - COMPLETED Jan 11, 2026
+Fixed partially implemented feature:
+
+**1. CashBook Add Entry Modal**
+- Added "Attach Documents" section at bottom of modal
+- Supports multiple files (PDF, JPG, PNG up to 15MB)
+- Files stored as `pendingFiles` state, uploaded after transaction creation
+- Shows file list with remove option before submission
+
+**2. Docs/Eye Icon Wiring**
+- Docs column added to transaction table
+- Eye icon opens Transaction Details dialog
+- Dialog shows full transaction info + AttachmentUploader
+- Supports upload/download/delete when day not locked
+
+**3. ProjectFinanceDetail Integration**
+- Added Docs column to Recent Transactions table
+- Rows are now clickable
+- Click opens read-only Transaction Details dialog
+- Shows linked cashbook documents
+
+**Testing**: 13 backend + 8 frontend tests passed (100%)
+
