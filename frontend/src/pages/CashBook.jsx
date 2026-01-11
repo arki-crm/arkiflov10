@@ -203,16 +203,34 @@ const CashBook = () => {
       return;
     }
 
+    const amount = parseFloat(newTxn.amount);
+    
+    // Guardrails validation for outflows
+    if (newTxn.transaction_type === 'outflow' && amount > THRESHOLDS.review_threshold) {
+      // High value transaction - needs approver or expense request
+      if (!newTxn.approved_by && !newTxn.expense_request_id) {
+        toast.warning('High value transaction (>₹5,000). Consider selecting an Approver or linking to an approved Expense Request.');
+        // Still allow but warn
+      }
+    }
+
     try {
       setSubmitting(true);
       await axios.post(`${API}/accounting/transactions`, {
         ...newTxn,
-        amount: parseFloat(newTxn.amount),
+        amount: amount,
         transaction_date: new Date().toISOString(),
-        project_id: newTxn.project_id || null
+        project_id: newTxn.project_id || null,
+        requested_by: newTxn.requested_by || user?.user_id,
+        requested_by_name: newTxn.requested_by_name || user?.name
       }, { withCredentials: true });
       
-      toast.success('Transaction added successfully');
+      let message = 'Transaction added successfully';
+      if (amount > THRESHOLDS.petty_cash_max && amount <= THRESHOLDS.review_threshold) {
+        message += ' (flagged for review)';
+      }
+      toast.success(message);
+      
       setIsAddDialogOpen(false);
       setNewTxn({
         transaction_type: 'outflow',
@@ -222,7 +240,12 @@ const CashBook = () => {
         account_id: accounts[0]?.account_id || '',
         project_id: '',
         paid_to: '',
-        remarks: ''
+        remarks: '',
+        requested_by: '',
+        requested_by_name: '',
+        approved_by: '',
+        approved_by_name: '',
+        expense_request_id: ''
       });
       fetchData();
     } catch (error) {
@@ -230,6 +253,16 @@ const CashBook = () => {
       toast.error(error.response?.data?.detail || 'Failed to add transaction');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleMarkReviewed = async (transactionId) => {
+    try {
+      await axios.put(`${API}/accounting/transactions/${transactionId}/mark-reviewed`, {}, { withCredentials: true });
+      toast.success('Transaction marked as reviewed');
+      fetchData();
+    } catch (error) {
+      toast.error('Failed to mark as reviewed');
     }
   };
 
