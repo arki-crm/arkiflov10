@@ -1221,63 +1221,127 @@ export default function Salaries() {
 
       {/* Salary Ladder Config Modal */}
       <Dialog open={showLadderConfig} onOpenChange={setShowLadderConfig}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Salary Ladder Configuration</DialogTitle>
-            <DialogDescription>Define reference salary levels (guidance only, not enforced)</DialogDescription>
+            <DialogDescription>Reference salary levels for guidance and eligibility flagging</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-            {ladderData.map((level, index) => (
-              <div key={level.level} className="grid grid-cols-5 gap-3 items-center p-3 bg-gray-50 rounded-lg">
-                <Input
-                  value={level.name}
-                  onChange={(e) => {
-                    const newData = [...ladderData];
-                    newData[index].name = e.target.value;
-                    setLadderData(newData);
-                  }}
-                  placeholder="Level Name"
-                />
-                <Input
-                  type="number"
-                  value={level.min_salary}
-                  onChange={(e) => {
-                    const newData = [...ladderData];
-                    newData[index].min_salary = parseFloat(e.target.value) || 0;
-                    setLadderData(newData);
-                  }}
-                  placeholder="Min Salary"
-                />
-                <Input
-                  type="number"
-                  value={level.max_salary}
-                  onChange={(e) => {
-                    const newData = [...ladderData];
-                    newData[index].max_salary = parseFloat(e.target.value) || 0;
-                    setLadderData(newData);
-                  }}
-                  placeholder="Max Salary"
-                />
-                <Input
-                  type="number"
-                  value={level.order}
-                  onChange={(e) => {
-                    const newData = [...ladderData];
-                    newData[index].order = parseInt(e.target.value) || 0;
-                    setLadderData(newData);
-                  }}
-                  placeholder="Order"
-                />
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => setLadderData(ladderData.filter((_, i) => i !== index))}
-                >
-                  Remove
-                </Button>
+          
+          {/* Disclaimer Banner */}
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+            <p className="text-sm text-blue-800 font-medium">
+              ℹ️ This is a reference salary ladder for guidance and eligibility flagging only.
+            </p>
+            <p className="text-sm text-blue-700 mt-1">
+              Salary changes are always manual and controlled by Admin. No automatic promotions.
+            </p>
+          </div>
+          
+          <div className="space-y-4 max-h-[50vh] overflow-y-auto">
+            {/* Column Headers */}
+            <div className="grid grid-cols-4 gap-3 px-3 pb-2 border-b">
+              <div>
+                <Label className="font-semibold">Level Name</Label>
               </div>
-            ))}
+              <div>
+                <Label className="font-semibold">Reference Monthly Salary</Label>
+                <p className="text-xs text-gray-500">Guidance only, not enforced</p>
+              </div>
+              <div>
+                <Label className="font-semibold">Eligibility Credits</Label>
+                <p className="text-xs text-gray-500">Bookings Sent to Production</p>
+              </div>
+              <div></div>
+            </div>
+            
+            {ladderData.map((level, index) => {
+              const isTrainee = level.level === 'trainee' || level.name.toLowerCase().includes('trainee');
+              return (
+                <div key={level.level} className="grid grid-cols-4 gap-3 items-center p-3 bg-gray-50 rounded-lg">
+                  <Input
+                    value={level.name}
+                    onChange={(e) => {
+                      const newData = [...ladderData];
+                      newData[index].name = e.target.value;
+                      setLadderData(newData);
+                    }}
+                    placeholder="e.g., Level 1"
+                  />
+                  {isTrainee ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        value={level.min_salary}
+                        onChange={(e) => {
+                          const newData = [...ladderData];
+                          newData[index].min_salary = parseFloat(e.target.value) || 0;
+                          setLadderData(newData);
+                        }}
+                        placeholder="Min"
+                        className="w-24"
+                      />
+                      <span className="text-gray-500">–</span>
+                      <Input
+                        type="number"
+                        value={level.max_salary}
+                        onChange={(e) => {
+                          const newData = [...ladderData];
+                          newData[index].max_salary = parseFloat(e.target.value) || 0;
+                          setLadderData(newData);
+                        }}
+                        placeholder="Max"
+                        className="w-24"
+                      />
+                    </div>
+                  ) : (
+                    <Input
+                      type="number"
+                      value={level.min_salary}
+                      onChange={(e) => {
+                        const newData = [...ladderData];
+                        const salary = parseFloat(e.target.value) || 0;
+                        newData[index].min_salary = salary;
+                        newData[index].max_salary = salary; // Keep in sync for non-trainee levels
+                        setLadderData(newData);
+                      }}
+                      placeholder="₹ Monthly"
+                    />
+                  )}
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      value={level.order}
+                      onChange={(e) => {
+                        const newData = [...ladderData];
+                        newData[index].order = parseInt(e.target.value) || 0;
+                        setLadderData(newData);
+                      }}
+                      placeholder="0"
+                      className="w-20"
+                    />
+                    <span className="text-xs text-gray-500">credits</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={() => setLadderData(ladderData.filter((_, i) => i !== index))}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              );
+            })}
+            
+            {/* Helper text */}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              <p className="font-medium">About Eligibility Credits:</p>
+              <p className="mt-1">Used only to flag promotion eligibility. Salary updates are manual and admin-approved.</p>
+              <p className="mt-1 text-xs text-amber-700">
+                Example: An employee with 3+ production bookings across 3+ months is flagged as "Eligible for Review" — but promotion is still manual.
+              </p>
+            </div>
             <Button
               type="button"
               variant="outline"
