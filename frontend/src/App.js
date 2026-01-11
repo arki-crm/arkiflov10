@@ -64,6 +64,8 @@ import ExpenseRequests from './pages/ExpenseRequests';
 import Budgets from './pages/Budgets';
 import FinancialForecast from './pages/FinancialForecast';
 import Salaries from './pages/Salaries';
+import Liabilities from './pages/Liabilities';
+import PnLSnapshot from './pages/PnLSnapshot';
 
 import './App.css';
 
