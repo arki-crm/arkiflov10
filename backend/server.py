@@ -19138,6 +19138,17 @@ async def create_liability(liability: LiabilityCreate, request: Request):
     
     await db.finance_liabilities.insert_one(liability_doc)
     
+    # Audit log for liability creation
+    await create_audit_log(
+        entity_type="liability",
+        entity_id=liability_doc["liability_id"],
+        action="create",
+        user_id=user_doc.get("user_id"),
+        user_name=user_doc.get("name"),
+        new_value={"amount": liability.amount, "vendor": liability.vendor_name, "category": liability.category},
+        details=f"Created liability of ₹{liability.amount:,.0f} for {liability.vendor_name}"
+    )
+    
     return {k: v for k, v in liability_doc.items() if k != "_id"}
 
 
@@ -19212,6 +19223,18 @@ async def settle_liability(liability_id: str, settlement: LiabilitySettlement, r
             },
             "$push": {"settlements": settlement_entry}
         }
+    )
+    
+    # Audit log for liability settlement
+    await create_audit_log(
+        entity_type="liability",
+        entity_id=liability_id,
+        action="settle",
+        user_id=user_doc.get("user_id"),
+        user_name=user_doc.get("name"),
+        old_value={"amount_remaining": liability.get("amount_remaining", 0), "status": liability.get("status")},
+        new_value={"amount_settled": settlement.amount, "new_remaining": new_remaining, "status": new_status},
+        details=f"Settled ₹{settlement.amount:,.0f} - Status: {new_status}"
     )
     
     updated = await db.finance_liabilities.find_one({"liability_id": liability_id}, {"_id": 0})
@@ -19854,6 +19877,17 @@ async def create_receipt(receipt: ReceiptCreate, request: Request):
     
     await db.finance_receipts.insert_one(receipt_doc)
     await db.accounting_transactions.insert_one(txn_doc)
+    
+    # Audit log for receipt creation
+    await create_audit_log(
+        entity_type="receipt",
+        entity_id=receipt_doc["receipt_id"],
+        action="create",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"amount": receipt.amount, "project_id": receipt.project_id, "receipt_number": receipt_number},
+        details=f"Created receipt {receipt_number} for ₹{receipt.amount:,.0f}"
+    )
     
     receipt_doc.pop("_id", None)
     return receipt_doc
