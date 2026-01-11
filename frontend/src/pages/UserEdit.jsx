@@ -178,11 +178,13 @@ const UserEdit = () => {
 
   const fetchAvailablePermissions = async () => {
     try {
-      const response = await axios.get(`${API_URL}/api/permissions/available`, {
-        withCredentials: true
-      });
-      setAvailablePermissions(response.data.permission_groups || {});
-      setDefaultRolePermissions(response.data.default_role_permissions || {});
+      const [permRes, rolesRes] = await Promise.all([
+        axios.get(`${API_URL}/api/permissions/available`, { withCredentials: true }),
+        axios.get(`${API_URL}/api/roles/available`, { withCredentials: true })
+      ]);
+      setAvailablePermissions(permRes.data.permission_groups || {});
+      setDefaultRolePermissions(permRes.data.default_role_permissions || {});
+      setAvailableRoles(rolesRes.data.roles || []);
     } catch (err) {
       console.error('Error fetching permissions:', err);
     }
