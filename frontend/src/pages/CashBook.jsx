@@ -505,6 +505,103 @@ const CashBook = () => {
                       data-testid="remarks-input"
                     />
                   </div>
+
+                  {/* Accountability Section - For Outflows */}
+                  {newTxn.transaction_type === 'outflow' && (
+                    <>
+                      <div className="col-span-2 border-t pt-4 mt-2">
+                        <h4 className="font-medium text-sm text-slate-700 mb-3 flex items-center gap-2">
+                          <UserCheck className="w-4 h-4" />
+                          Accountability (Who is responsible?)
+                        </h4>
+                        
+                        {/* Amount Category Indicator */}
+                        {newTxn.amount && (
+                          <div className="mb-3">
+                            {(() => {
+                              const cat = getAmountCategory(parseFloat(newTxn.amount) || 0);
+                              return (
+                                <Badge className={cat.color}>
+                                  {cat.label}: {formatCurrency(parseFloat(newTxn.amount) || 0)}
+                                </Badge>
+                              );
+                            })()}
+                            {parseFloat(newTxn.amount) > THRESHOLDS.petty_cash_max && parseFloat(newTxn.amount) <= THRESHOLDS.review_threshold && (
+                              <p className="text-xs text-amber-600 mt-1">This transaction will be flagged for review</p>
+                            )}
+                            {parseFloat(newTxn.amount) > THRESHOLDS.review_threshold && (
+                              <p className="text-xs text-red-600 mt-1">High value: Consider selecting an Approver or linking to Expense Request</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Requested By */}
+                      <div>
+                        <Label>Requested By</Label>
+                        <Input
+                          value={newTxn.requested_by_name}
+                          onChange={(e) => setNewTxn(prev => ({ ...prev, requested_by_name: e.target.value }))}
+                          placeholder={user?.name || "Who initiated this spend?"}
+                          className="mt-1"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Leave blank = you</p>
+                      </div>
+
+                      {/* Approved By - Only show for high-value transactions */}
+                      {parseFloat(newTxn.amount) > THRESHOLDS.review_threshold && (
+                        <div>
+                          <Label>Approved By {parseFloat(newTxn.amount) > THRESHOLDS.review_threshold ? '(Recommended)' : ''}</Label>
+                          <Select 
+                            value={newTxn.approved_by || "none"} 
+                            onValueChange={(v) => {
+                              const approver = approvers.find(a => a.user_id === v);
+                              setNewTxn(prev => ({ 
+                                ...prev, 
+                                approved_by: v === "none" ? "" : v,
+                                approved_by_name: approver?.name || ""
+                              }));
+                            }}
+                          >
+                            <SelectTrigger className="mt-1">
+                              <SelectValue placeholder="Select approver" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No Approver</SelectItem>
+                              {approvers.map(a => (
+                                <SelectItem key={a.user_id} value={a.user_id}>
+                                  {a.name} ({a.role})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      {/* Link to Expense Request - For high-value */}
+                      {parseFloat(newTxn.amount) > THRESHOLDS.review_threshold && approvedExpenseRequests.length > 0 && (
+                        <div className="col-span-2">
+                          <Label>Link to Expense Request (Optional)</Label>
+                          <Select 
+                            value={newTxn.expense_request_id || "none"} 
+                            onValueChange={(v) => setNewTxn(prev => ({ ...prev, expense_request_id: v === "none" ? "" : v }))}
+                          >
+                            <SelectTrigger className="mt-1">
+                              <SelectValue placeholder="Link to approved expense request" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">No Link</SelectItem>
+                              {approvedExpenseRequests.map(req => (
+                                <SelectItem key={req.request_id} value={req.request_id}>
+                                  {req.title} - {formatCurrency(req.amount)} (by {req.requested_by_name})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
 
                 <DialogFooter>
