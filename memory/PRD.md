@@ -1136,3 +1136,125 @@ All imported records include:
 - Frontend UI verified
 - Test file: `/app/tests/test_import_export.py`
 
+---
+
+## ✅ Reports & Insights Layer - COMPLETED Jan 11, 2026
+
+Financial reports for analyzing cash flow and project profitability.
+
+### Reports Available
+
+| Report | Endpoint | Description |
+|--------|----------|-------------|
+| Cash Flow Report | `/api/finance/reports/cash-flow` | Inflows vs outflows with monthly trends, category breakdown, account breakdown, project cash flow |
+| Project Profitability | `/api/finance/reports/project-profitability` | All projects with profitability metrics, margins, risk assessment |
+
+### Cash Flow Report Features
+- Period selector: Last 3 months (default), 6 months, 12 months, custom range
+- Summary cards: Total Inflow, Total Outflow, Net Cash Flow, Transaction Count
+- Monthly trend table with inflow/outflow/net per month
+- Category breakdown for inflows and outflows
+- Account breakdown showing balance per account
+- Project cash flow (top 20 projects)
+- Export to Excel functionality
+
+### Project Profitability Report Features
+- Summary cards: Total Projects, Profitable, Loss-Making, Total Profit, Overall Margin %
+- Top profitable projects list
+- Loss-making projects list
+- Filters: Stage, Status (profitable/loss/all), Sort by (margin/profit/contract value)
+- All projects table with profitability metrics
+- Risk assessment per project (high/medium/low based on cost overrun)
+- Click to navigate to project finance detail
+
+### New API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/finance/reports/available` | GET | List available reports based on user permissions |
+| `/api/finance/reports/cash-flow` | GET | Cash flow report with period filter |
+| `/api/finance/reports/project-profitability` | GET | Project profitability report with filters |
+
+### Files Modified
+- `/app/backend/server.py` - Reports API endpoints
+- `/app/frontend/src/pages/FinanceReports.jsx` - NEW Reports hub page
+- `/app/frontend/src/pages/CashFlowReport.jsx` - NEW Cash Flow Report page
+- `/app/frontend/src/pages/ProjectProfitabilityReport.jsx` - NEW Project Profitability Report page
+- `/app/frontend/src/App.js` - Routes for `/finance/reports/*`
+- `/app/frontend/src/components/layout/Sidebar.jsx` - Reports link in Finance submenu
+
+### Testing
+- All API endpoints verified via curl
+- Frontend UI verified with screenshots
+
+---
+
+## ✅ CA Mode (Chartered Accountant Access) - COMPLETED Jan 11, 2026
+
+Read-only access for Chartered Accountants and Auditors.
+
+### Role Configuration
+- **Role ID**: `CharteredAccountant`
+- **Access Type**: Read-only
+- **Scope**: Finance + Project Finance summaries only (no CRM pipeline)
+
+### Permissions Granted
+```
+finance.cashbook.view, finance.daily_closing.view
+finance.accounts.view
+finance.receipts.view, finance.receipts.download
+finance.invoices.view, finance.refunds.view
+finance.project.view
+finance.expenses.view
+finance.reports.view, finance.reports.export, finance.reports.profit, finance.reports.margin
+finance.monthly_snapshot
+finance.budget.view, finance.forecast.view
+finance.categories.view, finance.vendors.view
+finance.payment_schedule.view
+finance.audit_log.view
+```
+
+### CA Navigation (Sidebar)
+- Dashboard (Finance Overview)
+- My Profile
+- Finance submenu:
+  - Overview
+  - Project Finance
+  - Cash Book
+  - Liabilities
+  - Receipts
+  - P&L Snapshot
+  - Reports
+  - Export Data
+
+### How to Create CA User
+1. Admin goes to Users page
+2. Click "Add User"
+3. Select role: "Chartered Accountant (CA)"
+4. Fill email and password
+5. CA user can login with email/password and access read-only finance data
+
+### Files Modified
+- `/app/backend/server.py` - CharteredAccountant added to VALID_ROLES, Founder role added
+- `/app/frontend/src/components/layout/Sidebar.jsx` - CA-specific navigation with restricted submenu
+
+---
+
+## 🔜 Upcoming Tasks
+
+### P2: Backend Refactoring
+- Break down the 22,000+ line `server.py` monolith into:
+  - `/app/backend/routes/` - API route modules
+  - `/app/backend/models/` - Pydantic models
+  - `/app/backend/services/` - Business logic
+
+### P3: Code Cleanup
+- Fix deferred Python linting errors in `server.py`
+- Remove duplicate API endpoint definitions
+
+---
+
+## Known Technical Debt
+1. **CRITICAL**: `/app/backend/server.py` monolith (~22,000+ lines)
+2. **Medium**: Duplicate API endpoints in `server.py`
+3. **Low**: Deferred Python linting errors
+
