@@ -118,6 +118,7 @@ const ProjectFinanceDetail = () => {
   const [lockStatus, setLockStatus] = useState(null);
   const [isLockOverrideOpen, setIsLockOverrideOpen] = useState(false);
   const [lockOverrideForm, setLockOverrideForm] = useState({ lock_percentage: '', reason: '' });
+  const [projectProfit, setProjectProfit] = useState(null);
   
   const [newMapping, setNewMapping] = useState({
     vendor_name: '',
