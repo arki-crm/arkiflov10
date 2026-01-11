@@ -703,6 +703,50 @@ A lightweight salary management module focused on financial discipline, not HR.
 - [ ] CA Mode (Read-only audit access)
 - [ ] SMS/Email integration for critical alerts
 
+---
+
+## ✅ Cashbook Guardrails & Expense Accountability - COMPLETED Jan 2026
+
+Enhancement to Cashbook for preventing money leakage and clarifying responsibility.
+
+### Features Implemented:
+- [x] **Amount-Based Guardrails** - Soft validation based on amount thresholds
+- [x] **Accountability Fields** - requested_by, paid_by, approved_by tracking
+- [x] **Review Flagging** - Auto-flag mid-range and high-value transactions
+- [x] **Admin/CEO Review List** - "Needs Review" filter and mark-reviewed action
+- [x] **Expense Request Linking** - Optional link to approved expense requests
+
+### Guardrail Thresholds:
+| Amount Range | Status | Behavior |
+|--------------|--------|----------|
+| ₹0 - ₹1,000 | Petty Cash | Direct entry, no approval needed |
+| ₹1,001 - ₹5,000 | Needs Review | Entry allowed, flagged for Admin/CEO review |
+| ₹5,001+ | Approval Required | Should have approver or expense request link |
+
+### New Fields in accounting_transactions:
+- `requested_by` / `requested_by_name` - Who initiated the spend
+- `paid_by` / `paid_by_name` - Who paid / created the entry
+- `approved_by` / `approved_by_name` - Who approved (for high-value)
+- `expense_request_id` - Link to approved expense request
+- `needs_review` - Boolean flag for review list
+- `approval_status` - not_required / needs_review / pending_approval / approved / reviewed
+
+### New API Endpoints:
+- `GET /api/accounting/transactions/review-summary` - Count and amount needing review
+- `GET /api/accounting/transactions/needs-review` - List flagged transactions
+- `PUT /api/accounting/transactions/{id}/mark-reviewed` - Clear review flag
+- `GET /api/accounting/users-for-approval` - List eligible approvers
+- `GET /api/accounting/approved-expense-requests` - List linkable expense requests
+
+### UI Enhancements:
+- "Needs Review (N)" button in Cashbook header (Admin/CEO only)
+- "Requested By" column in transactions table
+- Status badges: Needs Review, No Approver, ER Linked
+- "Mark Reviewed" action button
+- Accountability section in Add Entry dialog with amount category indicator
+
+---
+
 ### P3 - Future Features (CRM)
 - [ ] ProductionOpsDashboard UI implementation
 - [ ] Quick Add button on main dashboard
