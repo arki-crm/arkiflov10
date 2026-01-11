@@ -16615,6 +16615,759 @@ async def get_expense_requests_summary(request: Request):
     }
 
 
+# ============ BUDGETING & FORECASTING MODULE ============
+
+# Default budget categories
+DEFAULT_BUDGET_CATEGORIES = [
+    {"key": "salaries", "name": "Salaries", "type": "fixed", "description": "Employee salaries and wages"},
+    {"key": "stipends", "name": "Stipends & Allowances", "type": "fixed", "description": "Intern stipends, travel allowances"},
+    {"key": "rent", "name": "Office Rent", "type": "fixed", "description": "Monthly rent for office space"},
+    {"key": "utilities", "name": "Utilities", "type": "fixed", "description": "Electricity, internet, water bills"},
+    {"key": "marketing", "name": "Marketing & Ads", "type": "variable", "description": "Digital ads, marketing campaigns"},
+    {"key": "travel", "name": "Travel & Fuel", "type": "variable", "description": "Site visits, client meetings, fuel"},
+    {"key": "repairs", "name": "Repairs & Maintenance", "type": "variable", "description": "Equipment repairs, office maintenance"},
+    {"key": "warranty", "name": "Warranty & Snag", "type": "variable", "description": "Warranty claims, snag fixes"},
+    {"key": "professional", "name": "Professional Fees", "type": "variable", "description": "CA fees, legal, consulting"},
+    {"key": "miscellaneous", "name": "Miscellaneous", "type": "variable", "description": "Other expenses (capped)"}
+]
+
+# Approval thresholds (in INR)
+SPEND_APPROVAL_THRESHOLDS = {
+    "petty_cash": {"min": 0, "max": 1000, "permission": "finance.expenses.approve_petty", "auto_approve": True},
+    "standard": {"min": 1001, "max": 5000, "permission": "finance.expenses.approve_standard", "auto_approve": False},
+    "high_value": {"min": 5001, "max": float('inf'), "permission": "finance.expenses.approve_high", "auto_approve": False}
+}
+
+
+class BudgetCategoryAllocation(BaseModel):
+    category_key: str
+    planned_amount: float
+    notes: Optional[str] = None
+
+
+class BudgetCreate(BaseModel):
+    period_type: str  # "monthly" or "quarterly"
+    period_start: str  # YYYY-MM-DD
+    period_end: str  # YYYY-MM-DD
+    name: Optional[str] = None  # e.g., "January 2026 Budget"
+    allocations: List[BudgetCategoryAllocation]
+    notes: Optional[str] = None
+
+
+class BudgetUpdate(BaseModel):
+    allocations: Optional[List[BudgetCategoryAllocation]] = None
+    notes: Optional[str] = None
+
+
+class ForecastAssumptions(BaseModel):
+    expected_monthly_income: float
+    expected_project_closures: int = 0
+    average_project_value: float = 0
+    fixed_commitments: float = 0
+    notes: Optional[str] = None
+
+
+@api_router.get("/finance/budgets")
+async def list_budgets(
+    request: Request,
+    period_type: Optional[str] = None,
+    status: Optional[str] = None,
+    year: Optional[int] = None
+):
+    """List all budgets with optional filters"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.budget.view"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.budget.view permission")
+    
+    query = {}
+    if period_type:
+        query["period_type"] = period_type
+    if status:
+        query["status"] = status
+    if year:
+        query["period_start"] = {"$regex": f"^{year}"}
+    
+    budgets = await db.finance_budgets.find(query, {"_id": 0}).sort("period_start", -1).to_list(50)
+    return budgets
+
+
+@api_router.get("/finance/budgets/current")
+async def get_current_budget(request: Request):
+    """Get the current active budget (for current month/quarter)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.budget.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    
+    # Find budget where today falls within the period
+    budget = await db.finance_budgets.find_one({
+        "period_start": {"$lte": today},
+        "period_end": {"$gte": today},
+        "status": {"$in": ["active", "draft"]}
+    }, {"_id": 0})
+    
+    if not budget:
+        return {"budget": None, "message": "No active budget for current period"}
+    
+    # Calculate actuals from cashbook
+    budget_with_actuals = await calculate_budget_actuals(budget)
+    return budget_with_actuals
+
+
+async def calculate_budget_actuals(budget: dict) -> dict:
+    """Calculate actual spending against budget from cashbook transactions"""
+    period_start = budget["period_start"]
+    period_end = budget["period_end"]
+    
+    # Get all outflow transactions in the budget period
+    pipeline = [
+        {
+            "$match": {
+                "transaction_type": "outflow",
+                "transaction_date": {"$gte": period_start, "$lte": period_end}
+            }
+        },
+        {
+            "$group": {
+                "_id": "$category_id",
+                "total_spent": {"$sum": "$amount"},
+                "transaction_count": {"$sum": 1}
+            }
+        }
+    ]
+    
+    actual_by_category = {}
+    txn_results = await db.accounting_transactions.aggregate(pipeline).to_list(100)
+    
+    # Get category mappings to budget keys
+    categories = await db.accounting_categories.find({}, {"_id": 0}).to_list(100)
+    category_to_budget_key = {}
+    for cat in categories:
+        # Map category name to budget key (simple mapping)
+        cat_name_lower = cat.get("name", "").lower()
+        if "salary" in cat_name_lower or "payroll" in cat_name_lower:
+            category_to_budget_key[cat["category_id"]] = "salaries"
+        elif "rent" in cat_name_lower:
+            category_to_budget_key[cat["category_id"]] = "rent"
+        elif "utility" in cat_name_lower or "electric" in cat_name_lower:
+            category_to_budget_key[cat["category_id"]] = "utilities"
+        elif "marketing" in cat_name_lower or "ad" in cat_name_lower:
+            category_to_budget_key[cat["category_id"]] = "marketing"
+        elif "travel" in cat_name_lower or "fuel" in cat_name_lower:
+            category_to_budget_key[cat["category_id"]] = "travel"
+        elif "repair" in cat_name_lower or "maintenance" in cat_name_lower:
+            category_to_budget_key[cat["category_id"]] = "repairs"
+        elif "warranty" in cat_name_lower or "snag" in cat_name_lower:
+            category_to_budget_key[cat["category_id"]] = "warranty"
+        elif "professional" in cat_name_lower or "legal" in cat_name_lower or "consulting" in cat_name_lower:
+            category_to_budget_key[cat["category_id"]] = "professional"
+        elif "stipend" in cat_name_lower or "allowance" in cat_name_lower:
+            category_to_budget_key[cat["category_id"]] = "stipends"
+        else:
+            category_to_budget_key[cat["category_id"]] = "miscellaneous"
+    
+    # Aggregate by budget key
+    for txn in txn_results:
+        cat_id = txn["_id"]
+        budget_key = category_to_budget_key.get(cat_id, "miscellaneous")
+        if budget_key not in actual_by_category:
+            actual_by_category[budget_key] = {"spent": 0, "transactions": 0}
+        actual_by_category[budget_key]["spent"] += txn["total_spent"]
+        actual_by_category[budget_key]["transactions"] += txn["transaction_count"]
+    
+    # Enrich allocations with actuals
+    enriched_allocations = []
+    total_planned = 0
+    total_spent = 0
+    
+    for alloc in budget.get("allocations", []):
+        key = alloc["category_key"]
+        planned = alloc.get("planned_amount", 0)
+        actual = actual_by_category.get(key, {}).get("spent", 0)
+        txn_count = actual_by_category.get(key, {}).get("transactions", 0)
+        
+        variance = planned - actual
+        variance_pct = ((actual / planned) * 100) if planned > 0 else 0
+        
+        # Status: green (<80%), amber (80-100%), red (>100%)
+        if variance_pct < 80:
+            status = "green"
+        elif variance_pct <= 100:
+            status = "amber"
+        else:
+            status = "red"
+        
+        total_planned += planned
+        total_spent += actual
+        
+        enriched_allocations.append({
+            **alloc,
+            "actual_spent": actual,
+            "variance": variance,
+            "variance_pct": round(variance_pct, 1),
+            "remaining": max(0, variance),
+            "status": status,
+            "transaction_count": txn_count
+        })
+    
+    budget["allocations"] = enriched_allocations
+    budget["summary"] = {
+        "total_planned": total_planned,
+        "total_spent": total_spent,
+        "total_variance": total_planned - total_spent,
+        "total_variance_pct": round((total_spent / total_planned) * 100, 1) if total_planned > 0 else 0,
+        "overall_status": "green" if total_spent < total_planned * 0.8 else ("amber" if total_spent <= total_planned else "red")
+    }
+    
+    return budget
+
+
+@api_router.get("/finance/budgets/{budget_id}")
+async def get_budget(budget_id: str, request: Request):
+    """Get a specific budget with actuals"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.budget.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    budget = await db.finance_budgets.find_one({"budget_id": budget_id}, {"_id": 0})
+    if not budget:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    
+    budget_with_actuals = await calculate_budget_actuals(budget)
+    return budget_with_actuals
+
+
+@api_router.post("/finance/budgets")
+async def create_budget(data: BudgetCreate, request: Request):
+    """Create a new budget period"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.budget.create"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.budget.create permission")
+    
+    # Validate period type
+    if data.period_type not in ["monthly", "quarterly"]:
+        raise HTTPException(status_code=400, detail="Invalid period_type. Must be 'monthly' or 'quarterly'")
+    
+    # Check for overlapping budgets
+    existing = await db.finance_budgets.find_one({
+        "$or": [
+            {"period_start": {"$lte": data.period_end}, "period_end": {"$gte": data.period_start}},
+        ],
+        "status": {"$ne": "cancelled"}
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Budget period overlaps with existing budget: {existing.get('name', existing.get('budget_id'))}")
+    
+    now = datetime.now(timezone.utc)
+    budget_id = f"budget_{uuid.uuid4().hex[:12]}"
+    
+    # Generate name if not provided
+    start_date = datetime.strptime(data.period_start, "%Y-%m-%d")
+    name = data.name or f"{start_date.strftime('%B %Y')} Budget"
+    
+    # Validate allocations have valid category keys
+    valid_keys = [c["key"] for c in DEFAULT_BUDGET_CATEGORIES]
+    for alloc in data.allocations:
+        if alloc.category_key not in valid_keys:
+            raise HTTPException(status_code=400, detail=f"Invalid category key: {alloc.category_key}")
+    
+    new_budget = {
+        "budget_id": budget_id,
+        "name": name,
+        "period_type": data.period_type,
+        "period_start": data.period_start,
+        "period_end": data.period_end,
+        "status": "draft",  # draft, active, closed, cancelled
+        "allocations": [
+            {
+                "category_key": a.category_key,
+                "planned_amount": a.planned_amount,
+                "notes": a.notes
+            } for a in data.allocations
+        ],
+        "notes": data.notes,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "activated_at": None,
+        "closed_at": None,
+        "activity_log": [{
+            "action": "created",
+            "by_id": user.user_id,
+            "by_name": user.name,
+            "at": now.isoformat(),
+            "details": f"Budget created: {name}"
+        }]
+    }
+    
+    await db.finance_budgets.insert_one(new_budget)
+    new_budget.pop("_id", None)
+    return new_budget
+
+
+@api_router.put("/finance/budgets/{budget_id}")
+async def update_budget(budget_id: str, data: BudgetUpdate, request: Request):
+    """Update budget allocations"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.budget.edit"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.budget.edit permission")
+    
+    existing = await db.finance_budgets.find_one({"budget_id": budget_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    
+    if existing.get("status") == "closed":
+        raise HTTPException(status_code=400, detail="Cannot edit a closed budget")
+    
+    now = datetime.now(timezone.utc)
+    update_dict = {"updated_at": now.isoformat()}
+    
+    if data.allocations is not None:
+        update_dict["allocations"] = [
+            {
+                "category_key": a.category_key,
+                "planned_amount": a.planned_amount,
+                "notes": a.notes
+            } for a in data.allocations
+        ]
+    
+    if data.notes is not None:
+        update_dict["notes"] = data.notes
+    
+    activity_entry = {
+        "action": "updated",
+        "by_id": user.user_id,
+        "by_name": user.name,
+        "at": now.isoformat(),
+        "details": "Budget allocations updated"
+    }
+    
+    await db.finance_budgets.update_one(
+        {"budget_id": budget_id},
+        {
+            "$set": update_dict,
+            "$push": {"activity_log": activity_entry}
+        }
+    )
+    
+    updated = await db.finance_budgets.find_one({"budget_id": budget_id}, {"_id": 0})
+    return await calculate_budget_actuals(updated)
+
+
+@api_router.post("/finance/budgets/{budget_id}/activate")
+async def activate_budget(budget_id: str, request: Request):
+    """Activate a budget (make it the current budget)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.budget.edit"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    existing = await db.finance_budgets.find_one({"budget_id": budget_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    
+    if existing.get("status") != "draft":
+        raise HTTPException(status_code=400, detail="Can only activate draft budgets")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.finance_budgets.update_one(
+        {"budget_id": budget_id},
+        {
+            "$set": {
+                "status": "active",
+                "activated_at": now.isoformat(),
+                "updated_at": now.isoformat()
+            },
+            "$push": {"activity_log": {
+                "action": "activated",
+                "by_id": user.user_id,
+                "by_name": user.name,
+                "at": now.isoformat(),
+                "details": "Budget activated"
+            }}
+        }
+    )
+    
+    updated = await db.finance_budgets.find_one({"budget_id": budget_id}, {"_id": 0})
+    return updated
+
+
+@api_router.post("/finance/budgets/{budget_id}/close")
+async def close_budget(budget_id: str, request: Request):
+    """Close a budget period (lock it)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.budget.close"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.budget.close permission")
+    
+    existing = await db.finance_budgets.find_one({"budget_id": budget_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Budget not found")
+    
+    if existing.get("status") == "closed":
+        raise HTTPException(status_code=400, detail="Budget already closed")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Calculate final actuals before closing
+    final_budget = await calculate_budget_actuals(existing)
+    
+    await db.finance_budgets.update_one(
+        {"budget_id": budget_id},
+        {
+            "$set": {
+                "status": "closed",
+                "closed_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+                "final_summary": final_budget.get("summary", {})
+            },
+            "$push": {"activity_log": {
+                "action": "closed",
+                "by_id": user.user_id,
+                "by_name": user.name,
+                "at": now.isoformat(),
+                "details": f"Budget closed. Total spent: ₹{final_budget.get('summary', {}).get('total_spent', 0):,.0f}"
+            }}
+        }
+    )
+    
+    updated = await db.finance_budgets.find_one({"budget_id": budget_id}, {"_id": 0})
+    return updated
+
+
+@api_router.get("/finance/budget-categories")
+async def get_budget_categories(request: Request):
+    """Get available budget categories"""
+    user = await get_current_user(request)
+    return DEFAULT_BUDGET_CATEGORIES
+
+
+@api_router.get("/finance/budget-alerts")
+async def get_budget_alerts(request: Request):
+    """Get current budget alerts (categories crossing thresholds)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.budget.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get current budget
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    budget = await db.finance_budgets.find_one({
+        "period_start": {"$lte": today},
+        "period_end": {"$gte": today},
+        "status": "active"
+    }, {"_id": 0})
+    
+    if not budget:
+        return {"alerts": [], "message": "No active budget"}
+    
+    budget_with_actuals = await calculate_budget_actuals(budget)
+    
+    alerts = []
+    for alloc in budget_with_actuals.get("allocations", []):
+        if alloc["status"] == "amber":
+            alerts.append({
+                "type": "warning",
+                "category": alloc["category_key"],
+                "category_name": next((c["name"] for c in DEFAULT_BUDGET_CATEGORIES if c["key"] == alloc["category_key"]), alloc["category_key"]),
+                "message": f"Approaching budget limit ({alloc['variance_pct']:.0f}% used)",
+                "planned": alloc["planned_amount"],
+                "spent": alloc["actual_spent"],
+                "remaining": alloc["remaining"]
+            })
+        elif alloc["status"] == "red":
+            alerts.append({
+                "type": "critical",
+                "category": alloc["category_key"],
+                "category_name": next((c["name"] for c in DEFAULT_BUDGET_CATEGORIES if c["key"] == alloc["category_key"]), alloc["category_key"]),
+                "message": f"Budget exceeded! ({alloc['variance_pct']:.0f}% used)",
+                "planned": alloc["planned_amount"],
+                "spent": alloc["actual_spent"],
+                "over_by": abs(alloc["variance"])
+            })
+    
+    return {
+        "alerts": alerts,
+        "budget_id": budget["budget_id"],
+        "budget_name": budget.get("name"),
+        "overall_status": budget_with_actuals.get("summary", {}).get("overall_status", "unknown")
+    }
+
+
+# ============ FINANCIAL FORECASTING & RUNWAY ============
+
+@api_router.get("/finance/forecast")
+async def get_financial_forecast(request: Request):
+    """Get financial health forecast and runway analysis"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.forecast.view"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.forecast.view permission")
+    
+    now = datetime.now(timezone.utc)
+    current_month = now.strftime("%Y-%m")
+    
+    # Get current month receipts (income)
+    income_pipeline = [
+        {
+            "$match": {
+                "transaction_type": "inflow",
+                "transaction_date": {"$regex": f"^{current_month}"}
+            }
+        },
+        {
+            "$group": {
+                "_id": None,
+                "total_income": {"$sum": "$amount"},
+                "receipt_count": {"$sum": 1}
+            }
+        }
+    ]
+    income_result = await db.accounting_transactions.aggregate(income_pipeline).to_list(1)
+    monthly_income = income_result[0]["total_income"] if income_result else 0
+    
+    # Get current month expenses
+    expense_pipeline = [
+        {
+            "$match": {
+                "transaction_type": "outflow",
+                "transaction_date": {"$regex": f"^{current_month}"}
+            }
+        },
+        {
+            "$group": {
+                "_id": None,
+                "total_expenses": {"$sum": "$amount"},
+                "expense_count": {"$sum": 1}
+            }
+        }
+    ]
+    expense_result = await db.accounting_transactions.aggregate(expense_pipeline).to_list(1)
+    monthly_expenses = expense_result[0]["total_expenses"] if expense_result else 0
+    
+    # Get total cash available (sum of all account balances)
+    accounts = await db.accounting_accounts.find({"is_active": True}, {"_id": 0}).to_list(100)
+    cash_available = sum(a.get("current_balance", 0) for a in accounts)
+    
+    # Get pending expense requests (locked commitments)
+    pending_approved = await db.finance_expense_requests.find({
+        "status": {"$in": ["approved", "pending_approval"]}
+    }, {"_id": 0, "amount": 1, "status": 1}).to_list(100)
+    locked_commitments = sum(e.get("amount", 0) for e in pending_approved if e.get("status") == "approved")
+    pending_requests = sum(e.get("amount", 0) for e in pending_approved if e.get("status") == "pending_approval")
+    
+    # Get forecast assumptions (if saved)
+    assumptions = await db.finance_forecast_assumptions.find_one({"is_current": True}, {"_id": 0})
+    if not assumptions:
+        # Default assumptions
+        assumptions = {
+            "expected_monthly_income": monthly_income * 1.1,  # 10% growth assumption
+            "expected_project_closures": 2,
+            "average_project_value": 500000,
+            "fixed_commitments": 200000,  # Default fixed costs
+            "notes": "Auto-generated assumptions"
+        }
+    
+    # Calculate fixed vs variable expenses from current budget
+    today = now.strftime("%Y-%m-%d")
+    current_budget = await db.finance_budgets.find_one({
+        "period_start": {"$lte": today},
+        "period_end": {"$gte": today},
+        "status": "active"
+    }, {"_id": 0})
+    
+    fixed_expenses = 0
+    variable_expenses = 0
+    if current_budget:
+        for alloc in current_budget.get("allocations", []):
+            cat_info = next((c for c in DEFAULT_BUDGET_CATEGORIES if c["key"] == alloc["category_key"]), None)
+            if cat_info:
+                if cat_info["type"] == "fixed":
+                    fixed_expenses += alloc.get("planned_amount", 0)
+                else:
+                    variable_expenses += alloc.get("planned_amount", 0)
+    
+    # Calculate runway
+    monthly_burn = fixed_expenses + (variable_expenses * 0.7)  # Assume 70% of variable is typical
+    if monthly_burn > 0:
+        runway_months = (cash_available - locked_commitments) / monthly_burn
+    else:
+        runway_months = 12  # Default to 12 if no burn
+    
+    net_burn = monthly_expenses - monthly_income
+    
+    # Calculate sales pressure
+    if net_burn > 0:
+        sales_needed = net_burn
+        sales_pressure = "high" if net_burn > monthly_income * 0.5 else "moderate"
+    else:
+        sales_needed = 0
+        sales_pressure = "low"
+    
+    # Get last 3 months data for trend
+    three_months_ago = (now - timedelta(days=90)).strftime("%Y-%m-%d")
+    historical_pipeline = [
+        {
+            "$match": {
+                "transaction_date": {"$gte": three_months_ago}
+            }
+        },
+        {
+            "$group": {
+                "_id": {
+                    "month": {"$substr": ["$transaction_date", 0, 7]},
+                    "type": "$transaction_type"
+                },
+                "total": {"$sum": "$amount"}
+            }
+        }
+    ]
+    historical_data = await db.accounting_transactions.aggregate(historical_pipeline).to_list(20)
+    
+    monthly_trends = {}
+    for item in historical_data:
+        month = item["_id"]["month"]
+        txn_type = item["_id"]["type"]
+        if month not in monthly_trends:
+            monthly_trends[month] = {"income": 0, "expenses": 0}
+        if txn_type == "inflow":
+            monthly_trends[month]["income"] = item["total"]
+        else:
+            monthly_trends[month]["expenses"] = item["total"]
+    
+    return {
+        "current_month": current_month,
+        "monthly_income": monthly_income,
+        "monthly_expenses": monthly_expenses,
+        "net_burn_surplus": monthly_income - monthly_expenses,
+        "cash_available": cash_available,
+        "locked_commitments": locked_commitments,
+        "pending_requests": pending_requests,
+        "free_cash": cash_available - locked_commitments - pending_requests,
+        "fixed_expenses": fixed_expenses,
+        "variable_expenses": variable_expenses,
+        "runway": {
+            "months": round(runway_months, 1),
+            "status": "healthy" if runway_months >= 3 else ("caution" if runway_months >= 1 else "critical"),
+            "message": f"Current cash supports approximately {runway_months:.1f} months" if runway_months > 0 else "Cash runway critical!"
+        },
+        "sales_pressure": {
+            "level": sales_pressure,
+            "additional_revenue_needed": max(0, sales_needed),
+            "message": f"Need ₹{sales_needed:,.0f} additional revenue this month" if sales_needed > 0 else "Revenue targets being met"
+        },
+        "monthly_trends": dict(sorted(monthly_trends.items())),
+        "assumptions": assumptions,
+        "health_score": min(100, int((runway_months / 3) * 50 + (1 - min(1, net_burn / max(1, monthly_income))) * 50)) if monthly_burn > 0 else 100
+    }
+
+
+@api_router.post("/finance/forecast/assumptions")
+async def update_forecast_assumptions(data: ForecastAssumptions, request: Request):
+    """Update forecast assumptions"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.forecast.edit_assumptions"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Mark previous as not current
+    await db.finance_forecast_assumptions.update_many(
+        {"is_current": True},
+        {"$set": {"is_current": False}}
+    )
+    
+    assumption_id = f"assumption_{uuid.uuid4().hex[:8]}"
+    new_assumptions = {
+        "assumption_id": assumption_id,
+        "expected_monthly_income": data.expected_monthly_income,
+        "expected_project_closures": data.expected_project_closures,
+        "average_project_value": data.average_project_value,
+        "fixed_commitments": data.fixed_commitments,
+        "notes": data.notes,
+        "is_current": True,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now.isoformat()
+    }
+    
+    await db.finance_forecast_assumptions.insert_one(new_assumptions)
+    new_assumptions.pop("_id", None)
+    return new_assumptions
+
+
+# ============ ENHANCED EXPENSE REQUEST WITH THRESHOLD APPROVAL ============
+
+def get_approval_threshold(amount: float) -> dict:
+    """Determine approval threshold based on amount"""
+    for threshold_name, threshold in SPEND_APPROVAL_THRESHOLDS.items():
+        if threshold["min"] <= amount <= threshold["max"]:
+            return {
+                "name": threshold_name,
+                "permission_required": threshold["permission"],
+                "auto_approve": threshold["auto_approve"],
+                "min": threshold["min"],
+                "max": threshold["max"]
+            }
+    return SPEND_APPROVAL_THRESHOLDS["high_value"]
+
+
+@api_router.get("/finance/expense-requests/approval-rules")
+async def get_approval_rules(request: Request):
+    """Get current approval threshold rules"""
+    user = await get_current_user(request)
+    return {
+        "thresholds": SPEND_APPROVAL_THRESHOLDS,
+        "rules": [
+            {"range": "₹0 - ₹1,000", "approval": "Auto-allowed (Petty Cash)", "permission": "finance.expenses.approve_petty"},
+            {"range": "₹1,001 - ₹5,000", "approval": "Finance Manager / Ops Head", "permission": "finance.expenses.approve_standard"},
+            {"range": "₹5,001+", "approval": "Founder/CEO mandatory", "permission": "finance.expenses.approve_high"}
+        ]
+    }
+
+
+@api_router.get("/finance/expense-requests/can-approve/{request_id}")
+async def check_can_approve_expense(request_id: str, request: Request):
+    """Check if current user can approve a specific expense request"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    expense_req = await db.finance_expense_requests.find_one({"request_id": request_id}, {"_id": 0})
+    if not expense_req:
+        raise HTTPException(status_code=404, detail="Expense request not found")
+    
+    amount = expense_req.get("amount", 0)
+    threshold = get_approval_threshold(amount)
+    
+    can_approve = has_permission(user_doc, threshold["permission_required"])
+    
+    return {
+        "can_approve": can_approve,
+        "amount": amount,
+        "threshold": threshold,
+        "reason": f"Requires {threshold['permission_required']} permission" if not can_approve else "User has required permission"
+    }
+
+
 # ============ HISTORICAL COST INTELLIGENCE ============
 
 @api_router.get("/finance/cost-intelligence/{project_id}")
