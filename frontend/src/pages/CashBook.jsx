@@ -464,9 +464,17 @@ const CashBook = () => {
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
-                        {categories.map(cat => (
-                          <SelectItem key={cat.category_id} value={cat.category_id}>{cat.name}</SelectItem>
-                        ))}
+                        {newTxn.transaction_type === 'inflow' ? (
+                          // Show Income Categories for Money In
+                          INCOME_CATEGORIES.map(cat => (
+                            <SelectItem key={cat.category_id} value={cat.category_id}>{cat.name}</SelectItem>
+                          ))
+                        ) : (
+                          // Show Expense Categories for Money Out
+                          categories.map(cat => (
+                            <SelectItem key={cat.category_id} value={cat.category_id}>{cat.name}</SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
