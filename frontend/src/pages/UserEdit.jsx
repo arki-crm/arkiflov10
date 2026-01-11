@@ -126,9 +126,11 @@ const UserEdit = () => {
   // Permissions state
   const [availablePermissions, setAvailablePermissions] = useState({});
   const [defaultRolePermissions, setDefaultRolePermissions] = useState({});
+  const [availableRoles, setAvailableRoles] = useState([]);
   const [userPermissions, setUserPermissions] = useState([]);
   const [customPermissions, setCustomPermissions] = useState(false);
   const [savingPermissions, setSavingPermissions] = useState(false);
+  const [permissionFilter, setPermissionFilter] = useState('all'); // 'all', 'crm', 'finance'
   
   // Password reset state
   const [newPassword, setNewPassword] = useState('');
