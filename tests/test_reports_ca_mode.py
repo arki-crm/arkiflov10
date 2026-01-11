@@ -366,7 +366,7 @@ class TestReportsAndCAMode:
     
     def test_ca_role_exists_in_valid_roles(self):
         """Verify CharteredAccountant role exists in system"""
-        response = self.session.get(f"{BASE_URL}/api/admin/roles")
+        response = self.session.get(f"{BASE_URL}/api/roles/available")
         assert response.status_code == 200, f"Expected 200, got {response.status_code}"
         
         data = response.json()
