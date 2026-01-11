@@ -153,6 +153,9 @@ const AppRouter = () => {
         <Route path="/finance/daily-closing" element={<DailyClosing />} />
         <Route path="/finance/monthly-snapshot" element={<MonthlySnapshot />} />
         <Route path="/finance/settings" element={<FinanceSettings />} />
+        <Route path="/finance/reports" element={<FinanceReports />} />
+        <Route path="/finance/reports/cash-flow" element={<CashFlowReport />} />
+        <Route path="/finance/reports/project-profitability" element={<ProjectProfitabilityReport />} />
         
         {/* Settings Routes */}
         <Route path="/settings/company-profile" element={<CompanyProfile />} />
