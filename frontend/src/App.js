@@ -67,6 +67,9 @@ import Salaries from './pages/Salaries';
 import Liabilities from './pages/Liabilities';
 import PnLSnapshot from './pages/PnLSnapshot';
 import ImportExport from './pages/ImportExport';
+import FinanceReports from './pages/FinanceReports';
+import CashFlowReport from './pages/CashFlowReport';
+import ProjectProfitabilityReport from './pages/ProjectProfitabilityReport';
 
 import './App.css';
 
