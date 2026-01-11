@@ -208,9 +208,29 @@ const UserEdit = () => {
   };
 
   const getAvailableRoles = () => {
-    if (isAdmin) return ROLES;
+    if (isAdmin) return availableRoles.map(r => r.id);
     if (isManager) return MANAGER_ALLOWED_ROLES;
     return [];
+  };
+
+  // Filter permissions by category
+  const getFilteredPermissionGroups = () => {
+    if (permissionFilter === 'all') return Object.entries(availablePermissions);
+    if (permissionFilter === 'crm') {
+      return Object.entries(availablePermissions).filter(([key]) => CRM_PERMISSION_GROUPS.includes(key));
+    }
+    if (permissionFilter === 'finance') {
+      return Object.entries(availablePermissions).filter(([key]) => FINANCE_PERMISSION_GROUPS.includes(key));
+    }
+    return Object.entries(availablePermissions);
+  };
+
+  // Count permissions by category
+  const getPermissionCounts = () => {
+    const effective = getEffectivePermissions();
+    const crmCount = effective.filter(p => !p.startsWith('finance.')).length;
+    const financeCount = effective.filter(p => p.startsWith('finance.')).length;
+    return { crm: crmCount, finance: financeCount, total: effective.length };
   };
 
   const validateForm = () => {
