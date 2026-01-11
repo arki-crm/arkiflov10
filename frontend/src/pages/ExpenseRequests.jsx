@@ -765,6 +765,19 @@ const ExpenseRequests = () => {
                   ))}
                 </div>
               </div>
+
+              {/* Attachments Section */}
+              <div className="border-t pt-4">
+                <h4 className="font-medium mb-3 flex items-center gap-2">
+                  <Paperclip className="w-4 h-4" />
+                  Supporting Documents
+                </h4>
+                <AttachmentUploader
+                  entityType="expense"
+                  entityId={selectedRequest.request_id}
+                  readOnly={selectedRequest.status === 'recorded'}
+                />
+              </div>
             </div>
           )}
         </DialogContent>
