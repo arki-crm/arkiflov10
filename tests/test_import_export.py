@@ -384,11 +384,11 @@ TEST_Execute Lead,9999888877,Import Test
         preview_id = preview_data.get("preview_id")
         
         if preview_data.get("valid_count", 0) == 0 and preview_data.get("duplicate_count", 0) == 0:
+            upload_session.close()
             pytest.skip("No valid rows to import (may be duplicate)")
         
         # Execute import
-        self.session.headers.update({"Content-Type": "application/json"})
-        execute_response = self.session.post(
+        execute_response = upload_session.post(
             f"{BASE_URL}/api/admin/import/execute",
             json={
                 "data_type": "leads",
@@ -396,6 +396,7 @@ TEST_Execute Lead,9999888877,Import Test
                 "preview_id": preview_id
             }
         )
+        upload_session.close()
         
         assert execute_response.status_code == 200, f"Execute failed: {execute_response.text}"
         
