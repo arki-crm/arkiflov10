@@ -1452,6 +1452,19 @@ AVAILABLE_PERMISSIONS = {
         ]
     },
     
+    # Salary & Payroll
+    "finance_salary": {
+        "name": "Salary & Payroll",
+        "permissions": [
+            {"id": "finance.salaries.view", "name": "View Own Salary", "description": "View own salary details and history"},
+            {"id": "finance.salaries.view_all", "name": "View All Salaries", "description": "View all employee salaries - Admin/Finance only"},
+            {"id": "finance.salaries.edit_structure", "name": "Edit Salary Structure", "description": "Edit salary amounts and configurations - Admin/Founder only"},
+            {"id": "finance.salaries.pay", "name": "Make Salary Payments", "description": "Record salary payments and advances"},
+            {"id": "finance.salaries.close_month", "name": "Close Salary Month", "description": "Close monthly salary cycles"},
+            {"id": "finance.salaries.manage_exit", "name": "Manage Exit Settlement", "description": "Process final settlement for exiting employees"}
+        ]
+    },
+    
     # Legacy Finance Permissions (backward compatibility mapping)
     "finance": {
         "name": "Finance (Legacy)",
