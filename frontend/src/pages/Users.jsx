@@ -371,13 +371,13 @@ const Users = () => {
             
             {/* Role Filter */}
             <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Role" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Roles</SelectItem>
-                {ROLES.map(role => (
-                  <SelectItem key={role} value={role}>{role}</SelectItem>
+                {availableRoles.map(role => (
+                  <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
