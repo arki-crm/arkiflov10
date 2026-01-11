@@ -263,8 +263,10 @@ class TestBucket1OperationalHygiene:
         assert cat_response.status_code == 200
         assert acc_response.status_code == 200
         
-        categories = cat_response.json().get("categories", cat_response.json())
-        accounts = acc_response.json().get("accounts", acc_response.json())
+        cat_data = cat_response.json()
+        acc_data = acc_response.json()
+        categories = cat_data.get("categories", cat_data) if isinstance(cat_data, dict) else cat_data
+        accounts = acc_data.get("accounts", acc_data) if isinstance(acc_data, dict) else acc_data
         
         if categories and accounts:
             category_id = categories[0].get("category_id")
@@ -372,8 +374,10 @@ class TestBucket1OperationalHygiene:
         cat_response = self.session.get(f"{BASE_URL}/api/accounting/categories")
         acc_response = self.session.get(f"{BASE_URL}/api/accounting/accounts")
         
-        categories = cat_response.json().get("categories", cat_response.json())
-        accounts = acc_response.json().get("accounts", acc_response.json())
+        cat_data = cat_response.json()
+        acc_data = acc_response.json()
+        categories = cat_data.get("categories", cat_data) if isinstance(cat_data, dict) else cat_data
+        accounts = acc_data.get("accounts", acc_data) if isinstance(acc_data, dict) else acc_data
         
         if categories and accounts:
             # Create cashbook entry
