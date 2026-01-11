@@ -1409,15 +1409,23 @@ Email reminder system for overdue payments - logs to DB instead of sending actua
 **Note:** Emails are MOCKED - logged to `payment_reminders` collection instead of actually sent. Frontend shows "Mocked - Emails logged only" indicator.
 
 ### 4. Recurring Transactions
-Monthly recurring templates for auto-generating cashbook entries.
+Monthly recurring templates that create **pending payables** (not auto cashbook entries).
+
+**Workflow:**
+1. Templates run on due date → Creates pending payable
+2. Pending payables shown with overdue status
+3. Manual "Record Payment" → Creates cashbook entry
+4. Payment history tracked
 
 **Features:**
 - Create recurring templates (Admin/Founder/SeniorAccountant)
 - Fields: name, amount, category, account, day_of_month (1-28), description, paid_to
 - Active/Paused status toggle
-- Auto-creates cashbook entries on due date
-- Run due templates manually (Admin only)
-- Tracks: last_run, next_run, total_entries_created
+- Generate due payables (Admin only)
+- Pending payables list with overdue indicators
+- Record payment with flexible amount/date/mode
+- Cancel/skip occurrence option
+- Payment history tracking
 
 **API Endpoints:**
 | Endpoint | Method | Description |
@@ -1426,7 +1434,14 @@ Monthly recurring templates for auto-generating cashbook entries.
 | `/api/finance/recurring/templates` | POST | Create template |
 | `/api/finance/recurring/templates/{id}` | PUT | Update template |
 | `/api/finance/recurring/templates/{id}/toggle` | POST | Pause/Resume |
-| `/api/finance/recurring/run-scheduled` | POST | Run due templates |
+| `/api/finance/recurring/run-scheduled` | POST | Generate due payables |
+| `/api/finance/recurring/payables` | GET | List pending payables |
+| `/api/finance/recurring/payables/{id}/pay` | POST | Record payment |
+| `/api/finance/recurring/payables/{id}/cancel` | POST | Skip/cancel payable |
+
+**Collections:**
+- `recurring_templates` - Template definitions
+- `recurring_payables` - Pending/paid payables
 
 ### Frontend Pages
 | Route | Component | Access |
