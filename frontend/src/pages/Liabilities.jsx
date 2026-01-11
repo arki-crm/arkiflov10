@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
-const API = process.env.REACT_APP_BACKEND_URL;
+const API = process.env.REACT_APP_BACKEND_URL + '/api';
 
 const LIABILITY_CATEGORIES = [
   { value: 'raw_material', label: 'Raw Material' },
