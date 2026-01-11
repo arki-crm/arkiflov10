@@ -252,25 +252,29 @@ class TestImportExportModule:
     def test_import_preview_with_csv_file(self):
         """POST /api/admin/import/preview - Preview import with CSV file"""
         # Create a simple CSV content for leads
-        csv_content = """Customer Name,Customer Phone,Source
+        csv_content = b"""Customer Name,Customer Phone,Source
 TEST_Import Lead 1,9876543210,Website
 TEST_Import Lead 2,9876543211,Referral
 """
         
         files = {
-            'file': ('test_leads.csv', csv_content, 'text/csv')
+            'file': ('test_leads.csv', BytesIO(csv_content), 'text/csv')
         }
         
-        # Remove Content-Type header for multipart form
-        headers = dict(self.session.headers)
-        if 'Content-Type' in headers:
-            del headers['Content-Type']
-        
-        response = self.session.post(
-            f"{BASE_URL}/api/admin/import/preview?data_type=leads&duplicate_strategy=skip",
-            files=files,
-            headers=headers
+        # Use a fresh session for file upload to avoid Content-Type issues
+        upload_session = requests.Session()
+        # Login first
+        login_resp = upload_session.post(
+            f"{BASE_URL}/api/auth/local-login",
+            json={"email": TEST_EMAIL, "password": TEST_PASSWORD}
         )
+        assert login_resp.status_code == 200, "Login failed for upload session"
+        
+        response = upload_session.post(
+            f"{BASE_URL}/api/admin/import/preview?data_type=leads&duplicate_strategy=skip",
+            files=files
+        )
+        upload_session.close()
         
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         
