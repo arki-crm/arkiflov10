@@ -1863,6 +1863,95 @@ const ProjectFinanceDetail = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* View Transaction Dialog */}
+      <Dialog open={!!viewTransaction} onOpenChange={(open) => !open && setViewTransaction(null)}>
+        <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              {viewTransaction?.transaction_type === 'inflow' ? (
+                <ArrowDownCircle className="w-5 h-5 text-green-600" />
+              ) : (
+                <ArrowUpCircle className="w-5 h-5 text-red-600" />
+              )}
+              Transaction Details
+            </DialogTitle>
+            <DialogDescription>
+              {viewTransaction?.transaction_type === 'inflow' ? 'Money In' : 'Money Out'} • {formatDate(viewTransaction?.created_at)}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4 overflow-y-auto flex-1">
+            {/* Transaction Info */}
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-xs text-slate-500">Amount</p>
+                <p className={cn(
+                  "font-bold text-lg",
+                  viewTransaction?.transaction_type === 'inflow' ? "text-green-600" : "text-red-600"
+                )}>
+                  {viewTransaction?.transaction_type === 'inflow' ? '+' : '-'}{formatCurrency(viewTransaction?.amount)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Account</p>
+                <p className="font-medium">{viewTransaction?.account_name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Category</p>
+                <p>{viewTransaction?.category_name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Payment Mode</p>
+                <p className="capitalize">{viewTransaction?.mode?.replace('_', ' ')}</p>
+              </div>
+              {viewTransaction?.paid_to && (
+                <div className="col-span-2">
+                  <p className="text-xs text-slate-500">Paid To</p>
+                  <p>{viewTransaction?.paid_to}</p>
+                </div>
+              )}
+              {viewTransaction?.remarks && (
+                <div className="col-span-2">
+                  <p className="text-xs text-slate-500">Remarks</p>
+                  <p>{viewTransaction?.remarks}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-xs text-slate-500">Created By</p>
+                <p>{viewTransaction?.created_by_name}</p>
+              </div>
+              {viewTransaction?.approved_by_name && (
+                <div>
+                  <p className="text-xs text-slate-500">Approved By</p>
+                  <p className="text-green-600">{viewTransaction?.approved_by_name}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Attachments Section */}
+            <div className="border-t pt-4">
+              <p className="text-sm font-medium flex items-center gap-2 mb-3">
+                <Paperclip className="w-4 h-4" />
+                Supporting Documents
+              </p>
+              {viewTransaction?.transaction_id && (
+                <AttachmentUploader
+                  entityType="cashbook"
+                  entityId={viewTransaction.transaction_id}
+                  readOnly={true}
+                />
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="flex-shrink-0 border-t pt-4">
+            <Button variant="outline" onClick={() => setViewTransaction(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
