@@ -18368,11 +18368,16 @@ async def update_lock_config(config: LockConfigUpdate, request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    # Get full user doc for permission check
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="User not found")
+    
     # Permission check - only Admin/Founder can update
-    if not has_permission(user, "finance.lock_config") and user.get("role") not in ["Admin", "Founder", "CEO"]:
+    if not has_permission(user_doc, "finance.lock_config") and user_doc.get("role") not in ["Admin", "Founder", "CEO"]:
         raise HTTPException(status_code=403, detail="Only Admin/Founder can update lock configuration")
     
-    update_data = {"updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("user_id")}
+    update_data = {"updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user_doc.get("user_id")}
     
     if config.default_lock_percentage is not None:
         if config.default_lock_percentage < 0 or config.default_lock_percentage > 100:
