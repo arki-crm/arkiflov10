@@ -1546,6 +1546,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.payment_schedule.view", "finance.payment_schedule.edit", "finance.payment_schedule.override",
         "finance.writeoff.approve", "finance.exception.mark", "finance.audit_log.view",
         "finance.import_data", "finance.cancellation.mark",
+        # Salary permissions - Admin gets all
+        "finance.salaries.view", "finance.salaries.view_all", "finance.salaries.edit_structure",
+        "finance.salaries.pay", "finance.salaries.close_month", "finance.salaries.manage_exit",
         # Legacy permissions (backward compatibility)
         "finance.view_dashboard", "finance.view_cashbook", "finance.view_bankbook",
         "finance.add_transaction", "finance.edit_transaction", "finance.delete_transaction",
