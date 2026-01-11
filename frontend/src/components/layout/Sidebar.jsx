@@ -64,6 +64,8 @@ const financeSubItems = [
   { path: '/finance/budgets', label: 'Budgets', icon: PiggyBank },
   { path: '/finance/invoices', label: 'Invoices', icon: FileText },
   { path: '/finance/refunds', label: 'Refunds', icon: RefreshCw },
+  { path: '/finance/payment-reminders', label: 'Payment Reminders', icon: Mail },
+  { path: '/finance/recurring-transactions', label: 'Recurring', icon: RefreshCw },
   { path: '/finance/daily-closing', label: 'Daily Closing', icon: CalendarCheck },
   { path: '/finance/monthly-snapshot', label: 'Monthly Snapshot', icon: CalendarRange },
   { path: '/finance/settings', label: 'Settings', icon: Settings },
