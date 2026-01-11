@@ -22391,6 +22391,1115 @@ async def get_employee_promotion_eligibility(employee_id: str, request: Request)
     return eligibility
 
 
+# ============ IMPORT / EXPORT MODULE ============
+
+# Import/Export specific imports
+import csv
+from io import StringIO
+from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+# Create uploads directory for import files
+IMPORT_UPLOADS_DIR = ROOT_DIR / "uploads" / "imports"
+IMPORT_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Export field mappings for each data type
+EXPORT_FIELD_MAPPINGS = {
+    "cashbook": {
+        "collection": "accounting_transactions",
+        "fields": [
+            ("transaction_id", "Transaction ID"),
+            ("date", "Date"),
+            ("type", "Type"),  # inflow/outflow
+            ("amount", "Amount"),
+            ("category_id", "Category ID"),
+            ("category_name", "Category Name"),
+            ("account_id", "Account ID"),
+            ("account_name", "Account Name"),
+            ("project_id", "Project ID"),
+            ("description", "Description"),
+            ("reference_number", "Reference Number"),
+            ("payment_mode", "Payment Mode"),
+            ("verified", "Verified"),
+            ("requested_by_name", "Requested By"),
+            ("paid_by_name", "Paid By"),
+            ("approved_by_name", "Approved By"),
+            ("created_at", "Created At"),
+            ("notes", "Notes"),
+        ],
+        "date_field": "date"
+    },
+    "receipts": {
+        "collection": "finance_receipts",
+        "fields": [
+            ("receipt_id", "Receipt ID"),
+            ("receipt_number", "Receipt Number"),
+            ("project_id", "Project ID"),
+            ("project_name", "Project Name"),
+            ("customer_name", "Customer Name"),
+            ("amount", "Amount"),
+            ("payment_mode", "Payment Mode"),
+            ("account_id", "Account ID"),
+            ("account_name", "Account Name"),
+            ("receipt_date", "Receipt Date"),
+            ("payment_description", "Description"),
+            ("notes", "Notes"),
+            ("contract_value", "Contract Value"),
+            ("total_received", "Total Received"),
+            ("balance_due", "Balance Due"),
+            ("status", "Status"),
+            ("created_at", "Created At"),
+            ("created_by_name", "Created By"),
+        ],
+        "date_field": "receipt_date"
+    },
+    "liabilities": {
+        "collection": "finance_liabilities",
+        "fields": [
+            ("liability_id", "Liability ID"),
+            ("project_id", "Project ID"),
+            ("vendor_id", "Vendor ID"),
+            ("vendor_name", "Vendor Name"),
+            ("category", "Category"),
+            ("description", "Description"),
+            ("amount", "Amount"),
+            ("amount_settled", "Amount Settled"),
+            ("amount_remaining", "Amount Remaining"),
+            ("due_date", "Due Date"),
+            ("source", "Source"),
+            ("status", "Status"),
+            ("created_at", "Created At"),
+            ("created_by_name", "Created By"),
+        ],
+        "date_field": "created_at"
+    },
+    "salaries": {
+        "collection": "finance_salary_master",
+        "fields": [
+            ("salary_id", "Salary ID"),
+            ("employee_id", "Employee ID"),
+            ("employee_name", "Employee Name"),
+            ("monthly_salary", "Monthly Salary"),
+            ("salary_level", "Salary Level"),
+            ("payment_type", "Payment Type"),
+            ("bank_account_number", "Bank Account Number"),
+            ("bank_name", "Bank Name"),
+            ("ifsc_code", "IFSC Code"),
+            ("status", "Status"),
+            ("exit_date", "Exit Date"),
+            ("created_at", "Created At"),
+        ],
+        "date_field": "created_at"
+    },
+    "project_finance": {
+        "collection": "projects",
+        "fields": [
+            ("project_id", "Project ID"),
+            ("pid", "PID"),
+            ("project_name", "Project Name"),
+            ("client_name", "Client Name"),
+            ("contract_value", "Contract Value"),
+            ("total_received", "Total Received"),
+            ("total_planned", "Total Planned Cost"),
+            ("total_actual", "Total Actual Cost"),
+            ("stage", "Stage"),
+            ("hold_status", "Hold Status"),
+            ("created_at", "Created At"),
+        ],
+        "date_field": "created_at"
+    },
+    "leads": {
+        "collection": "leads",
+        "fields": [
+            ("lead_id", "Lead ID"),
+            ("pid", "PID"),
+            ("customer_name", "Customer Name"),
+            ("customer_phone", "Customer Phone"),
+            ("customer_email", "Customer Email"),
+            ("customer_address", "Customer Address"),
+            ("customer_requirements", "Requirements"),
+            ("source", "Source"),
+            ("budget", "Budget"),
+            ("status", "Status"),
+            ("stage", "Stage"),
+            ("assigned_to", "Assigned To"),
+            ("designer_id", "Designer ID"),
+            ("is_converted", "Is Converted"),
+            ("project_id", "Converted Project ID"),
+            ("hold_status", "Hold Status"),
+            ("created_at", "Created At"),
+            ("updated_at", "Updated At"),
+        ],
+        "date_field": "created_at"
+    },
+    "projects": {
+        "collection": "projects",
+        "fields": [
+            ("project_id", "Project ID"),
+            ("pid", "PID"),
+            ("project_name", "Project Name"),
+            ("client_name", "Client Name"),
+            ("client_phone", "Client Phone"),
+            ("stage", "Stage"),
+            ("summary", "Summary"),
+            ("contract_value", "Contract Value"),
+            ("hold_status", "Hold Status"),
+            ("created_at", "Created At"),
+            ("updated_at", "Updated At"),
+        ],
+        "date_field": "created_at"
+    },
+    "customers": {
+        "collection": "leads",  # Customers are derived from leads/projects
+        "fields": [
+            ("customer_name", "Customer Name"),
+            ("customer_phone", "Customer Phone"),
+            ("customer_email", "Customer Email"),
+            ("customer_address", "Customer Address"),
+            ("source", "Source"),
+            ("lead_id", "Lead ID"),
+            ("project_id", "Project ID"),
+            ("created_at", "First Contact Date"),
+        ],
+        "date_field": "created_at"
+    }
+}
+
+# Import field mappings (what fields are required for import)
+IMPORT_REQUIRED_FIELDS = {
+    "cashbook": ["date", "type", "amount", "category_name", "account_name"],
+    "receipts": ["receipt_date", "project_name", "customer_name", "amount", "payment_mode"],
+    "liabilities": ["vendor_name", "category", "amount"],
+    "salaries": ["employee_name", "monthly_salary"],
+    "leads": ["customer_name", "customer_phone", "source"],
+    "projects": ["project_name", "client_name", "client_phone"],
+}
+
+# Pydantic models for Import/Export
+class ExportRequest(BaseModel):
+    data_type: str  # cashbook, receipts, liabilities, salaries, project_finance, leads, projects, customers
+    format: str = "xlsx"  # xlsx or csv
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    project_id: Optional[str] = None  # Filter by project for finance data
+
+class ImportPreviewRequest(BaseModel):
+    data_type: str
+    duplicate_strategy: str = "skip"  # skip, update, create_new
+
+class ImportExecuteRequest(BaseModel):
+    data_type: str
+    duplicate_strategy: str = "skip"
+    preview_id: str  # Reference to stored preview data
+
+class ImportAuditLog(BaseModel):
+    import_id: str
+    data_type: str
+    file_name: str
+    total_rows: int
+    imported_count: int
+    skipped_count: int
+    error_count: int
+    duplicate_strategy: str
+    imported_by: str
+    imported_by_name: str
+    import_date: datetime
+    errors: List[dict] = []
+    sample_imported: List[dict] = []
+
+
+# ============ EXPORT ENDPOINTS ============
+
+@api_router.get("/admin/export/types")
+async def get_export_types(request: Request):
+    """Get available data types for export"""
+    await require_admin(request)
+    
+    return {
+        "finance": [
+            {"id": "cashbook", "name": "Cashbook (Money In/Out)", "description": "Daily transactions from the cashbook"},
+            {"id": "receipts", "name": "Receipts", "description": "Customer payment receipts"},
+            {"id": "liabilities", "name": "Liabilities", "description": "Outstanding liabilities and vendor dues"},
+            {"id": "salaries", "name": "Salaries", "description": "Employee salary master data"},
+            {"id": "project_finance", "name": "Project Financial Summary", "description": "Project-wise financial overview"},
+        ],
+        "crm": [
+            {"id": "leads", "name": "Leads", "description": "All leads with customer details"},
+            {"id": "projects", "name": "Projects", "description": "All projects with client information"},
+            {"id": "customers", "name": "Customers", "description": "Unique customer contact list"},
+        ]
+    }
+
+
+@api_router.post("/admin/export")
+async def export_data(export_req: ExportRequest, request: Request):
+    """Export data to Excel or CSV format"""
+    user = await require_admin(request)
+    
+    if export_req.data_type not in EXPORT_FIELD_MAPPINGS:
+        raise HTTPException(status_code=400, detail=f"Invalid data type: {export_req.data_type}")
+    
+    mapping = EXPORT_FIELD_MAPPINGS[export_req.data_type]
+    collection_name = mapping["collection"]
+    fields = mapping["fields"]
+    date_field = mapping.get("date_field", "created_at")
+    
+    # Build query
+    query = {}
+    
+    # Date filter
+    if export_req.date_from or export_req.date_to:
+        date_query = {}
+        if export_req.date_from:
+            date_query["$gte"] = export_req.date_from
+        if export_req.date_to:
+            date_query["$lte"] = export_req.date_to
+        query[date_field] = date_query
+    
+    # Project filter for finance data
+    if export_req.project_id and export_req.data_type in ["cashbook", "receipts", "liabilities"]:
+        query["project_id"] = export_req.project_id
+    
+    # Fetch data
+    collection = db[collection_name]
+    
+    # Special handling for customers (dedupe from leads)
+    if export_req.data_type == "customers":
+        # Get unique customers from leads
+        pipeline = [
+            {"$match": query} if query else {"$match": {}},
+            {"$group": {
+                "_id": "$customer_phone",
+                "customer_name": {"$first": "$customer_name"},
+                "customer_phone": {"$first": "$customer_phone"},
+                "customer_email": {"$first": "$customer_email"},
+                "customer_address": {"$first": "$customer_address"},
+                "source": {"$first": "$source"},
+                "lead_id": {"$first": "$lead_id"},
+                "project_id": {"$first": "$project_id"},
+                "created_at": {"$min": "$created_at"}
+            }},
+            {"$sort": {"customer_name": 1}}
+        ]
+        docs = await collection.aggregate(pipeline).to_list(10000)
+    else:
+        docs = await collection.find(query, {"_id": 0}).to_list(10000)
+    
+    if not docs:
+        raise HTTPException(status_code=404, detail="No data found for the specified criteria")
+    
+    # Generate file
+    if export_req.format == "csv":
+        return await generate_csv_export(docs, fields, export_req.data_type)
+    else:
+        return await generate_excel_export(docs, fields, export_req.data_type)
+
+
+async def generate_csv_export(docs: List[dict], fields: List[tuple], data_type: str):
+    """Generate CSV file from data"""
+    output = StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    headers = [f[1] for f in fields]
+    writer.writerow(headers)
+    
+    # Write data
+    for doc in docs:
+        row = []
+        for field_key, _ in fields:
+            value = doc.get(field_key, "")
+            # Handle datetime
+            if isinstance(value, datetime):
+                value = value.isoformat()
+            elif value is None:
+                value = ""
+            row.append(str(value))
+        writer.writerow(row)
+    
+    output.seek(0)
+    
+    filename = f"{data_type}_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
+    
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+async def generate_excel_export(docs: List[dict], fields: List[tuple], data_type: str):
+    """Generate Excel file from data"""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = data_type.replace("_", " ").title()
+    
+    # Style definitions
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="2563EB", end_color="2563EB", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center")
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # Write headers
+    headers = [f[1] for f in fields]
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = thin_border
+    
+    # Write data
+    for row_idx, doc in enumerate(docs, 2):
+        for col_idx, (field_key, _) in enumerate(fields, 1):
+            value = doc.get(field_key, "")
+            # Handle datetime
+            if isinstance(value, datetime):
+                value = value.strftime("%Y-%m-%d %H:%M:%S")
+            elif value is None:
+                value = ""
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            cell.border = thin_border
+    
+    # Auto-adjust column widths
+    for col in range(1, len(headers) + 1):
+        max_length = 0
+        column_letter = get_column_letter(col)
+        for cell in ws[column_letter]:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)
+        ws.column_dimensions[column_letter].width = adjusted_width
+    
+    # Freeze header row
+    ws.freeze_panes = "A2"
+    
+    # Save to buffer
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    filename = f"{data_type}_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.xlsx"
+    
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@api_router.get("/admin/export/template/{data_type}")
+async def get_import_template(data_type: str, request: Request):
+    """Get Excel template for importing data"""
+    await require_admin(request)
+    
+    if data_type not in EXPORT_FIELD_MAPPINGS:
+        raise HTTPException(status_code=400, detail=f"Invalid data type: {data_type}")
+    
+    mapping = EXPORT_FIELD_MAPPINGS[data_type]
+    fields = mapping["fields"]
+    required_fields = IMPORT_REQUIRED_FIELDS.get(data_type, [])
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{data_type.replace('_', ' ').title()} Import"
+    
+    # Style definitions
+    header_font = Font(bold=True, color="FFFFFF")
+    required_fill = PatternFill(start_color="DC2626", end_color="DC2626", fill_type="solid")  # Red for required
+    optional_fill = PatternFill(start_color="6B7280", end_color="6B7280", fill_type="solid")  # Gray for optional
+    header_alignment = Alignment(horizontal="center", vertical="center")
+    
+    # Write headers with required/optional indication
+    headers = [(f[1], f[0] in required_fields) for f in fields]
+    for col, (header, is_required) in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header + (" *" if is_required else ""))
+        cell.font = header_font
+        cell.fill = required_fill if is_required else optional_fill
+        cell.alignment = header_alignment
+    
+    # Add instruction row
+    ws.cell(row=2, column=1, value="<-- Red headers are required fields. Delete this row before importing.")
+    
+    # Auto-adjust column widths
+    for col in range(1, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 20
+    
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    
+    filename = f"{data_type}_import_template.xlsx"
+    
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+# ============ IMPORT ENDPOINTS ============
+
+@api_router.get("/admin/import/types")
+async def get_import_types(request: Request):
+    """Get available data types for import"""
+    await require_admin(request)
+    
+    return {
+        "finance": [
+            {"id": "cashbook", "name": "Cashbook (Money In/Out)", "description": "Import historical transactions", "required_fields": IMPORT_REQUIRED_FIELDS.get("cashbook", [])},
+            {"id": "receipts", "name": "Receipts", "description": "Import historical receipts", "required_fields": IMPORT_REQUIRED_FIELDS.get("receipts", [])},
+            {"id": "liabilities", "name": "Liabilities", "description": "Import outstanding liabilities", "required_fields": IMPORT_REQUIRED_FIELDS.get("liabilities", [])},
+            {"id": "salaries", "name": "Salaries", "description": "Import salary master data", "required_fields": IMPORT_REQUIRED_FIELDS.get("salaries", [])},
+        ],
+        "crm": [
+            {"id": "leads", "name": "Leads", "description": "Import leads data", "required_fields": IMPORT_REQUIRED_FIELDS.get("leads", [])},
+            {"id": "projects", "name": "Projects", "description": "Import projects data", "required_fields": IMPORT_REQUIRED_FIELDS.get("projects", [])},
+        ],
+        "duplicate_strategies": [
+            {"id": "skip", "name": "Skip Duplicates", "description": "Skip rows that match existing records"},
+            {"id": "update", "name": "Update Existing", "description": "Update existing records with new data"},
+            {"id": "create_new", "name": "Create New", "description": "Create new records even if duplicates exist"},
+        ]
+    }
+
+
+@api_router.post("/admin/import/preview")
+async def import_preview(
+    request: Request,
+    file: UploadFile = File(...),
+    data_type: str = "cashbook",
+    duplicate_strategy: str = "skip"
+):
+    """Upload file and preview import data with validation"""
+    user = await require_admin(request)
+    
+    if data_type not in EXPORT_FIELD_MAPPINGS:
+        raise HTTPException(status_code=400, detail=f"Invalid data type: {data_type}")
+    
+    # Validate file type
+    filename = file.filename or ""
+    if not filename.endswith(('.xlsx', '.xls', '.csv')):
+        raise HTTPException(status_code=400, detail="Only Excel (.xlsx, .xls) or CSV files are supported")
+    
+    # Read file content
+    content = await file.read()
+    
+    # Parse file
+    try:
+        if filename.endswith('.csv'):
+            rows = await parse_csv_file(content)
+        else:
+            rows = await parse_excel_file(content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
+    
+    if not rows:
+        raise HTTPException(status_code=400, detail="File is empty or has no data rows")
+    
+    # Validate and transform data
+    mapping = EXPORT_FIELD_MAPPINGS[data_type]
+    required_fields = IMPORT_REQUIRED_FIELDS.get(data_type, [])
+    field_map = {f[1].lower().replace(" ", "_").replace("*", "").strip(): f[0] for f in mapping["fields"]}
+    
+    validated_rows = []
+    errors = []
+    duplicates = []
+    
+    for idx, row in enumerate(rows, start=2):  # Start from 2 (row 1 is header)
+        row_errors = []
+        transformed_row = {}
+        
+        # Map columns to field names
+        for col_name, value in row.items():
+            clean_col = col_name.lower().replace(" ", "_").replace("*", "").strip()
+            if clean_col in field_map:
+                field_key = field_map[clean_col]
+                transformed_row[field_key] = value
+        
+        # Check required fields
+        for req_field in required_fields:
+            if req_field not in transformed_row or not transformed_row[req_field]:
+                row_errors.append(f"Missing required field: {req_field}")
+        
+        # Type validation
+        if "amount" in transformed_row:
+            try:
+                transformed_row["amount"] = float(str(transformed_row["amount"]).replace(",", "").replace("₹", "").strip())
+            except:
+                row_errors.append("Invalid amount format")
+        
+        if "monthly_salary" in transformed_row:
+            try:
+                transformed_row["monthly_salary"] = float(str(transformed_row["monthly_salary"]).replace(",", "").replace("₹", "").strip())
+            except:
+                row_errors.append("Invalid salary format")
+        
+        if "budget" in transformed_row and transformed_row["budget"]:
+            try:
+                transformed_row["budget"] = float(str(transformed_row["budget"]).replace(",", "").replace("₹", "").strip())
+            except:
+                row_errors.append("Invalid budget format")
+        
+        # Date validation
+        for date_field in ["date", "receipt_date", "due_date", "created_at"]:
+            if date_field in transformed_row and transformed_row[date_field]:
+                try:
+                    # Try common date formats
+                    date_val = str(transformed_row[date_field])
+                    for fmt in ["%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d"]:
+                        try:
+                            parsed = datetime.strptime(date_val.split()[0], fmt)
+                            transformed_row[date_field] = parsed.strftime("%Y-%m-%d")
+                            break
+                        except:
+                            continue
+                except:
+                    row_errors.append(f"Invalid date format for {date_field}")
+        
+        # Check for duplicates
+        is_duplicate = await check_duplicate(data_type, transformed_row)
+        
+        if row_errors:
+            errors.append({"row": idx, "errors": row_errors, "data": transformed_row})
+        elif is_duplicate:
+            duplicates.append({"row": idx, "data": transformed_row, "match_reason": is_duplicate})
+        else:
+            validated_rows.append({"row": idx, "data": transformed_row})
+    
+    # Store preview for execution
+    preview_id = f"preview_{uuid.uuid4().hex[:12]}"
+    preview_data = {
+        "preview_id": preview_id,
+        "data_type": data_type,
+        "duplicate_strategy": duplicate_strategy,
+        "file_name": filename,
+        "total_rows": len(rows),
+        "valid_rows": validated_rows,
+        "duplicates": duplicates,
+        "errors": errors,
+        "created_by": user.user_id,
+        "created_at": datetime.now(timezone.utc)
+    }
+    
+    await db.import_previews.insert_one(preview_data)
+    
+    # Auto-expire old previews (older than 1 hour)
+    await db.import_previews.delete_many({
+        "created_at": {"$lt": datetime.now(timezone.utc) - timedelta(hours=1)}
+    })
+    
+    return {
+        "preview_id": preview_id,
+        "data_type": data_type,
+        "file_name": filename,
+        "total_rows": len(rows),
+        "valid_count": len(validated_rows),
+        "duplicate_count": len(duplicates),
+        "error_count": len(errors),
+        "duplicate_strategy": duplicate_strategy,
+        "sample_valid": validated_rows[:5],
+        "duplicates": duplicates[:10],
+        "errors": errors[:10],
+        "warnings": [
+            "⚠️ Imported data will be tagged as 'imported' and EXCLUDED from live financial calculations.",
+            "⚠️ Imported records are for historical reference and CA/audit compliance only.",
+            "⚠️ Cash lock, safe surplus, and spending eligibility will NOT include imported data."
+        ]
+    }
+
+
+async def parse_csv_file(content: bytes) -> List[dict]:
+    """Parse CSV file content"""
+    text = content.decode('utf-8-sig')  # Handle BOM
+    reader = csv.DictReader(StringIO(text))
+    return list(reader)
+
+
+async def parse_excel_file(content: bytes) -> List[dict]:
+    """Parse Excel file content"""
+    buffer = BytesIO(content)
+    wb = load_workbook(buffer, data_only=True)
+    ws = wb.active
+    
+    rows = []
+    headers = []
+    
+    for row_idx, row in enumerate(ws.iter_rows(values_only=True), 1):
+        if row_idx == 1:
+            # Header row
+            headers = [str(cell).strip() if cell else f"column_{i}" for i, cell in enumerate(row)]
+        else:
+            # Data row
+            if any(cell for cell in row):  # Skip empty rows
+                row_dict = {}
+                for col_idx, cell in enumerate(row):
+                    if col_idx < len(headers):
+                        row_dict[headers[col_idx]] = cell
+                rows.append(row_dict)
+    
+    return rows
+
+
+async def check_duplicate(data_type: str, row_data: dict) -> Optional[str]:
+    """Check if record already exists based on data type specific logic"""
+    
+    if data_type == "cashbook":
+        # Check by date + amount + description
+        if row_data.get("date") and row_data.get("amount"):
+            existing = await db.accounting_transactions.find_one({
+                "date": row_data.get("date"),
+                "amount": row_data.get("amount"),
+                "description": row_data.get("description", "")
+            }, {"_id": 0, "transaction_id": 1})
+            if existing:
+                return f"Matching transaction found: {existing.get('transaction_id')}"
+    
+    elif data_type == "receipts":
+        # Check by receipt number or (project + amount + date)
+        if row_data.get("receipt_number"):
+            existing = await db.finance_receipts.find_one({
+                "receipt_number": row_data.get("receipt_number")
+            }, {"_id": 0, "receipt_id": 1})
+            if existing:
+                return f"Receipt number already exists: {existing.get('receipt_id')}"
+    
+    elif data_type == "liabilities":
+        # Check by vendor + amount + description
+        if row_data.get("vendor_name") and row_data.get("amount"):
+            existing = await db.finance_liabilities.find_one({
+                "vendor_name": row_data.get("vendor_name"),
+                "amount": row_data.get("amount"),
+                "description": row_data.get("description", "")
+            }, {"_id": 0, "liability_id": 1})
+            if existing:
+                return f"Matching liability found: {existing.get('liability_id')}"
+    
+    elif data_type == "salaries":
+        # Check by employee name
+        if row_data.get("employee_name"):
+            # Try to find user by name
+            user_doc = await db.users.find_one({
+                "name": {"$regex": f"^{row_data.get('employee_name')}$", "$options": "i"}
+            }, {"_id": 0, "user_id": 1})
+            if user_doc:
+                existing = await db.finance_salary_master.find_one({
+                    "employee_id": user_doc["user_id"]
+                }, {"_id": 0, "salary_id": 1})
+                if existing:
+                    return f"Salary record exists for employee: {existing.get('salary_id')}"
+    
+    elif data_type == "leads":
+        # Check by customer phone
+        if row_data.get("customer_phone"):
+            existing = await db.leads.find_one({
+                "customer_phone": row_data.get("customer_phone")
+            }, {"_id": 0, "lead_id": 1})
+            if existing:
+                return f"Lead with same phone exists: {existing.get('lead_id')}"
+    
+    elif data_type == "projects":
+        # Check by project name + client name
+        if row_data.get("project_name") and row_data.get("client_name"):
+            existing = await db.projects.find_one({
+                "project_name": row_data.get("project_name"),
+                "client_name": row_data.get("client_name")
+            }, {"_id": 0, "project_id": 1})
+            if existing:
+                return f"Project already exists: {existing.get('project_id')}"
+    
+    return None
+
+
+@api_router.post("/admin/import/execute")
+async def execute_import(exec_req: ImportExecuteRequest, request: Request):
+    """Execute the import after preview confirmation"""
+    user = await require_admin(request)
+    
+    # Get preview data
+    preview = await db.import_previews.find_one(
+        {"preview_id": exec_req.preview_id},
+        {"_id": 0}
+    )
+    
+    if not preview:
+        raise HTTPException(status_code=404, detail="Preview not found or expired. Please upload the file again.")
+    
+    if preview.get("created_by") != user.user_id:
+        raise HTTPException(status_code=403, detail="You can only execute your own import previews")
+    
+    data_type = preview["data_type"]
+    valid_rows = preview["valid_rows"]
+    duplicates = preview["duplicates"]
+    duplicate_strategy = exec_req.duplicate_strategy
+    
+    imported_count = 0
+    skipped_count = 0
+    error_count = 0
+    import_errors = []
+    sample_imported = []
+    
+    now = datetime.now(timezone.utc)
+    
+    # Process valid rows
+    for item in valid_rows:
+        row_data = item["data"]
+        try:
+            record = await create_import_record(data_type, row_data, user, now)
+            if record:
+                imported_count += 1
+                if len(sample_imported) < 5:
+                    sample_imported.append(record)
+        except Exception as e:
+            error_count += 1
+            import_errors.append({"row": item["row"], "error": str(e)})
+    
+    # Process duplicates based on strategy
+    for item in duplicates:
+        row_data = item["data"]
+        try:
+            if duplicate_strategy == "skip":
+                skipped_count += 1
+            elif duplicate_strategy == "update":
+                updated = await update_existing_record(data_type, row_data, user, now)
+                if updated:
+                    imported_count += 1
+                else:
+                    skipped_count += 1
+            elif duplicate_strategy == "create_new":
+                record = await create_import_record(data_type, row_data, user, now)
+                if record:
+                    imported_count += 1
+        except Exception as e:
+            error_count += 1
+            import_errors.append({"row": item["row"], "error": str(e)})
+    
+    # Create audit log
+    import_id = f"imp_{uuid.uuid4().hex[:12]}"
+    audit_log = {
+        "import_id": import_id,
+        "data_type": data_type,
+        "file_name": preview["file_name"],
+        "total_rows": preview["total_rows"],
+        "imported_count": imported_count,
+        "skipped_count": skipped_count,
+        "error_count": error_count + len(preview.get("errors", [])),
+        "duplicate_strategy": duplicate_strategy,
+        "imported_by": user.user_id,
+        "imported_by_name": user.name,
+        "import_date": now,
+        "errors": import_errors[:50],  # Limit stored errors
+        "sample_imported": sample_imported
+    }
+    
+    await db.import_audit_log.insert_one(audit_log)
+    
+    # Clean up preview
+    await db.import_previews.delete_one({"preview_id": exec_req.preview_id})
+    
+    return {
+        "success": True,
+        "import_id": import_id,
+        "data_type": data_type,
+        "imported_count": imported_count,
+        "skipped_count": skipped_count,
+        "error_count": error_count,
+        "message": f"Successfully imported {imported_count} records. {skipped_count} skipped, {error_count} errors.",
+        "warnings": [
+            "All imported records are tagged with 'imported=true'",
+            "Imported financial data is EXCLUDED from live calculations (cash lock, safe surplus, etc.)"
+        ]
+    }
+
+
+async def create_import_record(data_type: str, row_data: dict, user, now: datetime) -> Optional[dict]:
+    """Create a new imported record based on data type"""
+    
+    # Common import metadata
+    import_meta = {
+        "imported": True,
+        "import_date": now.isoformat(),
+        "imported_by": user.user_id,
+        "imported_by_name": user.name
+    }
+    
+    if data_type == "cashbook":
+        # Lookup account and category
+        account = await db.accounting_accounts.find_one(
+            {"name": {"$regex": f"^{row_data.get('account_name', '')}$", "$options": "i"}},
+            {"_id": 0}
+        )
+        if not account:
+            # Create a default imported account
+            account = {"account_id": "imported_account", "name": row_data.get("account_name", "Imported Account")}
+        
+        category_name = row_data.get("category_name", "Imported")
+        
+        record = {
+            "transaction_id": f"txn_imp_{uuid.uuid4().hex[:10]}",
+            "date": row_data.get("date", now.strftime("%Y-%m-%d")),
+            "type": row_data.get("type", "outflow"),
+            "amount": float(row_data.get("amount", 0)),
+            "category_id": row_data.get("category_id", "imported"),
+            "category_name": category_name,
+            "account_id": account.get("account_id", "imported_account"),
+            "account_name": account.get("name", "Imported Account"),
+            "project_id": row_data.get("project_id"),
+            "description": row_data.get("description", ""),
+            "reference_number": row_data.get("reference_number", ""),
+            "payment_mode": row_data.get("payment_mode", ""),
+            "notes": row_data.get("notes", ""),
+            "verified": False,
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "created_at": now.isoformat(),
+            **import_meta
+        }
+        await db.accounting_transactions.insert_one(record)
+        return {"transaction_id": record["transaction_id"], "amount": record["amount"]}
+    
+    elif data_type == "receipts":
+        record = {
+            "receipt_id": f"rcp_imp_{uuid.uuid4().hex[:10]}",
+            "receipt_number": row_data.get("receipt_number", f"IMP-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"),
+            "project_id": row_data.get("project_id"),
+            "project_name": row_data.get("project_name", ""),
+            "customer_name": row_data.get("customer_name", ""),
+            "amount": float(row_data.get("amount", 0)),
+            "payment_mode": row_data.get("payment_mode", ""),
+            "account_id": row_data.get("account_id"),
+            "account_name": row_data.get("account_name", ""),
+            "receipt_date": row_data.get("receipt_date", now.strftime("%Y-%m-%d")),
+            "payment_description": row_data.get("payment_description", ""),
+            "notes": row_data.get("notes", ""),
+            "status": "completed",
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "created_at": now.isoformat(),
+            **import_meta
+        }
+        await db.finance_receipts.insert_one(record)
+        return {"receipt_id": record["receipt_id"], "amount": record["amount"]}
+    
+    elif data_type == "liabilities":
+        record = {
+            "liability_id": f"lia_imp_{uuid.uuid4().hex[:10]}",
+            "project_id": row_data.get("project_id"),
+            "vendor_id": row_data.get("vendor_id"),
+            "vendor_name": row_data.get("vendor_name", "Unknown Vendor"),
+            "category": row_data.get("category", "other"),
+            "description": row_data.get("description", ""),
+            "amount": float(row_data.get("amount", 0)),
+            "amount_settled": float(row_data.get("amount_settled", 0)),
+            "amount_remaining": float(row_data.get("amount", 0)) - float(row_data.get("amount_settled", 0)),
+            "due_date": row_data.get("due_date"),
+            "source": "import",
+            "status": "open" if float(row_data.get("amount_settled", 0)) == 0 else "partially_settled",
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "created_at": now.isoformat(),
+            **import_meta
+        }
+        await db.finance_liabilities.insert_one(record)
+        return {"liability_id": record["liability_id"], "amount": record["amount"]}
+    
+    elif data_type == "salaries":
+        # Try to match employee by name
+        employee_name = row_data.get("employee_name", "")
+        user_doc = await db.users.find_one(
+            {"name": {"$regex": f"^{employee_name}$", "$options": "i"}},
+            {"_id": 0}
+        )
+        
+        if not user_doc:
+            # Skip if employee not found
+            return None
+        
+        record = {
+            "salary_id": f"sal_imp_{uuid.uuid4().hex[:10]}",
+            "employee_id": user_doc["user_id"],
+            "employee_name": user_doc["name"],
+            "monthly_salary": float(row_data.get("monthly_salary", 0)),
+            "salary_level": row_data.get("salary_level", "L1"),
+            "payment_type": row_data.get("payment_type", "bank_transfer"),
+            "bank_account_number": row_data.get("bank_account_number"),
+            "bank_name": row_data.get("bank_name"),
+            "ifsc_code": row_data.get("ifsc_code"),
+            "status": row_data.get("status", "active"),
+            "created_by": user.user_id,
+            "created_at": now.isoformat(),
+            **import_meta
+        }
+        await db.finance_salary_master.insert_one(record)
+        return {"salary_id": record["salary_id"], "employee_name": record["employee_name"]}
+    
+    elif data_type == "leads":
+        # Generate PID
+        counter = await db.counters.find_one_and_update(
+            {"_id": "pid_counter"},
+            {"$inc": {"seq": 1}},
+            upsert=True,
+            return_document=True
+        )
+        pid = f"PID-{str(counter.get('seq', 1)).zfill(5)}"
+        
+        record = {
+            "lead_id": f"lead_imp_{uuid.uuid4().hex[:10]}",
+            "pid": pid,
+            "customer_name": row_data.get("customer_name", ""),
+            "customer_phone": row_data.get("customer_phone", ""),
+            "customer_email": row_data.get("customer_email"),
+            "customer_address": row_data.get("customer_address"),
+            "customer_requirements": row_data.get("customer_requirements"),
+            "source": row_data.get("source", "Others"),
+            "budget": float(row_data.get("budget", 0)) if row_data.get("budget") else None,
+            "status": row_data.get("status", "In Progress"),
+            "stage": row_data.get("stage", "BC Call Done"),
+            "assigned_to": row_data.get("assigned_to"),
+            "designer_id": row_data.get("designer_id"),
+            "is_converted": False,
+            "hold_status": "Active",
+            "hold_history": [],
+            "timeline": [],
+            "comments": [],
+            "files": [],
+            "collaborators": [],
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            **import_meta
+        }
+        await db.leads.insert_one(record)
+        return {"lead_id": record["lead_id"], "customer_name": record["customer_name"]}
+    
+    elif data_type == "projects":
+        # Generate PID
+        counter = await db.counters.find_one_and_update(
+            {"_id": "pid_counter"},
+            {"$inc": {"seq": 1}},
+            upsert=True,
+            return_document=True
+        )
+        pid = f"PID-{str(counter.get('seq', 1)).zfill(5)}"
+        
+        record = {
+            "project_id": f"proj_imp_{uuid.uuid4().hex[:10]}",
+            "pid": pid,
+            "project_name": row_data.get("project_name", ""),
+            "client_name": row_data.get("client_name", ""),
+            "client_phone": row_data.get("client_phone", ""),
+            "stage": row_data.get("stage", "Design Finalization"),
+            "summary": row_data.get("summary", ""),
+            "contract_value": float(row_data.get("contract_value", 0)) if row_data.get("contract_value") else 0,
+            "hold_status": "Active",
+            "hold_history": [],
+            "collaborators": [],
+            "timeline": [],
+            "comments": [],
+            "files": [],
+            "notes": [],
+            "milestones": {},
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            **import_meta
+        }
+        await db.projects.insert_one(record)
+        return {"project_id": record["project_id"], "project_name": record["project_name"]}
+    
+    return None
+
+
+async def update_existing_record(data_type: str, row_data: dict, user, now: datetime) -> bool:
+    """Update existing record based on data type"""
+    
+    update_meta = {
+        "updated_at": now.isoformat(),
+        "last_import_update": now.isoformat(),
+        "last_import_by": user.user_id
+    }
+    
+    if data_type == "cashbook":
+        # Update by date + amount + description match
+        result = await db.accounting_transactions.update_one(
+            {
+                "date": row_data.get("date"),
+                "amount": float(row_data.get("amount", 0)),
+                "description": row_data.get("description", "")
+            },
+            {"$set": {**row_data, **update_meta}}
+        )
+        return result.modified_count > 0
+    
+    elif data_type == "leads":
+        result = await db.leads.update_one(
+            {"customer_phone": row_data.get("customer_phone")},
+            {"$set": {
+                "customer_name": row_data.get("customer_name"),
+                "customer_email": row_data.get("customer_email"),
+                "customer_address": row_data.get("customer_address"),
+                "customer_requirements": row_data.get("customer_requirements"),
+                "source": row_data.get("source"),
+                **update_meta
+            }}
+        )
+        return result.modified_count > 0
+    
+    elif data_type == "projects":
+        result = await db.projects.update_one(
+            {
+                "project_name": row_data.get("project_name"),
+                "client_name": row_data.get("client_name")
+            },
+            {"$set": {
+                "client_phone": row_data.get("client_phone"),
+                "summary": row_data.get("summary"),
+                "contract_value": float(row_data.get("contract_value", 0)) if row_data.get("contract_value") else None,
+                **update_meta
+            }}
+        )
+        return result.modified_count > 0
+    
+    # For other types, skip update
+    return False
+
+
+@api_router.get("/admin/import/history")
+async def get_import_history(request: Request, limit: int = 20):
+    """Get import audit log history"""
+    await require_admin(request)
+    
+    history = await db.import_audit_log.find(
+        {},
+        {"_id": 0}
+    ).sort("import_date", -1).limit(limit).to_list(limit)
+    
+    return {"imports": history}
+
+
+@api_router.get("/admin/import/history/{import_id}")
+async def get_import_detail(import_id: str, request: Request):
+    """Get details of a specific import"""
+    await require_admin(request)
+    
+    import_record = await db.import_audit_log.find_one(
+        {"import_id": import_id},
+        {"_id": 0}
+    )
+    
+    if not import_record:
+        raise HTTPException(status_code=404, detail="Import record not found")
+    
+    return import_record
+
+
 # ============ HEALTH CHECK ============
 
 @api_router.get("/")
