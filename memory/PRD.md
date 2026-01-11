@@ -1056,3 +1056,83 @@ Lightweight accounting clarity without full double-entry system. All data derive
 - 25/25 backend API tests passed
 - Frontend UI verified with screenshots
 - Test file: `/app/tests/test_accounting_clarity_layers.py`
+
+---
+
+## ✅ Import / Export Module - COMPLETED Jan 11, 2026
+
+Admin-only module for exporting data for CA compliance and importing historical records.
+
+### Core Concept
+- **Export:** Download CRM and Finance data in Excel (.xlsx) or CSV format for CA/audit compliance
+- **Import:** Upload historical data with validation, duplicate detection, and dry-run preview
+- **Critical Constraint:** All imported records are tagged with `imported=true` and **EXCLUDED from live financial calculations** (cash lock, safe surplus, spending eligibility)
+
+### Export Features
+| Data Type | Collection | Description |
+|-----------|------------|-------------|
+| Cashbook | `accounting_transactions` | Daily transactions (Money In/Out) |
+| Receipts | `finance_receipts` | Customer payment receipts |
+| Liabilities | `finance_liabilities` | Outstanding vendor dues |
+| Salaries | `finance_salary_master` | Employee salary data |
+| Project Finance | `projects` | Project-wise financial summary |
+| Leads | `leads` | All leads with customer details |
+| Projects | `projects` | All projects with client info |
+| Customers | `leads` (dedupe) | Unique customer contact list |
+
+### Import Features
+- **Supported Types:** Cashbook, Receipts, Liabilities, Salaries, Leads, Projects
+- **File Formats:** Excel (.xlsx, .xls) and CSV
+- **Dry-Run Preview:** Validate data before importing
+- **Duplicate Detection:** Skip, Update existing, or Create new records
+- **Validation:** Required field checks, amount/date format validation
+- **Audit Trail:** All imports logged in `import_audit_log` collection
+
+### Duplicate Strategies
+| Strategy | Description |
+|----------|-------------|
+| `skip` | Skip rows that match existing records |
+| `update` | Update existing records with new data |
+| `create_new` | Create new records even if duplicates exist |
+
+### New API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/admin/export/types` | GET | List available export types |
+| `/api/admin/export` | POST | Export data (CSV/Excel) |
+| `/api/admin/export/template/{type}` | GET | Download import template |
+| `/api/admin/import/types` | GET | List available import types |
+| `/api/admin/import/preview` | POST | Preview import with validation |
+| `/api/admin/import/execute` | POST | Execute import |
+| `/api/admin/import/history` | GET | Get import audit log |
+| `/api/admin/import/history/{id}` | GET | Get import detail |
+
+### New Database Collections
+| Collection | Purpose |
+|------------|---------|
+| `import_previews` | Temporary storage for import preview data (auto-expires after 1 hour) |
+| `import_audit_log` | Permanent audit trail of all import operations |
+
+### Import Record Tagging
+All imported records include:
+```json
+{
+  "imported": true,
+  "import_date": "2026-01-11T12:00:00Z",
+  "imported_by": "user_id",
+  "imported_by_name": "User Name"
+}
+```
+
+### Files Modified
+- `/app/backend/server.py` - Import/Export APIs
+- `/app/frontend/src/pages/ImportExport.jsx` - NEW Import/Export page
+- `/app/frontend/src/App.js` - Route at `/admin/import-export`
+- `/app/frontend/src/components/layout/Sidebar.jsx` - Navigation link for Admin
+- `/app/backend/requirements.txt` - Added `openpyxl==3.1.5`
+
+### Testing
+- 24/24 backend API tests passed
+- Frontend UI verified
+- Test file: `/app/tests/test_import_export.py`
+
