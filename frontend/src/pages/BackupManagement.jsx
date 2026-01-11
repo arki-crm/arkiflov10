@@ -55,7 +55,7 @@ export default function BackupManagement() {
   useEffect(() => {
     fetchBackups();
     fetchSchedulerStatus();
-  }, []);
+  }, [token]);
 
   const handleCreateBackup = async () => {
     setCreating(true);
