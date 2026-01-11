@@ -498,6 +498,129 @@ const FounderDashboard = () => {
         </Card>
       )}
 
+      {/* Advance Cash Lock & Safe Use Summary */}
+      {safeUseSummary && (
+        <Card className="bg-slate-800/50 border-slate-700" data-testid="safe-use-summary">
+          <CardHeader className="border-b border-slate-700 pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg text-white flex items-center gap-2">
+                <PiggyBank className="w-5 h-5 text-emerald-400" />
+                Advance Cash Lock
+              </CardTitle>
+              <Badge 
+                className={cn(
+                  "text-xs",
+                  safeUseSummary.safe_use_warning 
+                    ? "bg-red-900/50 text-red-300 border-red-700" 
+                    : "bg-emerald-900/50 text-emerald-300 border-emerald-700"
+                )}
+              >
+                {safeUseSummary.safe_use_months} months runway
+              </Badge>
+            </div>
+            <p className="text-slate-400 text-sm mt-1">
+              {safeUseSummary.default_lock_percentage}% locked by default • Operating baseline: {formatCurrency(safeUseSummary.monthly_operating_expense)}/month
+            </p>
+          </CardHeader>
+          <CardContent className="p-4">
+            {/* Warning Banner */}
+            {safeUseSummary.safe_use_warning && (
+              <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                  <div>
+                    <p className="text-red-300 font-medium">Low Safe Cash Warning</p>
+                    <p className="text-red-400 text-sm">
+                      Safe to use ({formatCurrency(safeUseSummary.project_safe_to_use)}) is below monthly operating expense
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Main Metrics - 4 Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+              {/* Total Received */}
+              <div className="bg-slate-700/50 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <DollarSign className="w-4 h-4 text-blue-400" />
+                  <p className="text-slate-400 text-xs">Total Received</p>
+                </div>
+                <p className="text-2xl font-bold text-white">{formatCurrency(safeUseSummary.total_project_received)}</p>
+                <p className="text-xs text-slate-500 mt-1">From all projects</p>
+              </div>
+              
+              {/* Locked Amount */}
+              <div className="bg-slate-700/50 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Lock className="w-4 h-4 text-amber-400" />
+                  <p className="text-slate-400 text-xs">Locked</p>
+                </div>
+                <p className="text-2xl font-bold text-amber-400">{formatCurrency(safeUseSummary.total_locked)}</p>
+                <p className="text-xs text-slate-500 mt-1">Reserved for execution</p>
+              </div>
+              
+              {/* Commitments Made */}
+              <div className="bg-slate-700/50 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <TrendingDown className="w-4 h-4 text-orange-400" />
+                  <p className="text-slate-400 text-xs">Commitments</p>
+                </div>
+                <p className="text-2xl font-bold text-orange-400">{formatCurrency(safeUseSummary.total_commitments)}</p>
+                <p className="text-xs text-slate-500 mt-1">Spent + approved requests</p>
+              </div>
+              
+              {/* Safe to Use */}
+              <div className="bg-slate-700/50 rounded-lg p-4 border border-emerald-700/30">
+                <div className="flex items-center gap-2 mb-2">
+                  <Unlock className="w-4 h-4 text-emerald-400" />
+                  <p className="text-slate-400 text-xs">Safe to Use</p>
+                </div>
+                <p className={cn(
+                  "text-2xl font-bold",
+                  safeUseSummary.safe_use_warning ? "text-red-400" : "text-emerald-400"
+                )}>
+                  {formatCurrency(safeUseSummary.project_safe_to_use)}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">Available for operations</p>
+              </div>
+            </div>
+
+            {/* Top Projects by Lock */}
+            {safeUseSummary.top_projects_by_lock?.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-700">
+                <p className="text-sm text-slate-400 mb-3">Top Projects by Locked Amount</p>
+                <div className="space-y-2">
+                  {safeUseSummary.top_projects_by_lock.slice(0, 3).map((project) => (
+                    <div 
+                      key={project.project_id}
+                      className="flex items-center justify-between bg-slate-700/30 rounded-lg p-3"
+                    >
+                      <div className="flex-1">
+                        <p className="text-white text-sm font-medium truncate">{project.project_name}</p>
+                        <p className="text-slate-500 text-xs">
+                          {project.is_overridden ? `${project.effective_lock_pct}% (custom)` : `${project.effective_lock_pct}%`}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="flex items-center gap-2">
+                          <Lock className="w-3 h-3 text-amber-400" />
+                          <span className="text-amber-400 font-medium">{formatCurrency(project.net_locked)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Unlock className="w-3 h-3 text-emerald-400" />
+                          <span className="text-emerald-400 text-sm">{formatCurrency(project.safe_to_use)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Revenue Reality Check */}
       {revenueReality && (
         <Card className="bg-slate-800/50 border-slate-700" data-testid="revenue-reality-check">
