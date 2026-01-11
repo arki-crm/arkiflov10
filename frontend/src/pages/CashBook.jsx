@@ -681,6 +681,64 @@ const CashBook = () => {
                       )}
                     </>
                   )}
+
+                  {/* File Attachments Section */}
+                  <div className="border-t pt-4 mt-2">
+                    <Label className="text-sm font-medium flex items-center gap-2 mb-2">
+                      <Paperclip className="w-4 h-4" />
+                      Attach Documents (Optional)
+                    </Label>
+                    <p className="text-xs text-slate-500 mb-3">
+                      Bills, vouchers, UPI screenshots • PDF, JPG, PNG up to 15MB
+                    </p>
+                    
+                    {/* Pending Files List */}
+                    {pendingFiles.length > 0 && (
+                      <div className="space-y-2 mb-3">
+                        {pendingFiles.map((file, index) => (
+                          <div key={index} className="flex items-center justify-between p-2 bg-slate-50 rounded border text-sm">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {file.type.includes('pdf') ? (
+                                <FileText className="w-4 h-4 text-red-500 flex-shrink-0" />
+                              ) : (
+                                <Image className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                              )}
+                              <span className="truncate">{file.name}</span>
+                              <span className="text-xs text-slate-400">
+                                ({(file.size / 1024).toFixed(0)} KB)
+                              </span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removePendingFile(index)}
+                              className="flex-shrink-0 text-red-500 hover:text-red-600 hover:bg-red-50"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Upload Button */}
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        multiple
+                        onChange={handlePendingFileSelect}
+                        className="hidden"
+                      />
+                      <div className="flex items-center justify-center gap-2 p-3 border-2 border-dashed border-slate-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                        <Upload className="w-4 h-4 text-slate-500" />
+                        <span className="text-sm text-slate-600">
+                          {pendingFiles.length > 0 ? 'Add more files' : 'Click to upload files'}
+                        </span>
+                      </div>
+                    </label>
+                  </div>
                 </div>
 
                 <DialogFooter className="flex-shrink-0 border-t pt-4 mt-2">
