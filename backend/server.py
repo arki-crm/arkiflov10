@@ -22393,6 +22393,358 @@ async def get_employee_promotion_eligibility(employee_id: str, request: Request)
     return eligibility
 
 
+# ============ REPORTS & INSIGHTS MODULE ============
+
+@api_router.get("/finance/reports/cash-flow")
+async def get_cash_flow_report(
+    request: Request,
+    period: str = "3months",  # 3months, 6months, 12months, custom
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """
+    Cash Flow Report - Shows inflows vs outflows with trends
+    Default: Last 3 months
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Check permission
+    if not has_permission(user_doc, "finance.reports.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Calculate date range
+    if period == "custom" and start_date and end_date:
+        date_from = start_date
+        date_to = end_date
+    else:
+        months = {"3months": 3, "6months": 6, "12months": 12}.get(period, 3)
+        date_from = (now - timedelta(days=months * 30)).strftime("%Y-%m-%d")
+        date_to = now.strftime("%Y-%m-%d")
+    
+    # Get all transactions in date range (exclude imported)
+    transactions = await db.accounting_transactions.find({
+        "date": {"$gte": date_from, "$lte": date_to},
+        "$or": [{"imported": {"$ne": True}}, {"imported": {"$exists": False}}]
+    }, {"_id": 0}).to_list(10000)
+    
+    # Initialize aggregations
+    total_inflow = 0
+    total_outflow = 0
+    category_breakdown = {"inflow": {}, "outflow": {}}
+    monthly_trend = {}
+    project_cash_flow = {}
+    account_breakdown = {}
+    
+    for txn in transactions:
+        amount = float(txn.get("amount", 0))
+        txn_type = txn.get("type", "outflow")
+        category = txn.get("category_name", "Uncategorized")
+        account = txn.get("account_name", "Unknown")
+        project_id = txn.get("project_id")
+        date_str = txn.get("date", "")
+        
+        # Total inflow/outflow
+        if txn_type == "inflow":
+            total_inflow += amount
+            category_breakdown["inflow"][category] = category_breakdown["inflow"].get(category, 0) + amount
+        else:
+            total_outflow += amount
+            category_breakdown["outflow"][category] = category_breakdown["outflow"].get(category, 0) + amount
+        
+        # Monthly trend
+        if date_str:
+            month_key = date_str[:7]  # YYYY-MM
+            if month_key not in monthly_trend:
+                monthly_trend[month_key] = {"inflow": 0, "outflow": 0, "net": 0}
+            if txn_type == "inflow":
+                monthly_trend[month_key]["inflow"] += amount
+            else:
+                monthly_trend[month_key]["outflow"] += amount
+            monthly_trend[month_key]["net"] = monthly_trend[month_key]["inflow"] - monthly_trend[month_key]["outflow"]
+        
+        # Project cash flow
+        if project_id:
+            if project_id not in project_cash_flow:
+                project_cash_flow[project_id] = {"inflow": 0, "outflow": 0, "net": 0}
+            if txn_type == "inflow":
+                project_cash_flow[project_id]["inflow"] += amount
+            else:
+                project_cash_flow[project_id]["outflow"] += amount
+            project_cash_flow[project_id]["net"] = project_cash_flow[project_id]["inflow"] - project_cash_flow[project_id]["outflow"]
+        
+        # Account breakdown
+        if account not in account_breakdown:
+            account_breakdown[account] = {"inflow": 0, "outflow": 0, "net": 0}
+        if txn_type == "inflow":
+            account_breakdown[account]["inflow"] += amount
+        else:
+            account_breakdown[account]["outflow"] += amount
+        account_breakdown[account]["net"] = account_breakdown[account]["inflow"] - account_breakdown[account]["outflow"]
+    
+    # Get project names for project cash flow
+    if project_cash_flow:
+        project_ids = list(project_cash_flow.keys())
+        projects = await db.projects.find(
+            {"project_id": {"$in": project_ids}},
+            {"_id": 0, "project_id": 1, "project_name": 1, "pid": 1}
+        ).to_list(100)
+        project_map = {p["project_id"]: p for p in projects}
+        
+        project_cash_flow_list = []
+        for pid, data in project_cash_flow.items():
+            proj = project_map.get(pid, {})
+            project_cash_flow_list.append({
+                "project_id": pid,
+                "project_name": proj.get("project_name", "Unknown"),
+                "pid": proj.get("pid", ""),
+                **data
+            })
+        project_cash_flow_list.sort(key=lambda x: abs(x["net"]), reverse=True)
+    else:
+        project_cash_flow_list = []
+    
+    # Sort monthly trend by month
+    monthly_trend_list = [
+        {"month": k, **v}
+        for k, v in sorted(monthly_trend.items())
+    ]
+    
+    # Convert category breakdown to list format
+    inflow_categories = [
+        {"category": k, "amount": v}
+        for k, v in sorted(category_breakdown["inflow"].items(), key=lambda x: x[1], reverse=True)
+    ]
+    outflow_categories = [
+        {"category": k, "amount": v}
+        for k, v in sorted(category_breakdown["outflow"].items(), key=lambda x: x[1], reverse=True)
+    ]
+    
+    # Convert account breakdown to list
+    account_breakdown_list = [
+        {"account": k, **v}
+        for k, v in sorted(account_breakdown.items(), key=lambda x: x[1]["net"], reverse=True)
+    ]
+    
+    net_cash_flow = total_inflow - total_outflow
+    
+    return {
+        "period": period,
+        "date_from": date_from,
+        "date_to": date_to,
+        "summary": {
+            "total_inflow": total_inflow,
+            "total_outflow": total_outflow,
+            "net_cash_flow": net_cash_flow,
+            "transaction_count": len(transactions),
+            "cash_flow_status": "positive" if net_cash_flow >= 0 else "negative"
+        },
+        "monthly_trend": monthly_trend_list,
+        "category_breakdown": {
+            "inflow": inflow_categories,
+            "outflow": outflow_categories
+        },
+        "account_breakdown": account_breakdown_list,
+        "project_cash_flow": project_cash_flow_list[:20],  # Top 20 projects
+        "generated_at": now.isoformat()
+    }
+
+
+@api_router.get("/finance/reports/project-profitability")
+async def get_project_profitability_report(
+    request: Request,
+    stage: Optional[str] = None,
+    status: Optional[str] = None,  # profitable, loss, all
+    sort_by: str = "margin_percent",  # margin_percent, profit, contract_value
+    sort_order: str = "desc"
+):
+    """
+    Project Profitability Report - Shows all projects with profitability metrics
+    """
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Check permission
+    if not has_permission(user_doc, "finance.reports.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Get all projects
+    query = {}
+    if stage:
+        query["stage"] = stage
+    
+    projects = await db.projects.find(query, {"_id": 0}).to_list(1000)
+    
+    profitability_data = []
+    
+    for project in projects:
+        project_id = project.get("project_id")
+        contract_value = float(project.get("contract_value", 0))
+        
+        # Get total received (from receipts, exclude imported)
+        receipts = await db.finance_receipts.find({
+            "project_id": project_id,
+            "$or": [{"imported": {"$ne": True}}, {"imported": {"$exists": False}}]
+        }, {"_id": 0, "amount": 1}).to_list(100)
+        total_received = sum(float(r.get("amount", 0)) for r in receipts)
+        
+        # Get planned cost (from vendor mappings)
+        vendor_mappings = await db.finance_vendor_mappings.find({
+            "project_id": project_id
+        }, {"_id": 0, "estimated_amount": 1}).to_list(100)
+        planned_cost = sum(float(vm.get("estimated_amount", 0)) for vm in vendor_mappings)
+        
+        # Get actual cost (from cashbook outflows, exclude imported)
+        outflows = await db.accounting_transactions.find({
+            "project_id": project_id,
+            "type": "outflow",
+            "$or": [{"imported": {"$ne": True}}, {"imported": {"$exists": False}}]
+        }, {"_id": 0, "amount": 1}).to_list(1000)
+        actual_cost = sum(float(o.get("amount", 0)) for o in outflows)
+        
+        # Calculate profitability
+        projected_profit = contract_value - planned_cost if planned_cost > 0 else contract_value
+        realized_profit = total_received - actual_cost
+        
+        projected_margin = (projected_profit / contract_value * 100) if contract_value > 0 else 0
+        realized_margin = (realized_profit / total_received * 100) if total_received > 0 else 0
+        
+        # Determine status
+        if realized_profit > 0:
+            profit_status = "profitable"
+        elif realized_profit < 0:
+            profit_status = "loss"
+        else:
+            profit_status = "break_even"
+        
+        # Risk assessment
+        if actual_cost > planned_cost and planned_cost > 0:
+            cost_overrun = ((actual_cost - planned_cost) / planned_cost * 100)
+            risk_level = "high" if cost_overrun > 20 else "medium" if cost_overrun > 10 else "low"
+        else:
+            cost_overrun = 0
+            risk_level = "low"
+        
+        profitability_data.append({
+            "project_id": project_id,
+            "pid": project.get("pid", ""),
+            "project_name": project.get("project_name", ""),
+            "client_name": project.get("client_name", ""),
+            "stage": project.get("stage", ""),
+            "hold_status": project.get("hold_status", "Active"),
+            "contract_value": contract_value,
+            "total_received": total_received,
+            "balance_due": contract_value - total_received,
+            "planned_cost": planned_cost,
+            "actual_cost": actual_cost,
+            "cost_variance": actual_cost - planned_cost,
+            "cost_overrun_percent": cost_overrun,
+            "projected_profit": projected_profit,
+            "realized_profit": realized_profit,
+            "projected_margin_percent": round(projected_margin, 1),
+            "realized_margin_percent": round(realized_margin, 1),
+            "profit_status": profit_status,
+            "risk_level": risk_level
+        })
+    
+    # Filter by status
+    if status and status != "all":
+        profitability_data = [p for p in profitability_data if p["profit_status"] == status]
+    
+    # Sort
+    reverse = sort_order == "desc"
+    sort_key = {
+        "margin_percent": "realized_margin_percent",
+        "profit": "realized_profit",
+        "contract_value": "contract_value",
+        "actual_cost": "actual_cost"
+    }.get(sort_by, "realized_margin_percent")
+    
+    profitability_data.sort(key=lambda x: x.get(sort_key, 0), reverse=reverse)
+    
+    # Summary stats
+    total_projects = len(profitability_data)
+    profitable_count = len([p for p in profitability_data if p["profit_status"] == "profitable"])
+    loss_count = len([p for p in profitability_data if p["profit_status"] == "loss"])
+    
+    total_contract_value = sum(p["contract_value"] for p in profitability_data)
+    total_received = sum(p["total_received"] for p in profitability_data)
+    total_actual_cost = sum(p["actual_cost"] for p in profitability_data)
+    total_realized_profit = sum(p["realized_profit"] for p in profitability_data)
+    
+    overall_margin = (total_realized_profit / total_received * 100) if total_received > 0 else 0
+    
+    # Top profitable and loss-making projects
+    top_profitable = sorted(profitability_data, key=lambda x: x["realized_profit"], reverse=True)[:5]
+    top_loss = sorted(profitability_data, key=lambda x: x["realized_profit"])[:5]
+    top_loss = [p for p in top_loss if p["realized_profit"] < 0]
+    
+    return {
+        "summary": {
+            "total_projects": total_projects,
+            "profitable_projects": profitable_count,
+            "loss_projects": loss_count,
+            "break_even_projects": total_projects - profitable_count - loss_count,
+            "total_contract_value": total_contract_value,
+            "total_received": total_received,
+            "total_actual_cost": total_actual_cost,
+            "total_realized_profit": total_realized_profit,
+            "overall_margin_percent": round(overall_margin, 1)
+        },
+        "projects": profitability_data,
+        "top_profitable": top_profitable,
+        "top_loss": top_loss,
+        "filters_applied": {
+            "stage": stage,
+            "status": status,
+            "sort_by": sort_by,
+            "sort_order": sort_order
+        },
+        "generated_at": now.isoformat()
+    }
+
+
+@api_router.get("/finance/reports/available")
+async def get_available_reports(request: Request):
+    """Get list of available financial reports"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Check basic finance permission
+    if not has_permission(user_doc, "finance.reports.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    reports = [
+        {
+            "id": "cash-flow",
+            "name": "Cash Flow Report",
+            "description": "Inflows vs outflows breakdown by category, account, and project with monthly trends",
+            "default_period": "3months",
+            "permissions_required": ["finance.reports.view"]
+        },
+        {
+            "id": "project-profitability",
+            "name": "Project Profitability Report",
+            "description": "All projects with profitability metrics, margins, and risk assessment",
+            "default_period": "all",
+            "permissions_required": ["finance.reports.view", "finance.reports.profit"]
+        }
+    ]
+    
+    # Filter reports based on user permissions
+    available_reports = []
+    for report in reports:
+        has_all_perms = all(has_permission(user_doc, perm) for perm in report["permissions_required"])
+        if has_all_perms or user_doc.get("role") == "Admin":
+            available_reports.append(report)
+    
+    return {"reports": available_reports}
+
+
 # ============ IMPORT / EXPORT MODULE ============
 
 # Import/Export specific imports
