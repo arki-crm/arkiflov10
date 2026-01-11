@@ -229,7 +229,7 @@ const CashBook = () => {
 
     try {
       setSubmitting(true);
-      await axios.post(`${API}/accounting/transactions`, {
+      const response = await axios.post(`${API}/accounting/transactions`, {
         ...newTxn,
         amount: amount,
         transaction_date: new Date().toISOString(),
@@ -238,6 +238,30 @@ const CashBook = () => {
         requested_by_name: newTxn.requested_by_name || user?.name
       }, { withCredentials: true });
       
+      // Get transaction_id from response
+      const transactionId = response.data?.transaction_id;
+      
+      // Upload pending files if any
+      if (pendingFiles.length > 0 && transactionId) {
+        for (const file of pendingFiles) {
+          try {
+            const formData = new FormData();
+            formData.append('file', file);
+            await axios.post(
+              `${API}/finance/attachments/upload?entity_type=cashbook&entity_id=${transactionId}&description=${encodeURIComponent(file.name)}`,
+              formData,
+              { withCredentials: true, headers: { 'Content-Type': 'multipart/form-data' } }
+            );
+          } catch (uploadError) {
+            console.error('Failed to upload file:', file.name, uploadError);
+            toast.error(`Failed to upload ${file.name}`);
+          }
+        }
+        if (pendingFiles.length > 0) {
+          toast.success(`${pendingFiles.length} document(s) attached`);
+        }
+      }
+      
       let message = 'Transaction added successfully';
       if (amount > THRESHOLDS.petty_cash_max && amount <= THRESHOLDS.review_threshold) {
         message += ' (flagged for review)';
@@ -245,6 +269,7 @@ const CashBook = () => {
       toast.success(message);
       
       setIsAddDialogOpen(false);
+      setPendingFiles([]);
       setNewTxn({
         transaction_type: 'outflow',
         amount: '',
@@ -267,6 +292,35 @@ const CashBook = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Handle file selection for pending uploads
+  const handlePendingFileSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    const maxSize = 15 * 1024 * 1024; // 15MB
+    
+    const validFiles = [];
+    for (const file of files) {
+      if (!allowedTypes.includes(file.type)) {
+        toast.error(`${file.name}: Only PDF, JPG, PNG files allowed`);
+        continue;
+      }
+      if (file.size > maxSize) {
+        toast.error(`${file.name}: File exceeds 15MB limit`);
+        continue;
+      }
+      validFiles.push(file);
+    }
+    
+    if (validFiles.length > 0) {
+      setPendingFiles(prev => [...prev, ...validFiles]);
+    }
+    e.target.value = '';
+  };
+
+  const removePendingFile = (index) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleMarkReviewed = async (transactionId) => {
