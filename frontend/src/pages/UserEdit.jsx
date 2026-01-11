@@ -580,58 +580,141 @@ const UserEdit = () => {
                   User Permissions
                 </CardTitle>
                 <CardDescription>
-                  Configure granular access permissions for this user
+                  Configure granular access permissions for this user. {getPermissionCounts().total} permissions enabled.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Custom vs Role Defaults */}
-                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-slate-900">Permission Mode</p>
-                    <p className="text-sm text-slate-500">
-                      {customPermissions ? 'Using custom permissions' : `Using ${formData.role} role defaults`}
-                    </p>
+                {/* Permission Summary & Mode */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Permission Mode */}
+                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                    <div>
+                      <p className="font-medium text-slate-900">Permission Mode</p>
+                      <p className="text-sm text-slate-500">
+                        {customPermissions ? 'Using custom permissions' : `Using ${formData.role} role defaults`}
+                      </p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={handleResetToRoleDefaults} disabled={savingPermissions}>
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Reset to Defaults
+                    </Button>
                   </div>
-                  <Button variant="outline" size="sm" onClick={handleResetToRoleDefaults} disabled={savingPermissions}>
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Reset to Role Defaults
+                  
+                  {/* Permission Counts */}
+                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                    <div className="flex gap-6">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-blue-600">{getPermissionCounts().crm}</p>
+                        <p className="text-xs text-slate-500">CRM</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-emerald-600">{getPermissionCounts().finance}</p>
+                        <p className="text-xs text-slate-500">Finance</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-slate-700">{getPermissionCounts().total}</p>
+                        <p className="text-xs text-slate-500">Total</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter Tabs */}
+                <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                  <span className="text-sm text-slate-500 mr-2">Show:</span>
+                  <Button 
+                    variant={permissionFilter === 'all' ? 'default' : 'outline'} 
+                    size="sm"
+                    onClick={() => setPermissionFilter('all')}
+                  >
+                    All Permissions
+                  </Button>
+                  <Button 
+                    variant={permissionFilter === 'crm' ? 'default' : 'outline'} 
+                    size="sm"
+                    onClick={() => setPermissionFilter('crm')}
+                    className={permissionFilter === 'crm' ? 'bg-blue-600' : ''}
+                  >
+                    CRM Only
+                  </Button>
+                  <Button 
+                    variant={permissionFilter === 'finance' ? 'default' : 'outline'} 
+                    size="sm"
+                    onClick={() => setPermissionFilter('finance')}
+                    className={permissionFilter === 'finance' ? 'bg-emerald-600' : ''}
+                  >
+                    Finance Only
                   </Button>
                 </div>
 
                 {/* Permission Groups */}
-                <div className="space-y-6">
-                  {Object.entries(availablePermissions).map(([groupKey, group]) => (
-                    <div key={groupKey} className="border border-slate-200 rounded-lg p-4">
-                      <h4 className="font-semibold text-slate-900 mb-3">{group.name}</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {group.permissions.map((perm) => {
-                          const isChecked = customPermissions 
-                            ? userPermissions.includes(perm.id)
-                            : getEffectivePermissions().includes(perm.id);
-                          
-                          return (
-                            <div key={perm.id} className="flex items-start gap-3 p-2 rounded hover:bg-slate-50">
-                              <Checkbox
-                                id={perm.id}
-                                checked={isChecked}
-                                onCheckedChange={() => handlePermissionToggle(perm.id)}
-                              />
-                              <div className="flex-1">
-                                <Label htmlFor={perm.id} className="text-sm font-medium text-slate-700 cursor-pointer">
-                                  {perm.name}
-                                </Label>
-                                <p className="text-xs text-slate-500">{perm.description}</p>
+                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+                  {getFilteredPermissionGroups().map(([groupKey, group]) => {
+                    const isFinanceGroup = groupKey.startsWith('finance');
+                    const groupPermCount = group.permissions.filter(p => 
+                      customPermissions ? userPermissions.includes(p.id) : getEffectivePermissions().includes(p.id)
+                    ).length;
+                    
+                    return (
+                      <div 
+                        key={groupKey} 
+                        className={cn(
+                          "border rounded-lg p-4",
+                          isFinanceGroup ? "border-emerald-200 bg-emerald-50/30" : "border-slate-200"
+                        )}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className={cn(
+                            "font-semibold flex items-center gap-2",
+                            isFinanceGroup ? "text-emerald-800" : "text-slate-900"
+                          )}>
+                            {isFinanceGroup && <Badge className="bg-emerald-100 text-emerald-700 text-xs">Finance</Badge>}
+                            {group.name}
+                          </h4>
+                          <Badge variant="outline" className="text-xs">
+                            {groupPermCount}/{group.permissions.length}
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {group.permissions.map((perm) => {
+                            const isChecked = customPermissions 
+                              ? userPermissions.includes(perm.id)
+                              : getEffectivePermissions().includes(perm.id);
+                            
+                            return (
+                              <div 
+                                key={perm.id} 
+                                className={cn(
+                                  "flex items-start gap-3 p-2 rounded transition-colors",
+                                  isChecked ? "bg-blue-50/50" : "hover:bg-slate-50"
+                                )}
+                              >
+                                <Checkbox
+                                  id={perm.id}
+                                  checked={isChecked}
+                                  onCheckedChange={() => handlePermissionToggle(perm.id)}
+                                  data-testid={`perm-${perm.id}`}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <Label htmlFor={perm.id} className="text-sm font-medium text-slate-700 cursor-pointer block truncate">
+                                    {perm.name}
+                                  </Label>
+                                  <p className="text-xs text-slate-500 truncate">{perm.description}</p>
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Save Permissions */}
-                <div className="flex justify-end pt-4 border-t border-slate-200">
+                <div className="flex justify-between items-center pt-4 border-t border-slate-200">
+                  <p className="text-sm text-slate-500">
+                    {customPermissions ? '⚡ Custom permissions active' : `📋 Using ${formData.role} defaults`}
+                  </p>
                   <Button onClick={handleSavePermissions} className="bg-blue-600 hover:bg-blue-700" disabled={savingPermissions}>
                     {savingPermissions ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />Save Permissions</>}
                   </Button>
