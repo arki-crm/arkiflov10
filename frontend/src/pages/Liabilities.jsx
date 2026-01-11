@@ -336,12 +336,12 @@ export default function Liabilities() {
                   </div>
                   <div>
                     <Label>Project (Optional)</Label>
-                    <Select value={createForm.project_id} onValueChange={(v) => setCreateForm(prev => ({ ...prev, project_id: v }))}>
+                    <Select value={createForm.project_id || "none"} onValueChange={(v) => setCreateForm(prev => ({ ...prev, project_id: v === "none" ? "" : v }))}>
                       <SelectTrigger className="mt-1">
                         <SelectValue placeholder="No project linked" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">No project</SelectItem>
+                        <SelectItem value="none">No project</SelectItem>
                         {projects.map(p => (
                           <SelectItem key={p.project_id} value={p.project_id}>
                             {p.project_name || p.name}
