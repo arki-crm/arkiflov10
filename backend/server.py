@@ -1684,6 +1684,12 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.categories.view", "finance.categories.manage",
         "finance.vendors.view", "finance.vendors.manage",
         "finance.payment_schedule.view", "finance.payment_schedule.edit", "finance.payment_schedule.override",
+        # Threshold-based approval - FinanceManager gets petty and standard
+        "finance.expenses.approve_petty", "finance.expenses.approve_standard",
+        "finance.expenses.mark_exception",
+        # Budgeting - View and edit but not close
+        "finance.budget.view", "finance.budget.edit",
+        "finance.forecast.view",
         # Controls & Overrides
         "finance.writeoff.approve", "finance.exception.mark", "finance.audit_log.view",
         "finance.import_data", "finance.cancellation.mark",
@@ -1718,6 +1724,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         # Reports - Full read access including profit/margin
         "finance.reports.view", "finance.reports.export", "finance.reports.profit", "finance.reports.margin",
         "finance.monthly_snapshot",
+        # Budgeting & Forecast - View only
+        "finance.budget.view", "finance.forecast.view",
         # Masters - View only
         "finance.categories.view", "finance.vendors.view",
         "finance.payment_schedule.view",
@@ -1746,8 +1754,13 @@ DEFAULT_ROLE_PERMISSIONS = {
         "finance.refunds.view", "finance.refunds.approve",
         # Project Finance - Full view and override
         "finance.project.view", "finance.project.override_budget",
-        # Expense Requests - Approve and override
+        # Expense Requests - Full approval including high-value
         "finance.expenses.view", "finance.expenses.approve",
+        "finance.expenses.approve_petty", "finance.expenses.approve_standard", "finance.expenses.approve_high",
+        "finance.expenses.mark_exception",
+        # Budgeting & Forecasting - Full access
+        "finance.budget.view", "finance.budget.create", "finance.budget.edit", "finance.budget.close",
+        "finance.forecast.view", "finance.forecast.edit_assumptions",
         # Reports - Full visibility
         "finance.reports.view", "finance.reports.export", "finance.reports.profit", "finance.reports.margin",
         "finance.monthly_snapshot", "finance.founder_dashboard",
