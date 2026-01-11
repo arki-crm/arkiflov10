@@ -423,11 +423,13 @@ class TestReportsAndCAMode:
         
         if response.status_code in [200, 201]:
             data = response.json()
-            assert data.get("role") == "CharteredAccountant"
+            # The user data is nested under "user" key
+            user_data = data.get("user", data)
+            assert user_data.get("role") == "CharteredAccountant"
             print(f"✓ CA user invited successfully: {test_email}")
             
             # Cleanup - delete test user
-            user_id = data.get("user_id")
+            user_id = data.get("user_id") or user_data.get("user_id")
             if user_id:
                 self.session.delete(f"{BASE_URL}/api/users/{user_id}")
         else:
