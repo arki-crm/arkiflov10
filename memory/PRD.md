@@ -909,3 +909,150 @@ Safe to Use = Total Received − Net Locked
 - 18/18 backend API tests passed
 - Frontend UI verified with screenshots
 - Test file: `/app/tests/test_advance_cash_lock.py`
+
+---
+
+## ✅ Accounting Clarity Layers - COMPLETED Jan 11, 2026
+
+Lightweight accounting clarity without full double-entry system. All data derived from existing sources.
+
+### Phase A - Explicit Liability Register
+
+**Problem:** Remaining liability was implicit (derived from planned - actual). No explicit tracking.
+
+**Solution:** Dedicated `finance_liabilities` collection with:
+- Auto-creation when Expense Requests are approved
+- Manual creation by Admin (vendor credit, advances, exceptional commitments)
+- Settlement tracking with history
+- Cashbook outflows settle liabilities (never create them)
+
+| Field | Description |
+|-------|-------------|
+| liability_id | Unique identifier (lia_xxxxx) |
+| project_id | Optional - office expenses have no project |
+| vendor_id / vendor_name | Hybrid vendor management |
+| category | raw_material, production, installation, transport, office, salary, marketing, other |
+| amount / amount_settled / amount_remaining | Financial tracking |
+| due_date | Optional due date |
+| source | expense_request, vendor_credit, manual |
+| status | open, partially_settled, closed |
+| settlements[] | Array of settlement records with transaction links |
+
+**New API Endpoints:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/finance/liabilities` | GET | List with filters (status, category, project_id) |
+| `/api/finance/liabilities` | POST | Create manual liability (Admin only) |
+| `/api/finance/liabilities/{id}` | GET | Get single liability |
+| `/api/finance/liabilities/{id}/settle` | POST | Settle liability (partial or full) |
+| `/api/finance/liabilities/summary` | GET | Dashboard summary |
+| `/api/finance/vendors` | GET | List vendors |
+
+**UI:** Finance → Liabilities
+- Summary cards: Total Outstanding, Due This Month, Overdue, Top Vendor
+- Filters by status, category, project
+- Table with Settle buttons
+- Export to CSV
+
+---
+
+### Phase B - Project Profit Visibility
+
+**Problem:** Projects showed "Safe Surplus" but no profit percentage or projected vs realised distinction.
+
+**Solution:** Enhanced Project Finance → Financial Summary Card:
+
+| Metric | Formula | Display |
+|--------|---------|---------|
+| Projected Profit | Contract Value − Planned Cost | ₹ + % |
+| Realised Profit | Cash Received − Actual Cost | ₹ + % |
+| Execution Margin Remaining | Projected − Realised | ₹ (buffer or exceeded) |
+
+**New API Endpoint:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/finance/project-profit/{id}` | GET | Project profit metrics |
+
+**UI:** Added "Profit Visibility" card to ProjectFinanceDetail.jsx
+
+---
+
+### Phase C - Simple P&L Snapshot
+
+**Problem:** No decision snapshot for founder/CA.
+
+**Solution:** Derived P&L from existing data:
+
+**Revenue:**
+- Cash received from projects (inflows + receipts)
+- Other income
+
+**Execution Costs:**
+- **Paid (Cashbook)** - actual money spent on projects
+- **Committed (Liabilities)** - pending payment obligations
+- **Total Execution Exposure** - Paid + Committed
+
+**Operating Expenses:**
+- Salaries, Office, Marketing, Travel, Miscellaneous
+
+**Profit Summary:**
+- Gross Profit = Revenue − Execution Paid
+- Net Operating Profit = Gross − Operating
+
+**Cash vs Accounting Profit:**
+- Cash Profit = actual cash in − cash out
+- Accounting Profit = includes commitments
+- Difference explained by: advances locked %, open liabilities, committed not paid
+
+**New API Endpoint:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/finance/pnl-snapshot` | GET | P&L with period (month, quarter, custom) |
+
+**UI:** Finance → P&L Snapshot
+- Period selector (Month, Quarter, Custom range)
+- Revenue & Costs table
+- Operating Expenses table
+- Cash vs Accounting Profit comparison with explanation
+- Export to CSV
+
+---
+
+### Phase D - Founder Overview Enhancement
+
+**Addition:** Outstanding Liabilities card on Founder Dashboard
+- Total Outstanding (red)
+- Due This Month (amber)
+- Overdue (red if any)
+- Top Vendors list
+- View All → link to Liabilities page
+
+---
+
+### New Database Collections
+| Collection | Purpose |
+|------------|---------|
+| `finance_liabilities` | Explicit liability tracking |
+| `finance_vendors` | Hybrid vendor management (auto-created) |
+
+### New Permissions
+| Permission | Description |
+|------------|-------------|
+| `finance.liabilities.view` | View liability register |
+| `finance.liabilities.create` | Create manual liability entries |
+| `finance.liabilities.settle` | Record settlements |
+| `finance.pnl.view` | View P&L snapshot |
+
+### Files Modified
+- `/app/backend/server.py` - Liability, P&L, Project Profit APIs
+- `/app/frontend/src/pages/Liabilities.jsx` - NEW liability register page
+- `/app/frontend/src/pages/PnLSnapshot.jsx` - NEW P&L snapshot page
+- `/app/frontend/src/pages/ProjectFinanceDetail.jsx` - Profit Visibility section
+- `/app/frontend/src/pages/FounderDashboard.jsx` - Outstanding Liabilities card
+- `/app/frontend/src/App.js` - New routes
+- `/app/frontend/src/components/layout/Sidebar.jsx` - New nav links
+
+### Testing
+- 25/25 backend API tests passed
+- Frontend UI verified with screenshots
+- Test file: `/app/tests/test_accounting_clarity_layers.py`
