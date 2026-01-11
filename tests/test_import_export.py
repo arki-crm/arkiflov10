@@ -334,18 +334,22 @@ TEST_Missing Phone,Website
     def test_import_preview_invalid_file_type_returns_400(self):
         """POST /api/admin/import/preview - Invalid file type should return 400"""
         files = {
-            'file': ('test.txt', 'invalid content', 'text/plain')
+            'file': ('test.txt', BytesIO(b'invalid content'), 'text/plain')
         }
         
-        headers = dict(self.session.headers)
-        if 'Content-Type' in headers:
-            del headers['Content-Type']
-        
-        response = self.session.post(
-            f"{BASE_URL}/api/admin/import/preview?data_type=leads&duplicate_strategy=skip",
-            files=files,
-            headers=headers
+        # Use a fresh session for file upload
+        upload_session = requests.Session()
+        login_resp = upload_session.post(
+            f"{BASE_URL}/api/auth/local-login",
+            json={"email": TEST_EMAIL, "password": TEST_PASSWORD}
         )
+        assert login_resp.status_code == 200, "Login failed"
+        
+        response = upload_session.post(
+            f"{BASE_URL}/api/admin/import/preview?data_type=leads&duplicate_strategy=skip",
+            files=files
+        )
+        upload_session.close()
         
         assert response.status_code == 400, f"Expected 400, got {response.status_code}"
     
