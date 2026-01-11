@@ -132,7 +132,7 @@ const ProjectFinanceDetail = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [financeRes, decisionsRes, intelligenceRes, attrRes, overrunRes, receiptsRes, scheduleRes, lockRes] = await Promise.all([
+      const [financeRes, decisionsRes, intelligenceRes, attrRes, overrunRes, receiptsRes, scheduleRes, lockRes, profitRes] = await Promise.all([
         axios.get(`${API}/finance/project-finance/${projectId}`, { withCredentials: true }),
         axios.get(`${API}/finance/projects/${projectId}/decisions`, { withCredentials: true }).catch(() => ({ data: {} })),
         axios.get(`${API}/finance/cost-intelligence/${projectId}`, { withCredentials: true }).catch(() => ({ data: null })),
@@ -140,7 +140,8 @@ const ProjectFinanceDetail = () => {
         axios.get(`${API}/finance/overrun-reasons`, { withCredentials: true }).catch(() => ({ data: { reasons: [], responsible_categories: [] } })),
         axios.get(`${API}/finance/receipts?project_id=${projectId}`, { withCredentials: true }).catch(() => ({ data: [] })),
         axios.get(`${API}/finance/payment-schedule/${projectId}`, { withCredentials: true }).catch(() => ({ data: null })),
-        axios.get(`${API}/finance/project-lock-status/${projectId}`, { withCredentials: true }).catch(() => ({ data: null }))
+        axios.get(`${API}/finance/project-lock-status/${projectId}`, { withCredentials: true }).catch(() => ({ data: null })),
+        axios.get(`${API}/finance/project-profit/${projectId}`, { withCredentials: true }).catch(() => ({ data: null }))
       ]);
       setData(financeRes.data);
       setDecisions(decisionsRes.data);
@@ -150,6 +151,7 @@ const ProjectFinanceDetail = () => {
       setProjectReceipts(receiptsRes.data || []);
       setPaymentSchedule(scheduleRes.data);
       setLockStatus(lockRes.data);
+      setProjectProfit(profitRes.data);
     } catch (error) {
       console.error('Failed to fetch project finance:', error);
       if (error.response?.status === 404) {
