@@ -500,12 +500,27 @@ const UserEdit = () => {
                         <SelectValue placeholder="Select role" />
                       </SelectTrigger>
                       <SelectContent>
-                        {getAvailableRoles().map(role => (
-                          <SelectItem key={role} value={role}>{role}</SelectItem>
-                        ))}
+                        {/* Group roles by category */}
+                        {['Administration', 'Sales', 'Design', 'Operations', 'Service', 'Finance', 'Leadership'].map(category => {
+                          const categoryRoles = availableRoles.filter(r => r.category === category && getAvailableRoles().includes(r.id));
+                          if (categoryRoles.length === 0) return null;
+                          return (
+                            <div key={category}>
+                              <div className="px-2 py-1.5 text-xs font-semibold text-slate-500 bg-slate-50">{category}</div>
+                              {categoryRoles.map(role => (
+                                <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
+                              ))}
+                            </div>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
+                  {formData.role && availableRoles.length > 0 && (
+                    <p className="text-xs text-slate-500">
+                      {availableRoles.find(r => r.id === formData.role)?.description}
+                    </p>
+                  )}
                 </div>
 
                 {/* Status */}
