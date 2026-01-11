@@ -14048,9 +14048,23 @@ async def create_transaction(txn: TransactionCreate, request: Request):
     if not account:
         raise HTTPException(status_code=400, detail="Invalid account")
     
-    category = await db.accounting_categories.find_one({"category_id": txn.category_id})
-    if not category:
-        raise HTTPException(status_code=400, detail="Invalid category")
+    # Static income categories for inflow transactions
+    INCOME_CATEGORIES = [
+        'income_project_payment',
+        'income_advance_booking', 
+        'income_design_fee',
+        'income_refund_reversal',
+        'income_other'
+    ]
+    
+    # For inflows, accept static income categories OR database categories
+    # For outflows, only accept database categories (expense categories)
+    if txn.transaction_type == "inflow" and txn.category_id in INCOME_CATEGORIES:
+        category = {"category_id": txn.category_id, "name": txn.category_id.replace('income_', '').replace('_', ' ').title()}
+    else:
+        category = await db.accounting_categories.find_one({"category_id": txn.category_id})
+        if not category:
+            raise HTTPException(status_code=400, detail="Invalid category")
     
     if txn.project_id:
         project = await db.projects.find_one({"project_id": txn.project_id})
