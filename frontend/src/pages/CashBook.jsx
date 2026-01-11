@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Badge } from '../components/ui/badge';
 import { 
   Select,
   SelectContent,
@@ -32,7 +33,12 @@ import {
   Wallet,
   Building2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  AlertTriangle,
+  Eye,
+  UserCheck,
+  FileCheck,
+  Filter
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
@@ -45,6 +51,13 @@ const TRANSACTION_MODES = [
   { value: 'upi', label: 'UPI' },
   { value: 'cheque', label: 'Cheque' }
 ];
+
+// Amount thresholds for guardrails
+const THRESHOLDS = {
+  petty_cash_max: 1000,      // ₹0-1000: Direct entry
+  review_threshold: 5000,    // ₹1001-5000: Needs review
+  approval_required: 5001    // ₹5001+: Needs approver or expense request
+};
 
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IN', {
@@ -74,11 +87,15 @@ const CashBook = () => {
   const [accounts, setAccounts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [approvers, setApprovers] = useState([]);
+  const [approvedExpenseRequests, setApprovedExpenseRequests] = useState([]);
   const [dailySummary, setDailySummary] = useState(null);
+  const [reviewSummary, setReviewSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isCloseDayDialogOpen, setIsCloseDayDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showNeedsReviewOnly, setShowNeedsReviewOnly] = useState(false);
   
   // New transaction form
   const [newTxn, setNewTxn] = useState({
@@ -89,7 +106,13 @@ const CashBook = () => {
     account_id: '',
     project_id: '',
     paid_to: '',
-    remarks: ''
+    remarks: '',
+    // New accountability fields
+    requested_by: '',
+    requested_by_name: '',
+    approved_by: '',
+    approved_by_name: '',
+    expense_request_id: ''
   });
 
   // Fetch data
