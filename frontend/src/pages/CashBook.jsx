@@ -290,6 +290,14 @@ const CashBook = () => {
   const canAddTransaction = hasPermission('finance.add_transaction');
   const canCloseDay = hasPermission('finance.close_day');
   const isDayLocked = dailySummary?.is_locked;
+  const isAdminOrCEO = user?.role === 'Admin' || user?.role === 'CEO' || user?.role === 'Founder' || hasPermission('finance.founder_dashboard');
+
+  // Get amount category for display
+  const getAmountCategory = (amount) => {
+    if (amount <= THRESHOLDS.petty_cash_max) return { label: 'Petty Cash', color: 'bg-green-100 text-green-800' };
+    if (amount <= THRESHOLDS.review_threshold) return { label: 'Review Flagged', color: 'bg-amber-100 text-amber-800' };
+    return { label: 'Approval Required', color: 'bg-red-100 text-red-800' };
+  };
 
   if (loading) {
     return (
@@ -311,6 +319,20 @@ const CashBook = () => {
         </div>
         
         <div className="flex items-center gap-3">
+          {/* Needs Review Badge - Visible to Admin/CEO */}
+          {isAdminOrCEO && reviewSummary?.needs_review_count > 0 && (
+            <Button
+              variant={showNeedsReviewOnly ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowNeedsReviewOnly(!showNeedsReviewOnly)}
+              className="gap-2"
+              data-testid="needs-review-filter"
+            >
+              <Eye className="w-4 h-4" />
+              Needs Review ({reviewSummary.needs_review_count})
+            </Button>
+          )}
+          
           {/* Date Navigation */}
           <div className="flex items-center gap-2 bg-white rounded-lg border border-slate-200 p-1">
             <Button variant="ghost" size="icon" onClick={() => changeDate(-1)} data-testid="prev-date-btn">
