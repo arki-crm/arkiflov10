@@ -852,10 +852,6 @@ const CashBook = () => {
                           )}
                         </td>
                       )}
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
-                      </td>
                     </tr>
                   ))}
                 </tbody>
