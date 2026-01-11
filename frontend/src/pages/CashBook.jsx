@@ -39,7 +39,11 @@ import {
   UserCheck,
   FileCheck,
   Filter,
-  Paperclip
+  Paperclip,
+  Upload,
+  X,
+  FileText,
+  Image
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
