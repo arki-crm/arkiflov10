@@ -1451,7 +1451,11 @@ AVAILABLE_PERMISSIONS = {
             {"id": "finance.cancellation.mark", "name": "Mark Cancellation", "description": "Cancel projects and handle forfeitures"},
             {"id": "finance.lock_config", "name": "Configure Lock Settings", "description": "Update global lock percentage and operating expense - Admin/Founder only"},
             {"id": "finance.lock_override", "name": "Override Project Lock", "description": "Override lock percentage for individual projects - Admin/Founder only"},
-            {"id": "finance.view_lock_status", "name": "View Lock Status", "description": "View locked vs usable amounts for projects"}
+            {"id": "finance.view_lock_status", "name": "View Lock Status", "description": "View locked vs usable amounts for projects"},
+            {"id": "finance.liabilities.view", "name": "View Liabilities", "description": "View liability register"},
+            {"id": "finance.liabilities.create", "name": "Create Liabilities", "description": "Create manual liability entries - Admin/Founder only"},
+            {"id": "finance.liabilities.settle", "name": "Settle Liabilities", "description": "Record settlements against liabilities"},
+            {"id": "finance.pnl.view", "name": "View P&L Snapshot", "description": "View profit and loss snapshot"}
         ]
     },
     
