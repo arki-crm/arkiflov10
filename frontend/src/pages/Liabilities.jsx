@@ -559,17 +559,27 @@ export default function Liabilities() {
                           )}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          {liability.status !== 'closed' && (
+                          <div className="flex items-center justify-center gap-1">
                             <Button
-                              variant="outline"
+                              variant="ghost"
                               size="sm"
-                              onClick={() => openSettleDialog(liability)}
-                              data-testid={`settle-btn-${liability.liability_id}`}
+                              onClick={() => setViewLiability(liability)}
+                              title="View details & attachments"
                             >
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Settle
+                              <Eye className="w-4 h-4" />
                             </Button>
-                          )}
+                            {liability.status !== 'closed' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openSettleDialog(liability)}
+                                data-testid={`settle-btn-${liability.liability_id}`}
+                              >
+                                <CheckCircle className="w-3 h-3 mr-1" />
+                                Settle
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))
