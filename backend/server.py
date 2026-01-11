@@ -14255,6 +14255,139 @@ async def verify_transaction(transaction_id: str, request: Request):
     return updated
 
 
+@api_router.get("/accounting/transactions/needs-review")
+async def get_transactions_needing_review(request: Request):
+    """Get all transactions flagged for review (Admin/CEO only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only Admin, CEO, or users with founder_dashboard can see review list
+    if not has_permission(user_doc, "finance.founder_dashboard") and user_doc.get("role") not in ["Admin", "CEO", "Founder"]:
+        raise HTTPException(status_code=403, detail="Access denied - Admin/CEO only")
+    
+    transactions = await db.accounting_transactions.find(
+        {"needs_review": True},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(500)
+    
+    # Enrich with category names
+    for txn in transactions:
+        cat = await db.accounting_categories.find_one({"category_id": txn.get("category_id")})
+        if cat:
+            txn["category_name"] = cat.get("name", "Unknown")
+    
+    return transactions
+
+
+@api_router.put("/accounting/transactions/{transaction_id}/mark-reviewed")
+async def mark_transaction_reviewed(transaction_id: str, request: Request):
+    """Mark a transaction as reviewed (Admin/CEO only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.founder_dashboard") and user_doc.get("role") not in ["Admin", "CEO", "Founder"]:
+        raise HTTPException(status_code=403, detail="Access denied - Admin/CEO only")
+    
+    existing = await db.accounting_transactions.find_one({"transaction_id": transaction_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.accounting_transactions.update_one(
+        {"transaction_id": transaction_id},
+        {"$set": {
+            "needs_review": False,
+            "reviewed_by": user.user_id,
+            "reviewed_by_name": user.name,
+            "reviewed_at": now.isoformat(),
+            "approval_status": "reviewed"
+        }}
+    )
+    
+    updated = await db.accounting_transactions.find_one({"transaction_id": transaction_id}, {"_id": 0})
+    return updated
+
+
+@api_router.get("/accounting/transactions/review-summary")
+async def get_review_summary(request: Request):
+    """Get summary of transactions needing review"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_cashbook"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Count needs_review transactions
+    needs_review_count = await db.accounting_transactions.count_documents({"needs_review": True})
+    
+    # Get total amount needing review
+    needs_review_txns = await db.accounting_transactions.find(
+        {"needs_review": True},
+        {"_id": 0, "amount": 1}
+    ).to_list(1000)
+    total_amount = sum(t.get("amount", 0) for t in needs_review_txns)
+    
+    # Count pending approval (high value without approver)
+    pending_approval_count = await db.accounting_transactions.count_documents({
+        "approval_status": "pending_approval"
+    })
+    
+    return {
+        "needs_review_count": needs_review_count,
+        "needs_review_amount": total_amount,
+        "pending_approval_count": pending_approval_count
+    }
+
+
+@api_router.get("/accounting/users-for-approval")
+async def get_users_for_approval(request: Request):
+    """Get list of users who can approve expenses (Admin, CEO, Finance Manager)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.add_transaction"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get users with approval permissions
+    approvers = await db.users.find(
+        {"status": "Active"},
+        {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1}
+    ).to_list(500)
+    
+    # Filter to only users with high-value approval permission or admin/CEO roles
+    eligible_approvers = []
+    for approver in approvers:
+        approver_doc = await db.users.find_one({"user_id": approver["user_id"]})
+        if approver_doc:
+            permissions = approver_doc.get("permissions", [])
+            role = approver_doc.get("role", "")
+            if role in ["Admin", "CEO", "Founder", "FinanceManager"] or \
+               "finance.expenses.approve_high" in permissions or \
+               "finance.founder_dashboard" in permissions:
+                eligible_approvers.append(approver)
+    
+    return eligible_approvers
+
+
+@api_router.get("/accounting/approved-expense-requests")
+async def get_approved_expense_requests(request: Request):
+    """Get list of approved expense requests that can be linked to cashbook entries"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.add_transaction"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get approved expense requests that haven't been recorded yet
+    approved_requests = await db.finance_expense_requests.find(
+        {"status": "approved"},
+        {"_id": 0, "request_id": 1, "title": 1, "amount": 1, "requested_by_name": 1, "approved_by_name": 1}
+    ).sort("created_at", -1).to_list(100)
+    
+    return approved_requests
+
+
 # ============ ACCOUNTING: DAILY CLOSING ============
 
 @api_router.get("/accounting/daily-summary/{date}")
