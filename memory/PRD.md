@@ -502,6 +502,44 @@ A comprehensive expense authorization system ensuring every financial transactio
 
 ---
 
+## ✅ Accounting Roles & Permission System - COMPLETED Jan 2026
+
+A comprehensive, admin-controlled permission system for finance operations with role templates.
+
+### New Finance Roles (Templates Only):
+| Role | Description | Key Capabilities |
+|------|-------------|------------------|
+| **JuniorAccountant** | Basic data entry | View & create cashbook, NO delete/edit |
+| **SeniorAccountant** | Full cashbook ops | Edit, verify, lock daily closing, invoices |
+| **FinanceManager** | Full finance control | All approvals, budget overrides, write-offs |
+| **CharteredAccountant** | Read-only audit | Reports, export, NO operational edits |
+| **Founder** | Full visibility | Final overrides, not required for daily tasks |
+
+### Granular Permission Groups:
+| Group | Key Permissions |
+|-------|-----------------|
+| `finance_cashbook` | view, create, edit, delete, verify, daily_closing.lock, transaction.reverse |
+| `finance_accounts` | view, create, edit, opening_balance |
+| `finance_documents` | receipts.view/create/download, invoices.view/create/cancel, refunds.view/create/approve |
+| `finance_project` | view, allocate_funds, vendor_mapping, cost_edit, override_budget |
+| `finance_expenses` | view, create, approve, record, track_refunds |
+| `finance_reports` | view, export, profit, margin, monthly_snapshot, founder_dashboard |
+| `finance_masters` | categories.view/manage, vendors.view/manage, payment_schedule.view/edit/override |
+| `finance_controls` | writeoff.approve, exception.mark, audit_log.view, import_data, cancellation.mark |
+
+### API Endpoints:
+- `GET /api/roles/available` - List all roles with categories
+- `GET /api/roles/{role_id}/default-permissions` - Get role default permissions
+- `GET /api/permissions/available` - Get all permission groups (Admin only)
+
+### Key Principles:
+- **NO hard-coded authority** - Roles are templates only
+- **Admin full control** - Can modify any user's permissions freely
+- **CRM untouched** - Finance permissions are completely separate
+- **Backward compatibility** - Legacy finance permissions kept
+
+---
+
 ### P3 - Future Features (Accounting Phase 2)
 - [x] **Account Master** - ✅ COMPLETED (Jan 2026)
 - [x] **Expense Category Master** - ✅ COMPLETED (Jan 2026)
