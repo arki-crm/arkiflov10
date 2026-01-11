@@ -113,6 +113,7 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
         { path: '/production-ops', label: 'Production/Ops', icon: Truck },
         { path: '/ceo-dashboard', label: 'CEO View', icon: Crown },
         { path: '/reports', label: 'Reports', icon: BarChart3 },
+        { path: '/admin/import-export', label: 'Import / Export', icon: FileUp },
         { path: '/users', label: 'Users', icon: UserCog },
         { path: '/settings', label: 'Settings', icon: Settings },
         { path: '/settings/company-profile', label: 'Company Profile', icon: Building2 }
