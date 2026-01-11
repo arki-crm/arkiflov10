@@ -63,6 +63,7 @@ import CompanyProfile from './pages/CompanyProfile';
 import ExpenseRequests from './pages/ExpenseRequests';
 import Budgets from './pages/Budgets';
 import FinancialForecast from './pages/FinancialForecast';
+import Salaries from './pages/Salaries';
 
 import './App.css';
 
@@ -138,6 +139,7 @@ const AppRouter = () => {
         <Route path="/finance/expense-requests" element={<ExpenseRequests />} />
         <Route path="/finance/budgets" element={<Budgets />} />
         <Route path="/finance/forecast" element={<FinancialForecast />} />
+        <Route path="/finance/salaries" element={<Salaries />} />
         <Route path="/finance/project-finance" element={<ProjectFinance />} />
         <Route path="/finance/project-finance/:projectId" element={<ProjectFinanceDetail />} />
         <Route path="/finance/daily-closing" element={<DailyClosing />} />
