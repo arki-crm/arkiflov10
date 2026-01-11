@@ -621,7 +621,7 @@ const CashBook = () => {
                   )}
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="flex-shrink-0 border-t pt-4 mt-2">
                   <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
                   <Button onClick={handleAddTransaction} disabled={submitting} data-testid="save-transaction-btn">
                     {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
