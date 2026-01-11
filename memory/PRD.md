@@ -622,6 +622,10 @@ A lightweight salary management module focused on financial discipline, not HR.
 - [x] **Exit Processing** - Final settlement with prorated salary calculation
 - [x] **Risk Assessment** - Safe/Tight/Critical cash status for salary obligations
 - [x] **12-Month History** - Payment history per employee
+- [x] **Salary Ladder Configuration** - Admin-editable salary level definitions (Trainee → Level 4 Cap)
+- [x] **Edit/Promote Salary** - Manual salary changes with history tracking and reason (promotion/adjustment/correction)
+- [x] **Salary Change History** - Audit trail of all salary changes with who, when, why
+- [x] **Promotion Eligibility Flagging** - Non-automated, visibility-only eligibility status based on booking credits
 
 ### New Permissions:
 | Permission | Description |
@@ -632,6 +636,11 @@ A lightweight salary management module focused on financial discipline, not HR.
 | `finance.salaries.pay` | Record salary payments |
 | `finance.salaries.close_month` | Close monthly salary cycles |
 | `finance.salaries.manage_exit` | Process employee exits |
+| `finance.salaries.manage_ladder` | Configure salary ladder levels |
+| `finance.salaries.promote` | Promote/adjust employee salary |
+| `hr.promotion.view` | View own eligibility status |
+| `hr.promotion.view_all` | View all employee eligibility |
+| `hr.promotion.manage` | Update eligibility thresholds |
 
 ### New API Endpoints:
 - `GET /api/finance/salaries` - List salary configurations
@@ -639,6 +648,8 @@ A lightweight salary management module focused on financial discipline, not HR.
 - `GET /api/finance/salaries/{employee_id}` - Get salary detail
 - `PUT /api/finance/salaries/{employee_id}` - Update salary
 - `GET /api/finance/salaries/{employee_id}/history` - Get 12-month payment history
+- `POST /api/finance/salaries/{employee_id}/promote` - Change salary with history tracking
+- `GET /api/finance/salaries/{employee_id}/salary-history` - Get salary change audit trail
 - `POST /api/finance/salary-payments` - Record payment (advance/salary/final)
 - `GET /api/finance/salary-summary` - Dashboard summary with risk status
 - `GET /api/finance/salary-cycles` - Get salary cycles for a month
@@ -646,14 +657,31 @@ A lightweight salary management module focused on financial discipline, not HR.
 - `POST /api/finance/salaries/{employee_id}/exit` - Process exit
 - `POST /api/finance/salaries/{employee_id}/close-settlement` - Close final settlement
 - `GET /api/finance/employees-for-salary` - Employees without salary setup
+- `GET /api/finance/salary-ladder` - Get salary ladder configuration
+- `PUT /api/finance/salary-ladder` - Update salary ladder configuration
+- `GET /api/hr/promotion-config` - Get promotion eligibility thresholds
+- `PUT /api/hr/promotion-config` - Update promotion thresholds
+- `GET /api/hr/promotion-eligibility` - Get all employee eligibility
+- `GET /api/hr/promotion-eligibility/overview` - CEO dashboard summary
+- `GET /api/hr/promotion-eligibility/{employee_id}` - Get specific employee eligibility
 
 ### New Pages:
-- `/finance/salaries` - Salary Management page
+- `/finance/salaries` - Salary Management page (with Salary Ladder config modal)
 
 ### Key Data Models:
-- **`finance_salary_master`**: salary_id, employee_id, monthly_salary, payment_type, status (active/on_hold/exit), exit_date, final_settlement_*
+- **`finance_salary_master`**: salary_id, employee_id, monthly_salary, salary_level, payment_type, status, exit_date, last_salary_change_date, last_salary_change_reason
 - **`finance_salary_cycles`**: cycle_id, employee_id, month_year, total_advances, total_salary_paid, balance_payable, carry_forward_recovery, status
 - **`finance_salary_payments`**: payment_id, employee_id, amount, payment_type (advance/salary/final_settlement), account_id, transaction_id
+- **`finance_salary_ladder`**: config_id, levels[] (level, name, min_salary, max_salary, order)
+- **`finance_salary_history`**: history_id, employee_id, previous_salary, new_salary, previous_level, new_level, effective_date, reason, notes, changed_by
+- **`hr_promotion_config`**: config_id, credits_required, months_required, stagnant_months
+
+### Promotion Eligibility Logic (Non-Automated):
+- **Credits Required**: 3 booking credits (projects sent to production)
+- **Months Required**: 3 unique months with bookings
+- **Stagnant**: 6+ months at same level with 0 bookings
+- **Status**: eligible / near_eligible / stagnant / in_progress
+- **Action**: System flags only - Admin manually promotes via "Edit Salary / Promote"
 
 ### Risk Status Calculation:
 - **Safe**: Cash ≥ 2x salary obligations
