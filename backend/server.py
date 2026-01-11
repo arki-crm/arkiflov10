@@ -13970,7 +13970,8 @@ async def list_transactions(
     category_id: Optional[str] = None,
     project_id: Optional[str] = None,
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
+    needs_review: Optional[bool] = None
 ):
     """List transactions (Cash Book view)"""
     user = await get_current_user(request)
