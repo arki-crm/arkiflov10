@@ -844,6 +844,148 @@ const ProjectFinanceDetail = () => {
         </CardContent>
       </Card>
 
+      {/* Advance Cash Lock Status */}
+      {lockStatus && lockStatus.total_received > 0 && (
+        <Card className="border-slate-200 border-amber-200 bg-amber-50/50" data-testid="lock-status-section">
+          <CardHeader className="border-b border-amber-200 pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <Lock className="w-5 h-5 text-amber-600" />
+                Advance Cash Lock
+                {lockStatus.is_overridden && (
+                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-300">
+                    Custom {lockStatus.effective_lock_percentage}%
+                  </Badge>
+                )}
+              </CardTitle>
+              {isAdmin && (
+                <Dialog open={isLockOverrideOpen} onOpenChange={setIsLockOverrideOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="text-xs">
+                      <Pencil className="w-3 h-3 mr-1" />
+                      Override Lock %
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[400px]">
+                    <DialogHeader>
+                      <DialogTitle>Override Lock Percentage</DialogTitle>
+                      <DialogDescription>
+                        Change the lock percentage for this project. Current default is {lockStatus.default_lock_percentage}%.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div>
+                        <Label htmlFor="lock_pct">Lock Percentage (%)</Label>
+                        <Input
+                          id="lock_pct"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={lockOverrideForm.lock_percentage}
+                          onChange={(e) => setLockOverrideForm(prev => ({ ...prev, lock_percentage: e.target.value }))}
+                          placeholder={String(lockStatus.effective_lock_percentage)}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="lock_reason">Reason (Required)</Label>
+                        <Textarea
+                          id="lock_reason"
+                          value={lockOverrideForm.reason}
+                          onChange={(e) => setLockOverrideForm(prev => ({ ...prev, reason: e.target.value }))}
+                          placeholder="Why is this project getting a different lock %?"
+                          className="mt-1"
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter className="gap-2">
+                      {lockStatus.is_overridden && (
+                        <Button variant="outline" onClick={handleRemoveLockOverride} className="text-red-600">
+                          Reset to Default
+                        </Button>
+                      )}
+                      <Button onClick={handleLockOverride} disabled={submitting}>
+                        {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        Save Override
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
+            <p className="text-sm text-slate-500 mt-1">
+              {lockStatus.effective_lock_percentage}% of advances locked for execution
+              {lockStatus.is_overridden && (
+                <span className="text-blue-600 ml-1">• {lockStatus.override_reason}</span>
+              )}
+            </p>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Total Received */}
+              <div className="bg-white rounded-lg p-3 border border-slate-200">
+                <div className="flex items-center gap-2 mb-1">
+                  <DollarSign className="w-4 h-4 text-blue-500" />
+                  <p className="text-xs text-slate-500">Total Received</p>
+                </div>
+                <p className="text-lg font-bold text-slate-900">{formatCurrency(lockStatus.total_received)}</p>
+                <p className="text-xs text-slate-400">{lockStatus.receipt_count} receipts</p>
+              </div>
+              
+              {/* Locked Amount */}
+              <div className="bg-amber-100/50 rounded-lg p-3 border border-amber-200">
+                <div className="flex items-center gap-2 mb-1">
+                  <Lock className="w-4 h-4 text-amber-600" />
+                  <p className="text-xs text-amber-700">Locked</p>
+                </div>
+                <p className="text-lg font-bold text-amber-700">{formatCurrency(lockStatus.net_locked)}</p>
+                <p className="text-xs text-amber-600">Reserved for execution</p>
+              </div>
+              
+              {/* Commitments */}
+              <div className="bg-white rounded-lg p-3 border border-slate-200">
+                <div className="flex items-center gap-2 mb-1">
+                  <TrendingDown className="w-4 h-4 text-orange-500" />
+                  <p className="text-xs text-slate-500">Commitments</p>
+                </div>
+                <p className="text-lg font-bold text-orange-600">{formatCurrency(lockStatus.total_commitments)}</p>
+                <p className="text-xs text-slate-400">
+                  {lockStatus.outflow_count} outflows + {lockStatus.expense_request_count} ERs
+                </p>
+              </div>
+              
+              {/* Safe to Use */}
+              <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200">
+                <div className="flex items-center gap-2 mb-1">
+                  <Unlock className="w-4 h-4 text-emerald-600" />
+                  <p className="text-xs text-emerald-700">Safe to Use</p>
+                </div>
+                <p className="text-lg font-bold text-emerald-700">{formatCurrency(lockStatus.safe_to_use)}</p>
+                <p className="text-xs text-emerald-600">Available for operations</p>
+              </div>
+            </div>
+
+            {/* Lock History */}
+            {lockStatus.lock_history?.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-200">
+                <p className="text-sm font-medium text-slate-700 mb-2">Lock Change History</p>
+                <div className="space-y-2">
+                  {lockStatus.lock_history.slice(0, 3).map((h) => (
+                    <div key={h.history_id} className="text-xs text-slate-500 flex justify-between">
+                      <span>
+                        {h.previous_percentage}% → {h.new_percentage}% by {h.changed_by_name}
+                      </span>
+                      <span>{formatDate(h.changed_at)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Payment Schedule Section */}
       {paymentSchedule && (
         <Card className="border-slate-200" data-testid="payment-schedule-section">
