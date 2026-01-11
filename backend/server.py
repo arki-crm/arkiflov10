@@ -22393,6 +22393,800 @@ async def get_employee_promotion_eligibility(employee_id: str, request: Request)
     return eligibility
 
 
+# ============ BUCKET 1: OPERATIONAL HYGIENE ============
+
+# ============ 1. AUDIT TRAIL ENHANCEMENT ============
+
+AUDIT_ENTITY_TYPES = ["cashbook", "receipt", "liability", "project_finance"]
+AUDIT_ACTION_TYPES = ["create", "edit", "delete", "verify", "review", "settle", "download", "lock_override", "freeze", "allow_overrun"]
+
+class AuditLogEntry(BaseModel):
+    entity_type: str
+    entity_id: str
+    action: str
+    old_value: Optional[dict] = None
+    new_value: Optional[dict] = None
+    details: Optional[str] = None
+
+
+async def create_audit_log(
+    entity_type: str,
+    entity_id: str,
+    action: str,
+    user_id: str,
+    user_name: str,
+    old_value: dict = None,
+    new_value: dict = None,
+    details: str = None
+):
+    """Create an audit log entry for finance actions"""
+    audit_entry = {
+        "audit_id": f"aud_{uuid.uuid4().hex[:12]}",
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "action": action,
+        "old_value": old_value,
+        "new_value": new_value,
+        "details": details,
+        "user_id": user_id,
+        "user_name": user_name,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "ip_address": None  # Can be added from request if needed
+    }
+    await db.finance_audit_log.insert_one(audit_entry)
+    return audit_entry
+
+
+@api_router.get("/finance/audit-log")
+async def get_audit_log(
+    request: Request,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    action: Optional[str] = None,
+    user_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 100,
+    skip: int = 0
+):
+    """Get audit log entries (Admin/Founder only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Only Admin and Founder can view audit log
+    if user_doc.get("role") not in ["Admin", "Founder"]:
+        raise HTTPException(status_code=403, detail="Only Admin and Founder can view audit log")
+    
+    # Build query
+    query = {}
+    if entity_type:
+        query["entity_type"] = entity_type
+    if entity_id:
+        query["entity_id"] = entity_id
+    if action:
+        query["action"] = action
+    if user_id:
+        query["user_id"] = user_id
+    if date_from or date_to:
+        date_query = {}
+        if date_from:
+            date_query["$gte"] = date_from
+        if date_to:
+            date_query["$lte"] = date_to + "T23:59:59"
+        query["timestamp"] = date_query
+    
+    # Get total count
+    total = await db.finance_audit_log.count_documents(query)
+    
+    # Get entries
+    entries = await db.finance_audit_log.find(
+        query,
+        {"_id": 0}
+    ).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
+    
+    return {
+        "entries": entries,
+        "total": total,
+        "limit": limit,
+        "skip": skip
+    }
+
+
+@api_router.get("/finance/audit-log/entity/{entity_type}/{entity_id}")
+async def get_entity_audit_history(entity_type: str, entity_id: str, request: Request):
+    """Get audit history for a specific entity"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder", "SeniorAccountant"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    entries = await db.finance_audit_log.find(
+        {"entity_type": entity_type, "entity_id": entity_id},
+        {"_id": 0}
+    ).sort("timestamp", -1).to_list(100)
+    
+    return {"entries": entries, "count": len(entries)}
+
+
+# ============ 2. SCHEDULED BACKUPS ============
+
+import subprocess
+import gzip
+import shutil
+
+BACKUP_DIR = ROOT_DIR / "backups"
+BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
+# Collections to backup
+BACKUP_COLLECTIONS = [
+    "finance_audit_log",
+    "finance_attachments",
+    "finance_liabilities",
+    "finance_receipts",
+    "finance_salary_master",
+    "finance_salary_payments",
+    "finance_lock_config",
+    "finance_vendors",
+    "accounting_transactions",
+    "accounting_accounts",
+    "accounting_categories",
+    "projects",
+    "leads",
+    "users",
+    "presales",
+    "import_audit_log",
+    "recurring_templates",
+    "payment_reminders"
+]
+
+
+@api_router.post("/admin/backup/create")
+async def create_backup(request: Request):
+    """Create a manual database backup (Admin only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can create backups")
+    
+    try:
+        backup_id = f"backup_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        backup_path = BACKUP_DIR / backup_id
+        backup_path.mkdir(parents=True, exist_ok=True)
+        
+        backup_data = {
+            "backup_id": backup_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_by": user.user_id,
+            "created_by_name": user.name,
+            "collections": {},
+            "status": "in_progress"
+        }
+        
+        # Export each collection to JSON
+        for collection_name in BACKUP_COLLECTIONS:
+            try:
+                collection = db[collection_name]
+                docs = await collection.find({}, {"_id": 0}).to_list(100000)
+                
+                # Save to file
+                file_path = backup_path / f"{collection_name}.json"
+                async with aiofiles.open(file_path, 'w') as f:
+                    await f.write(json.dumps(docs, default=str, indent=2))
+                
+                backup_data["collections"][collection_name] = {
+                    "count": len(docs),
+                    "file": f"{collection_name}.json"
+                }
+            except Exception as e:
+                backup_data["collections"][collection_name] = {
+                    "error": str(e)
+                }
+        
+        backup_data["status"] = "completed"
+        backup_data["completed_at"] = datetime.now(timezone.utc).isoformat()
+        
+        # Save backup metadata
+        meta_path = backup_path / "backup_meta.json"
+        async with aiofiles.open(meta_path, 'w') as f:
+            await f.write(json.dumps(backup_data, indent=2))
+        
+        # Create audit log
+        await create_audit_log(
+            entity_type="system",
+            entity_id=backup_id,
+            action="backup_created",
+            user_id=user.user_id,
+            user_name=user.name,
+            details=f"Manual backup created with {len(backup_data['collections'])} collections"
+        )
+        
+        return {
+            "success": True,
+            "backup_id": backup_id,
+            "collections_backed_up": len(backup_data["collections"]),
+            "path": str(backup_path)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Backup failed: {str(e)}")
+
+
+@api_router.get("/admin/backup/list")
+async def list_backups(request: Request):
+    """List available backups (Admin only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can view backups")
+    
+    backups = []
+    if BACKUP_DIR.exists():
+        for backup_folder in sorted(BACKUP_DIR.iterdir(), reverse=True):
+            if backup_folder.is_dir() and backup_folder.name.startswith("backup_"):
+                meta_path = backup_folder / "backup_meta.json"
+                if meta_path.exists():
+                    async with aiofiles.open(meta_path, 'r') as f:
+                        meta = json.loads(await f.read())
+                        backups.append({
+                            "backup_id": meta.get("backup_id"),
+                            "created_at": meta.get("created_at"),
+                            "created_by_name": meta.get("created_by_name"),
+                            "status": meta.get("status"),
+                            "collections_count": len(meta.get("collections", {}))
+                        })
+    
+    return {"backups": backups[:50]}  # Last 50 backups
+
+
+@api_router.post("/admin/backup/restore/{backup_id}")
+async def restore_backup(backup_id: str, request: Request):
+    """Restore from a backup (Admin only) - USE WITH CAUTION"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can restore backups")
+    
+    backup_path = BACKUP_DIR / backup_id
+    if not backup_path.exists():
+        raise HTTPException(status_code=404, detail="Backup not found")
+    
+    meta_path = backup_path / "backup_meta.json"
+    if not meta_path.exists():
+        raise HTTPException(status_code=400, detail="Invalid backup - metadata missing")
+    
+    try:
+        async with aiofiles.open(meta_path, 'r') as f:
+            meta = json.loads(await f.read())
+        
+        restored_collections = []
+        errors = []
+        
+        for collection_name, info in meta.get("collections", {}).items():
+            if "error" in info:
+                continue
+            
+            file_path = backup_path / info["file"]
+            if not file_path.exists():
+                errors.append(f"{collection_name}: file not found")
+                continue
+            
+            try:
+                async with aiofiles.open(file_path, 'r') as f:
+                    docs = json.loads(await f.read())
+                
+                if docs:
+                    # Clear existing and insert backup data
+                    collection = db[collection_name]
+                    await collection.delete_many({})
+                    await collection.insert_many(docs)
+                    restored_collections.append(collection_name)
+            except Exception as e:
+                errors.append(f"{collection_name}: {str(e)}")
+        
+        # Create audit log
+        await create_audit_log(
+            entity_type="system",
+            entity_id=backup_id,
+            action="backup_restored",
+            user_id=user.user_id,
+            user_name=user.name,
+            details=f"Restored {len(restored_collections)} collections from backup"
+        )
+        
+        return {
+            "success": True,
+            "backup_id": backup_id,
+            "restored_collections": restored_collections,
+            "errors": errors
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)}")
+
+
+# ============ 3. CUSTOMER PAYMENT REMINDERS (MOCKED) ============
+
+class PaymentReminderCreate(BaseModel):
+    project_id: str
+    reminder_type: str = "manual"  # manual, scheduled
+    message: Optional[str] = None
+
+
+@api_router.post("/finance/reminders/send")
+async def send_payment_reminder(reminder: PaymentReminderCreate, request: Request):
+    """Send payment reminder (MOCKED - logs to DB)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Check permission
+    if not has_permission(user_doc, "finance.receipts.create"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get project details
+    project = await db.projects.find_one(
+        {"project_id": reminder.project_id},
+        {"_id": 0}
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Calculate pending amount
+    contract_value = float(project.get("contract_value", 0))
+    receipts = await db.finance_receipts.find(
+        {"project_id": reminder.project_id, "imported": {"$ne": True}},
+        {"_id": 0, "amount": 1}
+    ).to_list(100)
+    total_received = sum(float(r.get("amount", 0)) for r in receipts)
+    pending_amount = contract_value - total_received
+    
+    if pending_amount <= 0:
+        raise HTTPException(status_code=400, detail="No pending payment for this project")
+    
+    # Create reminder log (MOCKED EMAIL)
+    reminder_id = f"rem_{uuid.uuid4().hex[:12]}"
+    reminder_log = {
+        "reminder_id": reminder_id,
+        "project_id": reminder.project_id,
+        "project_name": project.get("project_name", ""),
+        "client_name": project.get("client_name", ""),
+        "client_phone": project.get("client_phone", ""),
+        "client_email": project.get("client_email", ""),
+        "pending_amount": pending_amount,
+        "contract_value": contract_value,
+        "total_received": total_received,
+        "reminder_type": reminder.reminder_type,
+        "status": "logged",  # Would be "sent" with real email
+        "email_subject": f"Payment Reminder - {project.get('project_name', 'Project')}",
+        "email_body": reminder.message or f"Dear {project.get('client_name', 'Customer')},\n\nThis is a reminder that you have a pending payment of ₹{pending_amount:,.0f} for project '{project.get('project_name', '')}'.\n\nTotal Contract Value: ₹{contract_value:,.0f}\nAmount Received: ₹{total_received:,.0f}\nBalance Due: ₹{pending_amount:,.0f}\n\nPlease make the payment at your earliest convenience.\n\nThank you.",
+        "sent_by": user.user_id,
+        "sent_by_name": user.name,
+        "sent_at": datetime.now(timezone.utc).isoformat(),
+        "is_mocked": True  # Flag indicating email not actually sent
+    }
+    
+    await db.payment_reminders.insert_one(reminder_log)
+    
+    # Create audit log
+    await create_audit_log(
+        entity_type="payment_reminder",
+        entity_id=reminder_id,
+        action="create",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"project_id": reminder.project_id, "amount": pending_amount},
+        details=f"Payment reminder sent for ₹{pending_amount:,.0f}"
+    )
+    
+    return {
+        "success": True,
+        "reminder_id": reminder_id,
+        "status": "logged",
+        "message": "Reminder logged (email mocked - not actually sent)",
+        "pending_amount": pending_amount
+    }
+
+
+@api_router.get("/finance/reminders/overdue")
+async def get_overdue_payments(request: Request, days_threshold: int = 7):
+    """Get projects with overdue payments"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.receipts.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get all active projects with payment schedules
+    projects = await db.projects.find(
+        {"hold_status": {"$ne": "On Hold"}},
+        {"_id": 0}
+    ).to_list(1000)
+    
+    overdue_projects = []
+    threshold_date = (datetime.now(timezone.utc) - timedelta(days=days_threshold)).isoformat()
+    
+    for project in projects:
+        project_id = project.get("project_id")
+        contract_value = float(project.get("contract_value", 0))
+        
+        if contract_value <= 0:
+            continue
+        
+        # Get total received
+        receipts = await db.finance_receipts.find(
+            {"project_id": project_id, "imported": {"$ne": True}},
+            {"_id": 0, "amount": 1}
+        ).to_list(100)
+        total_received = sum(float(r.get("amount", 0)) for r in receipts)
+        pending_amount = contract_value - total_received
+        
+        if pending_amount <= 0:
+            continue
+        
+        # Check if project is old enough (created more than threshold days ago)
+        created_at = project.get("created_at", "")
+        if created_at and created_at < threshold_date:
+            # Check last reminder sent
+            last_reminder = await db.payment_reminders.find_one(
+                {"project_id": project_id},
+                {"_id": 0},
+                sort=[("sent_at", -1)]
+            )
+            
+            days_since_reminder = None
+            if last_reminder:
+                last_sent = datetime.fromisoformat(last_reminder["sent_at"].replace("Z", "+00:00"))
+                days_since_reminder = (datetime.now(timezone.utc) - last_sent).days
+            
+            overdue_projects.append({
+                "project_id": project_id,
+                "project_name": project.get("project_name", ""),
+                "client_name": project.get("client_name", ""),
+                "client_phone": project.get("client_phone", ""),
+                "contract_value": contract_value,
+                "total_received": total_received,
+                "pending_amount": pending_amount,
+                "created_at": created_at,
+                "days_since_last_reminder": days_since_reminder,
+                "last_reminder_sent": last_reminder.get("sent_at") if last_reminder else None
+            })
+    
+    # Sort by pending amount (highest first)
+    overdue_projects.sort(key=lambda x: x["pending_amount"], reverse=True)
+    
+    return {
+        "overdue_projects": overdue_projects,
+        "count": len(overdue_projects),
+        "threshold_days": days_threshold
+    }
+
+
+@api_router.get("/finance/reminders/history")
+async def get_reminder_history(request: Request, project_id: Optional[str] = None, limit: int = 50):
+    """Get payment reminder history"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.receipts.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if project_id:
+        query["project_id"] = project_id
+    
+    reminders = await db.payment_reminders.find(
+        query,
+        {"_id": 0}
+    ).sort("sent_at", -1).limit(limit).to_list(limit)
+    
+    return {"reminders": reminders, "count": len(reminders)}
+
+
+# ============ 4. RECURRING TRANSACTIONS ============
+
+class RecurringTemplateCreate(BaseModel):
+    name: str
+    amount: float
+    category_id: str
+    account_id: str
+    frequency: str = "monthly"  # Only monthly for now
+    day_of_month: int = 1  # Day to create entry
+    description: Optional[str] = None
+    paid_to: Optional[str] = None
+
+
+class RecurringTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    amount: Optional[float] = None
+    category_id: Optional[str] = None
+    account_id: Optional[str] = None
+    day_of_month: Optional[int] = None
+    description: Optional[str] = None
+    paid_to: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+@api_router.post("/finance/recurring/templates")
+async def create_recurring_template(template: RecurringTemplateCreate, request: Request):
+    """Create a recurring transaction template"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder", "SeniorAccountant"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Validate category and account
+    category = await db.accounting_categories.find_one({"category_id": template.category_id})
+    if not category:
+        raise HTTPException(status_code=400, detail="Invalid category")
+    
+    account = await db.accounting_accounts.find_one({"account_id": template.account_id})
+    if not account:
+        raise HTTPException(status_code=400, detail="Invalid account")
+    
+    template_id = f"rec_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    new_template = {
+        "template_id": template_id,
+        "name": template.name,
+        "amount": template.amount,
+        "category_id": template.category_id,
+        "category_name": category.get("name", ""),
+        "account_id": template.account_id,
+        "account_name": account.get("name", ""),
+        "frequency": "monthly",
+        "day_of_month": template.day_of_month,
+        "description": template.description or template.name,
+        "paid_to": template.paid_to,
+        "is_active": True,
+        "last_run": None,
+        "next_run": None,
+        "total_entries_created": 0,
+        "created_by": user.user_id,
+        "created_by_name": user.name,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    # Calculate next run date
+    today = now.date()
+    if today.day <= template.day_of_month:
+        next_run = today.replace(day=template.day_of_month)
+    else:
+        # Next month
+        if today.month == 12:
+            next_run = today.replace(year=today.year + 1, month=1, day=template.day_of_month)
+        else:
+            next_run = today.replace(month=today.month + 1, day=template.day_of_month)
+    new_template["next_run"] = next_run.isoformat()
+    
+    await db.recurring_templates.insert_one(new_template)
+    
+    # Audit log
+    await create_audit_log(
+        entity_type="recurring_template",
+        entity_id=template_id,
+        action="create",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"name": template.name, "amount": template.amount},
+        details=f"Created recurring template: {template.name}"
+    )
+    
+    new_template.pop("_id", None)
+    return {"success": True, "template": new_template}
+
+
+@api_router.get("/finance/recurring/templates")
+async def list_recurring_templates(request: Request, active_only: bool = False):
+    """List all recurring templates"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.cashbook.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    query = {}
+    if active_only:
+        query["is_active"] = True
+    
+    templates = await db.recurring_templates.find(
+        query,
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return {"templates": templates, "count": len(templates)}
+
+
+@api_router.put("/finance/recurring/templates/{template_id}")
+async def update_recurring_template(template_id: str, update: RecurringTemplateUpdate, request: Request):
+    """Update a recurring template"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder", "SeniorAccountant"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    template = await db.recurring_templates.find_one({"template_id": template_id})
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    old_value = {k: template.get(k) for k in ["name", "amount", "is_active"]}
+    
+    update_dict = {k: v for k, v in update.dict().items() if v is not None}
+    update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    # Update category/account names if changed
+    if "category_id" in update_dict:
+        category = await db.accounting_categories.find_one({"category_id": update_dict["category_id"]})
+        if category:
+            update_dict["category_name"] = category.get("name", "")
+    
+    if "account_id" in update_dict:
+        account = await db.accounting_accounts.find_one({"account_id": update_dict["account_id"]})
+        if account:
+            update_dict["account_name"] = account.get("name", "")
+    
+    await db.recurring_templates.update_one(
+        {"template_id": template_id},
+        {"$set": update_dict}
+    )
+    
+    # Audit log
+    await create_audit_log(
+        entity_type="recurring_template",
+        entity_id=template_id,
+        action="edit",
+        user_id=user.user_id,
+        user_name=user.name,
+        old_value=old_value,
+        new_value=update_dict,
+        details=f"Updated recurring template"
+    )
+    
+    updated = await db.recurring_templates.find_one({"template_id": template_id}, {"_id": 0})
+    return {"success": True, "template": updated}
+
+
+@api_router.post("/finance/recurring/templates/{template_id}/toggle")
+async def toggle_recurring_template(template_id: str, request: Request):
+    """Pause/Resume a recurring template"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") not in ["Admin", "Founder", "SeniorAccountant"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    template = await db.recurring_templates.find_one({"template_id": template_id})
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    new_status = not template.get("is_active", True)
+    
+    await db.recurring_templates.update_one(
+        {"template_id": template_id},
+        {"$set": {"is_active": new_status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    # Audit log
+    await create_audit_log(
+        entity_type="recurring_template",
+        entity_id=template_id,
+        action="edit",
+        user_id=user.user_id,
+        user_name=user.name,
+        old_value={"is_active": not new_status},
+        new_value={"is_active": new_status},
+        details=f"Template {'resumed' if new_status else 'paused'}"
+    )
+    
+    return {
+        "success": True,
+        "is_active": new_status,
+        "message": f"Template {'resumed' if new_status else 'paused'}"
+    }
+
+
+@api_router.post("/finance/recurring/run-scheduled")
+async def run_scheduled_recurring(request: Request):
+    """Run scheduled recurring transactions (called by cron or manually by admin)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if user_doc.get("role") != "Admin":
+        raise HTTPException(status_code=403, detail="Only Admin can run scheduled tasks")
+    
+    today = datetime.now(timezone.utc).date()
+    today_str = today.isoformat()
+    
+    # Get active templates due today or before
+    templates = await db.recurring_templates.find({
+        "is_active": True,
+        "next_run": {"$lte": today_str}
+    }, {"_id": 0}).to_list(100)
+    
+    created_entries = []
+    errors = []
+    
+    for template in templates:
+        try:
+            # Create cashbook entry
+            transaction_id = f"txn_{uuid.uuid4().hex[:10]}"
+            new_txn = {
+                "transaction_id": transaction_id,
+                "date": today_str,
+                "transaction_type": "outflow",
+                "amount": template["amount"],
+                "mode": "bank_transfer",
+                "category_id": template["category_id"],
+                "category_name": template["category_name"],
+                "account_id": template["account_id"],
+                "account_name": template["account_name"],
+                "project_id": None,
+                "paid_to": template.get("paid_to", ""),
+                "remarks": f"[RECURRING] {template['name']} - {template.get('description', '')}",
+                "is_verified": False,
+                "needs_review": False,
+                "recurring_template_id": template["template_id"],
+                "created_by": "system",
+                "created_by_name": "Recurring System",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            await db.accounting_transactions.insert_one(new_txn)
+            
+            # Update template
+            next_month = today.month + 1 if today.month < 12 else 1
+            next_year = today.year if today.month < 12 else today.year + 1
+            try:
+                next_run = today.replace(year=next_year, month=next_month, day=template["day_of_month"])
+            except ValueError:
+                # Handle months with fewer days
+                next_run = today.replace(year=next_year, month=next_month, day=28)
+            
+            await db.recurring_templates.update_one(
+                {"template_id": template["template_id"]},
+                {
+                    "$set": {
+                        "last_run": today_str,
+                        "next_run": next_run.isoformat()
+                    },
+                    "$inc": {"total_entries_created": 1}
+                }
+            )
+            
+            # Audit log
+            await create_audit_log(
+                entity_type="cashbook",
+                entity_id=transaction_id,
+                action="create",
+                user_id="system",
+                user_name="Recurring System",
+                new_value={"amount": template["amount"], "template": template["name"]},
+                details=f"Auto-created from recurring template: {template['name']}"
+            )
+            
+            created_entries.append({
+                "template_name": template["name"],
+                "transaction_id": transaction_id,
+                "amount": template["amount"]
+            })
+        except Exception as e:
+            errors.append({
+                "template_name": template["name"],
+                "error": str(e)
+            })
+    
+    return {
+        "success": True,
+        "created_count": len(created_entries),
+        "created_entries": created_entries,
+        "errors": errors
+    }
+
+
 # ============ DOCUMENT ATTACHMENT (PROOF) LAYER ============
 
 # Finance attachments directory
