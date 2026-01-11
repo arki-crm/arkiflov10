@@ -15876,6 +15876,70 @@ async def list_expense_requests(
     return expense_requests
 
 
+@api_router.get("/finance/expense-requests/approval-rules")
+async def get_expense_approval_rules(request: Request):
+    """Get current approval threshold rules"""
+    user = await get_current_user(request)
+    return {
+        "thresholds": SPEND_APPROVAL_THRESHOLDS,
+        "rules": [
+            {"range": "₹0 - ₹1,000", "approval": "Auto-allowed (Petty Cash)", "permission": "finance.expenses.approve_petty"},
+            {"range": "₹1,001 - ₹5,000", "approval": "Finance Manager / Ops Head", "permission": "finance.expenses.approve_standard"},
+            {"range": "₹5,001+", "approval": "Founder/CEO mandatory", "permission": "finance.expenses.approve_high"}
+        ]
+    }
+
+
+@api_router.get("/finance/expense-requests/stats/summary")
+async def get_expense_requests_summary_endpoint(request: Request):
+    """Get summary stats for expense requests dashboard (moved before {request_id})"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.view_expense_requests"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Count by status
+    pipeline = [
+        {"$group": {"_id": "$status", "count": {"$sum": 1}, "total_amount": {"$sum": "$amount"}}}
+    ]
+    status_stats = await db.finance_expense_requests.aggregate(pipeline).to_list(10)
+    status_summary = {s["_id"]: {"count": s["count"], "amount": s["total_amount"]} for s in status_stats}
+    
+    # Pending refunds
+    pending_refunds = await db.finance_expense_requests.find(
+        {"status": "refund_pending"},
+        {"_id": 0, "request_id": 1, "request_number": 1, "amount": 1, "refund_expected_amount": 1, 
+         "refund_expected_date": 1, "project_id": 1, "owner_name": 1}
+    ).to_list(100)
+    
+    # Calculate money at risk
+    pending_approval = status_summary.get("pending_approval", {}).get("amount", 0)
+    approved_unrecorded = status_summary.get("approved", {}).get("amount", 0)
+    refund_pending_amount = sum(
+        (r.get("refund_expected_amount", 0) - r.get("refund_received_amount", 0))
+        for r in pending_refunds
+    )
+    
+    money_at_risk = pending_approval + approved_unrecorded + refund_pending_amount
+    
+    # Over-budget requests
+    over_budget = await db.finance_expense_requests.count_documents({
+        "is_over_budget": True,
+        "status": {"$in": ["pending_approval", "approved"]}
+    })
+    
+    return {
+        "status_summary": status_summary,
+        "money_at_risk": money_at_risk,
+        "pending_refunds_count": len(pending_refunds),
+        "pending_refunds": pending_refunds,
+        "over_budget_count": over_budget,
+        "total_pending_approval": status_summary.get("pending_approval", {}).get("count", 0),
+        "total_approved_unrecorded": status_summary.get("approved", {}).get("count", 0)
+    }
+
+
 @api_router.get("/finance/expense-requests/{request_id}")
 async def get_expense_request(request_id: str, request: Request):
     """Get a single expense request with full details"""
