@@ -6,6 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
+import { 
   Loader2, 
   AlertTriangle,
   TrendingUp,
@@ -22,7 +29,11 @@ import {
   XCircle,
   AlertCircle,
   Calendar,
-  Target
+  Target,
+  DollarSign,
+  BarChart3,
+  TrendingUp as TrendUp,
+  Ban
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -44,6 +55,8 @@ const FounderDashboard = () => {
   const [safeSpend, setSafeSpend] = useState(null);
   const [alerts, setAlerts] = useState(null);
   const [expenseStats, setExpenseStats] = useState(null);
+  const [revenueReality, setRevenueReality] = useState(null);
+  const [revenuePeriod, setRevenuePeriod] = useState('month');
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
 
