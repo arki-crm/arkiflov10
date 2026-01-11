@@ -56,6 +56,7 @@ const financeSubItems = [
   { path: '/finance/receipts', label: 'Receipts', icon: Receipt },
   { path: '/finance/salaries', label: 'Salaries', icon: Banknote },
   { path: '/finance/pnl-snapshot', label: 'P&L Snapshot', icon: TrendingUp },
+  { path: '/finance/reports', label: 'Reports', icon: BarChart3 },
   { path: '/finance/forecast', label: 'Forecast', icon: TrendingUp },
   { path: '/finance/budgets', label: 'Budgets', icon: PiggyBank },
   { path: '/finance/invoices', label: 'Invoices', icon: FileText },
@@ -63,6 +64,18 @@ const financeSubItems = [
   { path: '/finance/daily-closing', label: 'Daily Closing', icon: CalendarCheck },
   { path: '/finance/monthly-snapshot', label: 'Monthly Snapshot', icon: CalendarRange },
   { path: '/finance/settings', label: 'Settings', icon: Settings },
+];
+
+// CA (Chartered Accountant) - Read-only finance submenu
+const caFinanceSubItems = [
+  { path: '/finance/founder-dashboard', label: 'Overview', icon: Gauge },
+  { path: '/finance/project-finance', label: 'Project Finance', icon: FolderKanban },
+  { path: '/finance/cashbook', label: 'Cash Book', icon: Wallet },
+  { path: '/finance/liabilities', label: 'Liabilities', icon: FileText },
+  { path: '/finance/receipts', label: 'Receipts', icon: Receipt },
+  { path: '/finance/pnl-snapshot', label: 'P&L Snapshot', icon: TrendingUp },
+  { path: '/finance/reports', label: 'Reports', icon: BarChart3 },
+  { path: '/admin/import-export', label: 'Export Data', icon: FileUp },
 ];
 
 // ============ V1 SIMPLIFIED RBAC - 6 CORE ROLES ============
