@@ -18794,6 +18794,18 @@ async def override_project_lock(project_id: str, override: ProjectLockOverride, 
         upsert=True
     )
     
+    # Audit log for lock override
+    await create_audit_log(
+        entity_type="project_finance",
+        entity_id=project_id,
+        action="lock_override",
+        user_id=user_doc.get("user_id"),
+        user_name=user_doc.get("name"),
+        old_value={"lock_percentage": previous_pct},
+        new_value={"lock_percentage": override.lock_percentage, "reason": override.reason},
+        details=f"Lock % changed: {previous_pct}% → {override.lock_percentage}%"
+    )
+    
     return {
         "success": True,
         "message": f"Lock percentage updated from {previous_pct}% to {override.lock_percentage}%",
