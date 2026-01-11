@@ -41,7 +41,7 @@ export default function BackupManagement() {
   const fetchSchedulerStatus = async () => {
     try {
       const res = await fetch(`${API}/api/admin/backup/scheduler-status`, {
-        headers: { Authorization: `Bearer ${token}` }
+        credentials: 'include'
       });
       if (res.ok) {
         const data = await res.json();
