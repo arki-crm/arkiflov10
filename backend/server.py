@@ -1561,6 +1561,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         # Salary permissions - Admin gets all
         "finance.salaries.view", "finance.salaries.view_all", "finance.salaries.edit_structure",
         "finance.salaries.pay", "finance.salaries.close_month", "finance.salaries.manage_exit",
+        "finance.salaries.manage_ladder", "finance.salaries.promote",
+        # HR Promotion permissions - Admin gets all
+        "hr.promotion.view", "hr.promotion.view_all", "hr.promotion.manage",
         # Legacy permissions (backward compatibility)
         "finance.view_dashboard", "finance.view_cashbook", "finance.view_bankbook",
         "finance.add_transaction", "finance.edit_transaction", "finance.delete_transaction",
