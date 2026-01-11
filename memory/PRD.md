@@ -1258,3 +1258,62 @@ finance.audit_log.view
 2. **Medium**: Duplicate API endpoints in `server.py`
 3. **Low**: Deferred Python linting errors
 
+---
+
+## ✅ Document Attachment (Proof) Layer - COMPLETED Jan 11, 2026
+
+Evidence layer for finance operations - supporting document uploads for audit compliance.
+
+### Scope
+| Module | Purpose | Examples |
+|--------|---------|----------|
+| Cashbook | Bills, vouchers, UPI screenshots | Transaction proofs |
+| Expense Requests | Quotations, invoices | Approval documentation |
+| Project Finance | Agreements, vendor invoices | Project documents |
+| Liabilities | Invoice copies, payment proofs | Vendor documentation |
+
+### Technical Specifications
+- **Max file size**: 15MB per file
+- **Allowed types**: PDF, JPG, PNG
+- **Storage**: Local filesystem (`/app/backend/uploads/finance/{YYYY}/{MM}/`)
+- **Architecture**: S3-ready abstraction for future migration
+- **Retention**: Permanent (no auto-delete)
+
+### Metadata Schema (`finance_attachments` collection)
+```json
+{
+  "attachment_id": "att_xxx",
+  "entity_type": "cashbook | expense | project | liability",
+  "entity_id": "txn_xxx | exp_xxx | proj_xxx | lia_xxx",
+  "file_name": "invoice.pdf",
+  "file_path": "finance/2026/01/xxx.pdf",
+  "file_size": 245000,
+  "mime_type": "application/pdf",
+  "description": "Vendor invoice for materials",
+  "uploaded_by": "user_id",
+  "uploaded_by_name": "User Name",
+  "uploaded_at": "2026-01-11T..."
+}
+```
+
+### API Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/finance/attachments/upload` | POST | Upload attachment (multipart/form-data) |
+| `/api/finance/attachments/{entity_type}/{entity_id}` | GET | List attachments for entity |
+| `/api/finance/attachments/download/{attachment_id}` | GET | Download file |
+| `/api/finance/attachments/{attachment_id}` | DELETE | Delete attachment (uploader/admin only) |
+| `/api/finance/attachments/by-ids` | GET | Get attachments by IDs (for exports) |
+
+### Frontend Integration
+- **AttachmentUploader component**: `/app/frontend/src/components/AttachmentUploader.jsx`
+- **CashBook**: View transaction dialog → Supporting Documents section
+- **ExpenseRequests**: View details dialog → Supporting Documents section
+- **Liabilities**: View liability dialog → Supporting Documents section
+- **ProjectFinanceDetail**: Project Documents section (max 50 files)
+
+### Testing
+- 25/25 backend API tests passed
+- Frontend UI verified
+- Test file: `/app/tests/test_document_attachments.py`
+
