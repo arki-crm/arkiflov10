@@ -19,6 +19,7 @@ import {
   TrendingDown,
   Wallet,
   Lock,
+  Unlock,
   ShieldCheck,
   ShieldAlert,
   ShieldX,
@@ -33,7 +34,8 @@ import {
   DollarSign,
   BarChart3,
   TrendingUp as TrendUp,
-  Ban
+  Ban,
+  PiggyBank
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
