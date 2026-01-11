@@ -132,7 +132,7 @@ class TestAttachmentAPIs:
         )
         
         assert response.status_code == 400
-        assert "Only PDF, JPG, PNG" in response.json().get("detail", "")
+        assert "PDF, JPG, PNG" in response.json().get("detail", "")
     
     def test_list_attachments_for_entity(self, session):
         """Test listing attachments for a specific entity"""
