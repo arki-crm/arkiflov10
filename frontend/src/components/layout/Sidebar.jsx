@@ -246,7 +246,8 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
         ...commonItems,
         financeParentItem,
         { path: '/ceo-dashboard', label: 'CEO View', icon: Crown },
-        { path: '/reports', label: 'Reports', icon: BarChart3 }
+        { path: '/reports', label: 'Reports', icon: BarChart3 },
+        { path: '/admin/audit-trail', label: 'Audit Trail', icon: History }
       ];
 
     default:
