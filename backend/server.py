@@ -20383,6 +20383,464 @@ async def get_employees_for_salary(request: Request):
     return available_users
 
 
+# ============ SALARY LADDER CONFIGURATION ============
+
+# Default salary ladder (can be overridden by admin)
+DEFAULT_SALARY_LADDER = [
+    {"level": "trainee", "name": "Trainee", "min_salary": 3000, "max_salary": 5000, "order": 0},
+    {"level": "level_1", "name": "Level 1", "min_salary": 7000, "max_salary": 7000, "order": 1},
+    {"level": "level_2", "name": "Level 2", "min_salary": 10000, "max_salary": 10000, "order": 2},
+    {"level": "level_3", "name": "Level 3", "min_salary": 13000, "max_salary": 13000, "order": 3},
+    {"level": "level_4", "name": "Level 4 (Cap)", "min_salary": 15000, "max_salary": 15000, "order": 4}
+]
+
+
+class SalaryLadderLevel(BaseModel):
+    level: str
+    name: str
+    min_salary: float
+    max_salary: float
+    order: int
+
+
+class SalaryLadderUpdate(BaseModel):
+    levels: List[SalaryLadderLevel]
+
+
+class SalaryPromoteRequest(BaseModel):
+    new_salary: float
+    new_level: Optional[str] = None  # Optional level label
+    effective_date: str  # YYYY-MM-DD
+    reason: str  # promotion, adjustment, correction
+    notes: Optional[str] = None
+
+
+@api_router.get("/finance/salary-ladder")
+async def get_salary_ladder(request: Request):
+    """Get salary ladder configuration"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Anyone with salary view permission can see the ladder
+    if not has_permission(user_doc, "finance.salaries.view") and not has_permission(user_doc, "finance.salaries.view_all"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get custom ladder or use default
+    ladder_config = await db.finance_salary_ladder.find_one({"config_id": "default"}, {"_id": 0})
+    
+    if ladder_config:
+        return ladder_config.get("levels", DEFAULT_SALARY_LADDER)
+    
+    return DEFAULT_SALARY_LADDER
+
+
+@api_router.put("/finance/salary-ladder")
+async def update_salary_ladder(data: SalaryLadderUpdate, request: Request):
+    """Update salary ladder configuration (Admin only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.salaries.manage_ladder"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.salaries.manage_ladder permission")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Convert levels to dict format
+    levels_dict = [level.model_dump() for level in data.levels]
+    
+    # Upsert the ladder config
+    await db.finance_salary_ladder.update_one(
+        {"config_id": "default"},
+        {"$set": {
+            "config_id": "default",
+            "levels": levels_dict,
+            "updated_by": user.user_id,
+            "updated_by_name": user_doc.get("name", "Unknown"),
+            "updated_at": now
+        }},
+        upsert=True
+    )
+    
+    # Log the change
+    await db.finance_salary_ladder_history.insert_one({
+        "change_id": f"ladder_{uuid.uuid4().hex[:12]}",
+        "levels": levels_dict,
+        "changed_by": user.user_id,
+        "changed_by_name": user_doc.get("name", "Unknown"),
+        "changed_at": now
+    })
+    
+    return {"success": True, "levels": levels_dict}
+
+
+@api_router.post("/finance/salaries/{employee_id}/promote")
+async def promote_employee_salary(employee_id: str, data: SalaryPromoteRequest, request: Request):
+    """Promote or adjust employee salary with history tracking"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "finance.salaries.promote"):
+        raise HTTPException(status_code=403, detail="Access denied - no finance.salaries.promote permission")
+    
+    # Validate reason
+    valid_reasons = ["promotion", "adjustment", "correction"]
+    if data.reason not in valid_reasons:
+        raise HTTPException(status_code=400, detail=f"Invalid reason. Must be one of: {valid_reasons}")
+    
+    # Get current salary
+    salary_master = await db.finance_salary_master.find_one({"employee_id": employee_id})
+    if not salary_master:
+        raise HTTPException(status_code=404, detail="Salary record not found for this employee")
+    
+    old_salary = salary_master.get("monthly_salary", 0)
+    old_level = salary_master.get("salary_level", None)
+    
+    now = datetime.now(timezone.utc)
+    
+    # Create salary history record
+    history_record = {
+        "history_id": f"salh_{uuid.uuid4().hex[:12]}",
+        "employee_id": employee_id,
+        "employee_name": salary_master.get("employee_name", "Unknown"),
+        "previous_salary": old_salary,
+        "new_salary": data.new_salary,
+        "previous_level": old_level,
+        "new_level": data.new_level,
+        "effective_date": data.effective_date,
+        "reason": data.reason,
+        "notes": data.notes,
+        "changed_by": user.user_id,
+        "changed_by_name": user_doc.get("name", "Unknown"),
+        "changed_at": now
+    }
+    
+    await db.finance_salary_history.insert_one(history_record)
+    
+    # Update salary master
+    activity_log = salary_master.get("activity_log", [])
+    activity_log.append({
+        "action": f"salary_{data.reason}",
+        "by_id": user.user_id,
+        "by_name": user_doc.get("name", "Unknown"),
+        "at": now.isoformat(),
+        "details": f"Salary changed: ₹{old_salary} → ₹{data.new_salary} ({data.reason})"
+    })
+    
+    update_data = {
+        "monthly_salary": data.new_salary,
+        "salary_level": data.new_level,
+        "last_salary_change_date": data.effective_date,
+        "last_salary_change_reason": data.reason,
+        "updated_at": now,
+        "activity_log": activity_log
+    }
+    
+    await db.finance_salary_master.update_one(
+        {"employee_id": employee_id},
+        {"$set": update_data}
+    )
+    
+    # Update any open salary cycles for current/future months
+    # This ensures the new salary is used for future calculations
+    current_month = datetime.now().strftime("%Y-%m")
+    await db.finance_salary_cycles.update_many(
+        {
+            "employee_id": employee_id,
+            "status": "open",
+            "month_year": {"$gte": current_month}
+        },
+        {"$set": {"monthly_salary": data.new_salary}}
+    )
+    
+    del history_record["_id"]
+    return {
+        "success": True,
+        "history": history_record,
+        "message": f"Salary updated from ₹{old_salary} to ₹{data.new_salary}"
+    }
+
+
+@api_router.get("/finance/salaries/{employee_id}/salary-history")
+async def get_employee_salary_history(employee_id: str, request: Request):
+    """Get salary change history for an employee"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Can view own or all
+    if employee_id != user.user_id and not has_permission(user_doc, "finance.salaries.view_all"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if employee_id == user.user_id and not has_permission(user_doc, "finance.salaries.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    history = await db.finance_salary_history.find(
+        {"employee_id": employee_id},
+        {"_id": 0}
+    ).sort("changed_at", -1).to_list(100)
+    
+    return history
+
+
+# ============ PROMOTION ELIGIBILITY & FLAGGING ============
+
+# Eligibility thresholds (configurable)
+DEFAULT_PROMOTION_THRESHOLDS = {
+    "credits_required": 3,  # Booking credits needed
+    "months_required": 3,   # Minimum months span
+    "stagnant_months": 6    # Months at same level = stagnant
+}
+
+
+class PromotionEligibilityConfig(BaseModel):
+    credits_required: int = 3
+    months_required: int = 3
+    stagnant_months: int = 6
+
+
+@api_router.get("/hr/promotion-config")
+async def get_promotion_config(request: Request):
+    """Get promotion eligibility configuration"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "hr.promotion.view_all") and not has_permission(user_doc, "hr.promotion.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    config = await db.hr_promotion_config.find_one({"config_id": "default"}, {"_id": 0})
+    if config:
+        return config
+    
+    return DEFAULT_PROMOTION_THRESHOLDS
+
+
+@api_router.put("/hr/promotion-config")
+async def update_promotion_config(data: PromotionEligibilityConfig, request: Request):
+    """Update promotion eligibility configuration (Admin only)"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "hr.promotion.manage"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.hr_promotion_config.update_one(
+        {"config_id": "default"},
+        {"$set": {
+            "config_id": "default",
+            "credits_required": data.credits_required,
+            "months_required": data.months_required,
+            "stagnant_months": data.stagnant_months,
+            "updated_by": user.user_id,
+            "updated_by_name": user_doc.get("name", "Unknown"),
+            "updated_at": now
+        }},
+        upsert=True
+    )
+    
+    return {"success": True, "config": data.model_dump()}
+
+
+async def calculate_employee_promotion_eligibility(employee_id: str, config: dict = None):
+    """Calculate promotion eligibility for an employee based on bookings"""
+    if config is None:
+        config = await db.hr_promotion_config.find_one({"config_id": "default"}, {"_id": 0})
+        if not config:
+            config = DEFAULT_PROMOTION_THRESHOLDS
+    
+    credits_required = config.get("credits_required", 3)
+    months_required = config.get("months_required", 3)
+    stagnant_months = config.get("stagnant_months", 6)
+    
+    # Get employee's salary info
+    salary = await db.finance_salary_master.find_one({"employee_id": employee_id}, {"_id": 0})
+    if not salary:
+        return None
+    
+    # Get last salary change date or salary start date
+    last_change = salary.get("last_salary_change_date") or salary.get("salary_start_date")
+    if last_change:
+        try:
+            if isinstance(last_change, str):
+                last_change_date = datetime.strptime(last_change, "%Y-%m-%d")
+            else:
+                last_change_date = last_change
+        except:
+            last_change_date = datetime.now() - timedelta(days=365)
+    else:
+        last_change_date = datetime.now() - timedelta(days=365)
+    
+    # Calculate months since last change
+    months_at_current = (datetime.now() - last_change_date).days // 30
+    
+    # Get bookings (projects sent to production) since last salary change
+    # Look for projects where the employee is the designer/assignee and stage is production
+    booking_query = {
+        "$or": [
+            {"designer_id": employee_id},
+            {"assigned_to": employee_id},
+            {"created_by": employee_id}
+        ],
+        "stage": {"$in": ["Production", "production", "Production Preparation", "Installation", "Handover", "Delivered"]},
+        "created_at": {"$gte": last_change_date}
+    }
+    
+    bookings = await db.projects.find(booking_query, {"_id": 0, "pid": 1, "name": 1, "stage": 1, "created_at": 1, "production_start_date": 1}).to_list(500)
+    
+    # Count credits and unique months
+    booking_credits = len(bookings)
+    booking_months = set()
+    for booking in bookings:
+        booking_date = booking.get("production_start_date") or booking.get("created_at")
+        if booking_date:
+            if isinstance(booking_date, str):
+                try:
+                    booking_date = datetime.fromisoformat(booking_date.replace('Z', '+00:00'))
+                except:
+                    continue
+            booking_months.add(booking_date.strftime("%Y-%m"))
+    
+    unique_months = len(booking_months)
+    
+    # Determine eligibility status
+    if booking_credits >= credits_required and unique_months >= months_required:
+        eligibility_status = "eligible"
+        eligibility_message = "Eligible for promotion review"
+    elif booking_credits >= credits_required - 1 or unique_months >= months_required - 1:
+        eligibility_status = "near_eligible"
+        eligibility_message = f"Near eligibility: {booking_credits}/{credits_required} credits, {unique_months}/{months_required} months"
+    elif months_at_current >= stagnant_months and booking_credits == 0:
+        eligibility_status = "stagnant"
+        eligibility_message = f"No production bookings in {months_at_current} months"
+    else:
+        eligibility_status = "in_progress"
+        eligibility_message = f"Progress: {booking_credits}/{credits_required} credits, {unique_months}/{months_required} months"
+    
+    return {
+        "employee_id": employee_id,
+        "employee_name": salary.get("employee_name", "Unknown"),
+        "current_salary": salary.get("monthly_salary", 0),
+        "salary_level": salary.get("salary_level"),
+        "last_salary_change": last_change,
+        "months_at_current_level": months_at_current,
+        "booking_credits": booking_credits,
+        "unique_booking_months": unique_months,
+        "credits_required": credits_required,
+        "months_required": months_required,
+        "eligibility_status": eligibility_status,
+        "eligibility_message": eligibility_message,
+        "recent_bookings": bookings[:10]  # Last 10 bookings
+    }
+
+
+@api_router.get("/hr/promotion-eligibility")
+async def get_all_promotion_eligibility(request: Request):
+    """Get promotion eligibility for all employees"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "hr.promotion.view_all"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get config
+    config = await db.hr_promotion_config.find_one({"config_id": "default"}, {"_id": 0})
+    if not config:
+        config = DEFAULT_PROMOTION_THRESHOLDS
+    
+    # Get all active salaries
+    salaries = await db.finance_salary_master.find(
+        {"status": "active"},
+        {"_id": 0, "employee_id": 1}
+    ).to_list(500)
+    
+    eligibility_list = []
+    for salary in salaries:
+        eligibility = await calculate_employee_promotion_eligibility(salary["employee_id"], config)
+        if eligibility:
+            eligibility_list.append(eligibility)
+    
+    return eligibility_list
+
+
+@api_router.get("/hr/promotion-eligibility/{employee_id}")
+async def get_employee_promotion_eligibility(employee_id: str, request: Request):
+    """Get promotion eligibility for a specific employee"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    # Can view own or all
+    if employee_id != user.user_id and not has_permission(user_doc, "hr.promotion.view_all"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if employee_id == user.user_id and not has_permission(user_doc, "hr.promotion.view"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    eligibility = await calculate_employee_promotion_eligibility(employee_id)
+    if not eligibility:
+        raise HTTPException(status_code=404, detail="Employee salary record not found")
+    
+    return eligibility
+
+
+@api_router.get("/hr/promotion-eligibility/overview")
+async def get_promotion_eligibility_overview(request: Request):
+    """Get CEO overview of promotion eligibility status"""
+    user = await get_current_user(request)
+    user_doc = await db.users.find_one({"user_id": user.user_id})
+    
+    if not has_permission(user_doc, "hr.promotion.view_all"):
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get all eligibility data
+    config = await db.hr_promotion_config.find_one({"config_id": "default"}, {"_id": 0})
+    if not config:
+        config = DEFAULT_PROMOTION_THRESHOLDS
+    
+    salaries = await db.finance_salary_master.find(
+        {"status": "active"},
+        {"_id": 0, "employee_id": 1}
+    ).to_list(500)
+    
+    eligible = []
+    near_eligible = []
+    stagnant = []
+    in_progress = []
+    
+    for salary in salaries:
+        eligibility = await calculate_employee_promotion_eligibility(salary["employee_id"], config)
+        if eligibility:
+            status = eligibility["eligibility_status"]
+            summary = {
+                "employee_id": eligibility["employee_id"],
+                "employee_name": eligibility["employee_name"],
+                "current_salary": eligibility["current_salary"],
+                "months_at_level": eligibility["months_at_current_level"],
+                "booking_credits": eligibility["booking_credits"],
+                "message": eligibility["eligibility_message"]
+            }
+            
+            if status == "eligible":
+                eligible.append(summary)
+            elif status == "near_eligible":
+                near_eligible.append(summary)
+            elif status == "stagnant":
+                stagnant.append(summary)
+            else:
+                in_progress.append(summary)
+    
+    return {
+        "total_employees": len(salaries),
+        "eligible_count": len(eligible),
+        "near_eligible_count": len(near_eligible),
+        "stagnant_count": len(stagnant),
+        "in_progress_count": len(in_progress),
+        "eligible": eligible,
+        "near_eligible": near_eligible,
+        "stagnant": stagnant,
+        "config": config
+    }
+
+
 # ============ HEALTH CHECK ============
 
 @api_router.get("/")
