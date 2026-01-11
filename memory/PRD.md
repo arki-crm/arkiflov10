@@ -1373,11 +1373,13 @@ Daily automated database backups via backend cron job.
 
 **Features:**
 - Manual backup creation (Admin only)
+- **Automated daily backups at midnight (00:00 server time)** using apscheduler
 - Backup listing with metadata
 - Backup restoration (Admin only, with confirmation)
 - Backups stored as JSON files in `/app/backend/backups/`
 - Includes: finance, accounting, projects, leads, users, and more (18+ collections)
 - Metadata-only for attachments (files not included)
+- Scheduler status shown in UI with next run time
 
 **API Endpoints:**
 | Endpoint | Method | Description |
@@ -1385,6 +1387,7 @@ Daily automated database backups via backend cron job.
 | `/api/admin/backup/create` | POST | Create manual backup |
 | `/api/admin/backup/list` | GET | List available backups |
 | `/api/admin/backup/restore/{id}` | POST | Restore from backup |
+| `/api/admin/backup/scheduler-status` | GET | Get scheduler status |
 
 ### 3. Customer Payment Reminders (MOCKED)
 Email reminder system for overdue payments - logs to DB instead of sending actual emails.
