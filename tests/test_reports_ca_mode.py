@@ -20,7 +20,7 @@ class TestReportsAndCAMode:
         self.session = requests.Session()
         # Login as Admin
         login_response = self.session.post(
-            f"{BASE_URL}/api/auth/local/login",
+            f"{BASE_URL}/api/auth/local-login",
             json={"email": "thaha.pakayil@gmail.com", "password": "password123"}
         )
         if login_response.status_code != 200:
@@ -442,7 +442,7 @@ class TestExportFromReports:
         """Setup - login and get session"""
         self.session = requests.Session()
         login_response = self.session.post(
-            f"{BASE_URL}/api/auth/local/login",
+            f"{BASE_URL}/api/auth/local-login",
             json={"email": "thaha.pakayil@gmail.com", "password": "password123"}
         )
         if login_response.status_code != 200:
