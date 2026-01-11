@@ -18723,8 +18723,13 @@ async def remove_project_lock_override(project_id: str, request: Request):
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    # Get full user doc for permission check
+    user_doc = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="User not found")
+    
     # Permission check
-    if not has_permission(user, "finance.lock_override") and user.get("role") not in ["Admin", "Founder", "CEO"]:
+    if not has_permission(user_doc, "finance.lock_override") and user_doc.get("role") not in ["Admin", "Founder", "CEO"]:
         raise HTTPException(status_code=403, detail="Only Admin/Founder can modify lock settings")
     
     # Get current override
@@ -18745,8 +18750,8 @@ async def remove_project_lock_override(project_id: str, request: Request):
         "previous_percentage": current_override.get("lock_percentage"),
         "new_percentage": default_lock_pct,
         "reason": "Override removed - reverted to default",
-        "changed_by": user.get("user_id"),
-        "changed_by_name": user.get("name"),
+        "changed_by": user_doc.get("user_id"),
+        "changed_by_name": user_doc.get("name"),
         "changed_at": now.isoformat()
     }
     await db.project_lock_history.insert_one(history_record)
@@ -18758,8 +18763,8 @@ async def remove_project_lock_override(project_id: str, request: Request):
         "decision_type": "lock_override_removed",
         "title": f"Lock override removed - reverted to {default_lock_pct}%",
         "description": f"Previously was {current_override.get('lock_percentage')}%",
-        "made_by": user.get("user_id"),
-        "made_by_name": user.get("name"),
+        "made_by": user_doc.get("user_id"),
+        "made_by_name": user_doc.get("name"),
         "created_at": now.isoformat()
     }
     await db.project_decisions_log.insert_one(decision_record)
