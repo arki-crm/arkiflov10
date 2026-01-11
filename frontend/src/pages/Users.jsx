@@ -642,15 +642,26 @@ const Users = () => {
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Admin">Admin</SelectItem>
-                  <SelectItem value="PreSales">Pre-Sales</SelectItem>
-                  <SelectItem value="SalesManager">Sales Manager</SelectItem>
-                  <SelectItem value="Designer">Designer</SelectItem>
-                  <SelectItem value="DesignManager">Design Manager</SelectItem>
-                  <SelectItem value="ProductionOpsManager">Production Ops Manager</SelectItem>
-                  <SelectItem value="Technician">Technician</SelectItem>
+                  {/* Group roles by category */}
+                  {['Administration', 'Sales', 'Design', 'Operations', 'Service', 'Finance', 'Leadership'].map(category => {
+                    const categoryRoles = availableRoles.filter(r => r.category === category);
+                    if (categoryRoles.length === 0) return null;
+                    return (
+                      <div key={category}>
+                        <div className="px-2 py-1.5 text-xs font-semibold text-slate-500 bg-slate-50">{category}</div>
+                        {categoryRoles.map(role => (
+                          <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
+                        ))}
+                      </div>
+                    );
+                  })}
                 </SelectContent>
               </Select>
+              {newUser.role && (
+                <p className="text-xs text-slate-500">
+                  {availableRoles.find(r => r.id === newUser.role)?.description}
+                </p>
+              )}
             </div>
             
             {/* Phone (Optional) */}
