@@ -216,6 +216,32 @@ const getRoleNavItems = (role, hasSeniorManagerView = false) => {
         { path: '/reports', label: 'Reports', icon: BarChart3 }
       ];
 
+    // 12. CHARTERED ACCOUNTANT - Read-only finance access for auditors
+    case 'CharteredAccountant':
+      // CA Finance parent menu item with restricted submenu
+      const caFinanceParentItem = { 
+        path: '/finance', 
+        label: 'Finance', 
+        icon: Wallet, 
+        isParent: true,
+        subItems: caFinanceSubItems
+      };
+      return [
+        { path: '/finance/founder-dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        ...commonItems.filter(item => item.path === '/profile'), // Only profile, no calendar/meetings
+        caFinanceParentItem
+      ];
+
+    // 13. FOUNDER - Full visibility, final override
+    case 'Founder':
+      return [
+        { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        ...commonItems,
+        financeParentItem,
+        { path: '/ceo-dashboard', label: 'CEO View', icon: Crown },
+        { path: '/reports', label: 'Reports', icon: BarChart3 }
+      ];
+
     default:
       return [
         { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
