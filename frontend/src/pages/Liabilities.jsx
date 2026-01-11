@@ -704,17 +704,16 @@ export default function Liabilities() {
                 </div>
               )}
               
-              <div>
-                <Label className="text-sm font-medium text-slate-600">Attachments</Label>
-                <div className="mt-2 p-3 border rounded-lg bg-slate-50">
-                  <div className="flex items-center gap-2 text-slate-500">
-                    <Paperclip className="w-4 h-4" />
-                    <span className="text-sm">No attachments available</span>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Attachment support will be added in future updates
-                  </p>
-                </div>
+              <div className="border-t pt-4">
+                <Label className="text-sm font-medium text-slate-600 flex items-center gap-2 mb-2">
+                  <Paperclip className="w-4 h-4" />
+                  Supporting Documents
+                </Label>
+                <AttachmentUploader
+                  entityType="liability"
+                  entityId={viewLiability.liability_id}
+                  readOnly={viewLiability.status === 'closed'}
+                />
               </div>
               
               <div className="text-xs text-slate-400 pt-2 border-t">
