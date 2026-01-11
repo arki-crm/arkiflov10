@@ -288,12 +288,12 @@ const ProjectProfitabilityReport = () => {
           <div className="flex flex-wrap items-end gap-4">
             <div className="w-40">
               <Label className="text-sm">Stage</Label>
-              <Select value={stage} onValueChange={(v) => handleFilterChange('stage', v)}>
+              <Select value={stage || "all_stages"} onValueChange={(v) => handleFilterChange('stage', v === "all_stages" ? "" : v)}>
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="All Stages" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Stages</SelectItem>
+                  <SelectItem value="all_stages">All Stages</SelectItem>
                   <SelectItem value="Design Finalization">Design Finalization</SelectItem>
                   <SelectItem value="Production Preparation">Production Preparation</SelectItem>
                   <SelectItem value="Production">Production</SelectItem>
