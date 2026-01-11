@@ -3,8 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { 
   Users, Plus, DollarSign, Calendar, AlertTriangle, CheckCircle, 
-  Clock, ArrowRight, ChevronDown, ChevronUp, XCircle, Wallet,
-  TrendingUp, TrendingDown, PiggyBank, History, LogOut
+  Clock, ArrowRight, XCircle, Wallet, Edit, History, LogOut,
+  TrendingUp, PiggyBank, Settings, Star, Award, Target
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
@@ -14,6 +14,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
+import { Textarea } from '../components/ui/textarea';
 import { toast } from 'sonner';
 
 const API = process.env.REACT_APP_BACKEND_URL;
@@ -24,7 +25,11 @@ const formatCurrency = (amount) => {
 
 const formatDate = (dateStr) => {
   if (!dateStr) return '-';
-  return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  try {
+    return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return dateStr;
+  }
 };
 
 const getCurrentMonth = () => {
@@ -40,13 +45,19 @@ export default function Salaries() {
   const [cycles, setCycles] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [availableEmployees, setAvailableEmployees] = useState([]);
+  const [salaryLadder, setSalaryLadder] = useState([]);
+  const [promotionOverview, setPromotionOverview] = useState(null);
   
   const [showAddSalary, setShowAddSalary] = useState(false);
   const [showAddPayment, setShowAddPayment] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showExitModal, setShowExitModal] = useState(false);
+  const [showPromoteModal, setShowPromoteModal] = useState(false);
+  const [showSalaryHistory, setShowSalaryHistory] = useState(false);
+  const [showLadderConfig, setShowLadderConfig] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
   const [employeeHistory, setEmployeeHistory] = useState(null);
+  const [salaryChangeHistory, setSalaryChangeHistory] = useState([]);
   
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
@@ -70,24 +81,45 @@ export default function Salaries() {
     notes: ''
   });
   
+  const [promoteData, setPromoteData] = useState({
+    new_salary: '',
+    new_level: '',
+    effective_date: new Date().toISOString().split('T')[0],
+    reason: 'promotion',
+    notes: ''
+  });
+  
   const [exitData, setExitData] = useState({
     exit_date: new Date().toISOString().split('T')[0]
   });
 
+  const [ladderData, setLadderData] = useState([]);
+
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [salariesRes, summaryRes, cyclesRes, accountsRes] = await Promise.all([
+      const [salariesRes, summaryRes, cyclesRes, accountsRes, ladderRes] = await Promise.all([
         axios.get(`${API}/api/finance/salaries`, { withCredentials: true }),
         axios.get(`${API}/api/finance/salary-summary`, { withCredentials: true }),
         axios.get(`${API}/api/finance/salary-cycles?month_year=${selectedMonth}`, { withCredentials: true }),
-        axios.get(`${API}/api/accounting/accounts`, { withCredentials: true })
+        axios.get(`${API}/api/accounting/accounts`, { withCredentials: true }),
+        axios.get(`${API}/api/finance/salary-ladder`, { withCredentials: true }).catch(() => ({ data: [] }))
       ]);
       
       setSalaries(salariesRes.data || []);
       setSummary(summaryRes.data || null);
       setCycles(cyclesRes.data || []);
       setAccounts(accountsRes.data || []);
+      setSalaryLadder(ladderRes.data || []);
+      setLadderData(ladderRes.data || []);
+      
+      // Fetch promotion overview
+      try {
+        const overviewRes = await axios.get(`${API}/api/hr/promotion-eligibility/overview`, { withCredentials: true });
+        setPromotionOverview(overviewRes.data);
+      } catch (err) {
+        // May not have permission
+      }
     } catch (err) {
       console.error('Error fetching data:', err);
       toast.error('Failed to load salary data');
@@ -162,6 +194,32 @@ export default function Salaries() {
     }
   };
 
+  const handlePromote = async (e) => {
+    e.preventDefault();
+    if (!selectedEmployee) return;
+    
+    try {
+      const res = await axios.post(`${API}/api/finance/salaries/${selectedEmployee.employee_id}/promote`, {
+        ...promoteData,
+        new_salary: parseFloat(promoteData.new_salary)
+      }, { withCredentials: true });
+      
+      toast.success(res.data.message);
+      setShowPromoteModal(false);
+      setSelectedEmployee(null);
+      setPromoteData({
+        new_salary: '',
+        new_level: '',
+        effective_date: new Date().toISOString().split('T')[0],
+        reason: 'promotion',
+        notes: ''
+      });
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update salary');
+    }
+  };
+
   const handleViewHistory = async (employee) => {
     try {
       const res = await axios.get(`${API}/api/finance/salaries/${employee.employee_id}/history`, { withCredentials: true });
@@ -170,6 +228,17 @@ export default function Salaries() {
       setShowHistory(true);
     } catch (err) {
       toast.error('Failed to load history');
+    }
+  };
+
+  const handleViewSalaryHistory = async (employee) => {
+    try {
+      const res = await axios.get(`${API}/api/finance/salaries/${employee.employee_id}/salary-history`, { withCredentials: true });
+      setSalaryChangeHistory(res.data || []);
+      setSelectedEmployee(employee);
+      setShowSalaryHistory(true);
+    } catch (err) {
+      toast.error('Failed to load salary history');
     }
   };
 
@@ -199,6 +268,27 @@ export default function Salaries() {
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to close cycle');
     }
+  };
+
+  const handleSaveLadder = async () => {
+    try {
+      await axios.put(`${API}/api/finance/salary-ladder`, { levels: ladderData }, { withCredentials: true });
+      toast.success('Salary ladder updated');
+      setShowLadderConfig(false);
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update ladder');
+    }
+  };
+
+  const openPromoteModal = (employee) => {
+    setSelectedEmployee(employee);
+    setPromoteData(prev => ({
+      ...prev,
+      new_salary: employee.monthly_salary?.toString() || '',
+      new_level: employee.salary_level || ''
+    }));
+    setShowPromoteModal(true);
   };
 
   const openPaymentModal = (employee) => {
@@ -243,6 +333,15 @@ export default function Salaries() {
     }
   };
 
+  const getEligibilityBadge = (status) => {
+    switch (status) {
+      case 'eligible': return <Badge className="bg-green-100 text-green-800"><Star className="h-3 w-3 mr-1" />Eligible</Badge>;
+      case 'near_eligible': return <Badge className="bg-blue-100 text-blue-800"><Target className="h-3 w-3 mr-1" />Near</Badge>;
+      case 'stagnant': return <Badge className="bg-red-100 text-red-800"><AlertTriangle className="h-3 w-3 mr-1" />Stagnant</Badge>;
+      default: return <Badge variant="secondary">In Progress</Badge>;
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -260,6 +359,14 @@ export default function Salaries() {
           <p className="text-gray-500 mt-1">Track employee salaries, advances, and payments</p>
         </div>
         <div className="flex items-center gap-3">
+          <Button 
+            variant="outline" 
+            onClick={() => setShowLadderConfig(true)}
+            data-testid="ladder-config-btn"
+          >
+            <Settings className="h-4 w-4 mr-2" />
+            Salary Ladder
+          </Button>
           <Button 
             variant="outline" 
             onClick={() => { fetchAvailableEmployees(); setShowAddSalary(true); }}
@@ -337,6 +444,51 @@ export default function Salaries() {
         </div>
       )}
 
+      {/* Promotion Eligibility Overview */}
+      {promotionOverview && (promotionOverview.eligible_count > 0 || promotionOverview.stagnant_count > 0) && (
+        <Card className="border-blue-200 bg-blue-50/30" data-testid="promotion-overview">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Award className="h-5 w-5 text-blue-600" />
+              Promotion Eligibility Overview
+            </CardTitle>
+            <CardDescription>Employees flagged for review (no auto-promotion)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-4 gap-4">
+              <div className="text-center p-3 bg-green-100 rounded-lg">
+                <p className="text-2xl font-bold text-green-700">{promotionOverview.eligible_count}</p>
+                <p className="text-sm text-green-600">Eligible for Review</p>
+              </div>
+              <div className="text-center p-3 bg-blue-100 rounded-lg">
+                <p className="text-2xl font-bold text-blue-700">{promotionOverview.near_eligible_count}</p>
+                <p className="text-sm text-blue-600">Near Eligible</p>
+              </div>
+              <div className="text-center p-3 bg-red-100 rounded-lg">
+                <p className="text-2xl font-bold text-red-700">{promotionOverview.stagnant_count}</p>
+                <p className="text-sm text-red-600">Stagnant</p>
+              </div>
+              <div className="text-center p-3 bg-gray-100 rounded-lg">
+                <p className="text-2xl font-bold text-gray-700">{promotionOverview.in_progress_count}</p>
+                <p className="text-sm text-gray-600">In Progress</p>
+              </div>
+            </div>
+            {promotionOverview.eligible.length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm font-medium mb-2">Eligible for Promotion Review:</p>
+                <div className="flex flex-wrap gap-2">
+                  {promotionOverview.eligible.map(emp => (
+                    <Badge key={emp.employee_id} className="bg-green-100 text-green-800">
+                      {emp.employee_name} ({formatCurrency(emp.current_salary)})
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Budget vs Actual */}
       {summary?.budget_info && (
         <Card data-testid="budget-tracking">
@@ -368,7 +520,6 @@ export default function Salaries() {
                 <p className="text-xl font-semibold">{summary.budget_info.utilization_percent}%</p>
               </div>
             </div>
-            {/* Progress bar */}
             <div className="mt-4 h-2 bg-gray-100 rounded-full overflow-hidden">
               <div 
                 className={`h-full transition-all ${
@@ -573,9 +724,9 @@ export default function Salaries() {
                       <th className="text-left py-3 px-4">Employee</th>
                       <th className="text-left py-3 px-4">Role</th>
                       <th className="text-right py-3 px-4">Monthly Salary</th>
-                      <th className="text-center py-3 px-4">Payment Type</th>
+                      <th className="text-center py-3 px-4">Level</th>
                       <th className="text-center py-3 px-4">Status</th>
-                      <th className="text-left py-3 px-4">Start Date</th>
+                      <th className="text-left py-3 px-4">Last Change</th>
                       <th className="text-right py-3 px-4">Actions</th>
                     </tr>
                   </thead>
@@ -596,21 +747,50 @@ export default function Salaries() {
                           <td className="py-3 px-4">{salary.employee_role}</td>
                           <td className="text-right py-3 px-4 font-medium">{formatCurrency(salary.monthly_salary)}</td>
                           <td className="text-center py-3 px-4">
-                            <Badge variant="outline">{salary.payment_type}</Badge>
+                            {salary.salary_level ? (
+                              <Badge variant="outline">{salary.salary_level}</Badge>
+                            ) : '-'}
                           </td>
                           <td className="text-center py-3 px-4">{getStatusBadge(salary.status)}</td>
-                          <td className="py-3 px-4">{formatDate(salary.salary_start_date)}</td>
+                          <td className="py-3 px-4">
+                            {salary.last_salary_change_date ? (
+                              <div>
+                                <p className="text-sm">{formatDate(salary.last_salary_change_date)}</p>
+                                <p className="text-xs text-gray-500 capitalize">{salary.last_salary_change_reason}</p>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
                           <td className="text-right py-3 px-4">
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button 
+                                size="sm" 
+                                variant="ghost"
+                                onClick={() => handleViewSalaryHistory(salary)}
+                                title="Salary Change History"
+                              >
+                                <TrendingUp className="h-4 w-4" />
+                              </Button>
                               <Button 
                                 size="sm" 
                                 variant="ghost"
                                 onClick={() => handleViewHistory(salary)}
+                                title="Payment History"
                               >
                                 <History className="h-4 w-4" />
                               </Button>
                               {salary.status === 'active' && (
                                 <>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={() => openPromoteModal(salary)}
+                                    title="Edit/Promote Salary"
+                                    data-testid={`promote-btn-${salary.employee_id}`}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
                                   <Button 
                                     size="sm" 
                                     variant="outline"
@@ -672,6 +852,11 @@ export default function Salaries() {
                 placeholder="Enter monthly salary"
                 required
               />
+              {salaryLadder.length > 0 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Reference: {salaryLadder.map(l => `${l.name}: ₹${l.min_salary}`).join(' → ')}
+                </p>
+              )}
             </div>
             <div>
               <Label>Payment Type</Label>
@@ -809,11 +994,99 @@ export default function Salaries() {
         </DialogContent>
       </Dialog>
 
-      {/* History Modal */}
+      {/* Promote/Edit Salary Modal */}
+      <Dialog open={showPromoteModal} onOpenChange={setShowPromoteModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Salary / Promote</DialogTitle>
+            <DialogDescription>
+              {selectedEmployee?.employee_name} - Current: {formatCurrency(selectedEmployee?.monthly_salary)}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handlePromote} className="space-y-4">
+            <div className="p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600">Current Salary: <span className="font-semibold">{formatCurrency(selectedEmployee?.monthly_salary)}</span></p>
+              {selectedEmployee?.salary_level && (
+                <p className="text-sm text-gray-600">Current Level: <span className="font-semibold">{selectedEmployee.salary_level}</span></p>
+              )}
+            </div>
+            <div>
+              <Label>New Salary (₹)</Label>
+              <Input 
+                type="number" 
+                value={promoteData.new_salary}
+                onChange={(e) => setPromoteData(prev => ({ ...prev, new_salary: e.target.value }))}
+                placeholder="Enter new salary"
+                required
+              />
+              {salaryLadder.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {salaryLadder.map(level => (
+                    <Button
+                      key={level.level}
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPromoteData(prev => ({ ...prev, new_salary: level.min_salary.toString(), new_level: level.name }))}
+                    >
+                      {level.name}: ₹{level.min_salary.toLocaleString()}
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <Label>Level Label (Optional)</Label>
+              <Input 
+                value={promoteData.new_level}
+                onChange={(e) => setPromoteData(prev => ({ ...prev, new_level: e.target.value }))}
+                placeholder="e.g., Level 2, Senior"
+              />
+            </div>
+            <div>
+              <Label>Effective Date</Label>
+              <Input 
+                type="date" 
+                value={promoteData.effective_date}
+                onChange={(e) => setPromoteData(prev => ({ ...prev, effective_date: e.target.value }))}
+                required
+              />
+            </div>
+            <div>
+              <Label>Reason</Label>
+              <Select value={promoteData.reason} onValueChange={(v) => setPromoteData(prev => ({ ...prev, reason: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="promotion">Promotion</SelectItem>
+                  <SelectItem value="adjustment">Adjustment</SelectItem>
+                  <SelectItem value="correction">Correction</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Notes (Optional)</Label>
+              <Textarea 
+                value={promoteData.notes}
+                onChange={(e) => setPromoteData(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Reason for change..."
+                rows={2}
+              />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => { setShowPromoteModal(false); setSelectedEmployee(null); }}>Cancel</Button>
+              <Button type="submit">Update Salary</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment History Modal */}
       <Dialog open={showHistory} onOpenChange={setShowHistory}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Salary History - {selectedEmployee?.employee_name}</DialogTitle>
+            <DialogTitle>Payment History - {selectedEmployee?.employee_name}</DialogTitle>
           </DialogHeader>
           {employeeHistory && (
             <div className="space-y-4 max-h-[60vh] overflow-y-auto">
@@ -859,16 +1132,57 @@ export default function Salaries() {
                         </p>
                       </div>
                     </div>
-                    {cycle.carry_forward_recovery > 0 && (
-                      <p className="text-xs text-amber-600 mt-2">
-                        Recovery from previous: {formatCurrency(cycle.carry_forward_recovery)}
-                      </p>
-                    )}
                   </div>
                 ))
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Salary Change History Modal */}
+      <Dialog open={showSalaryHistory} onOpenChange={setShowSalaryHistory}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Salary Change History - {selectedEmployee?.employee_name}</DialogTitle>
+            <DialogDescription>Audit trail of all salary changes</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+            {salaryChangeHistory.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No salary changes recorded</p>
+            ) : (
+              salaryChangeHistory.map(change => (
+                <div key={change.history_id} className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Badge className={change.reason === 'promotion' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}>
+                        {change.reason}
+                      </Badge>
+                      {change.new_level && <Badge variant="outline">{change.new_level}</Badge>}
+                    </div>
+                    <span className="text-sm text-gray-500">{formatDate(change.effective_date)}</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <p className="text-sm text-gray-500">Previous</p>
+                      <p className="font-medium">{formatCurrency(change.previous_salary)}</p>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-gray-400" />
+                    <div>
+                      <p className="text-sm text-gray-500">New</p>
+                      <p className="font-medium text-green-600">{formatCurrency(change.new_salary)}</p>
+                    </div>
+                  </div>
+                  {change.notes && (
+                    <p className="text-sm text-gray-600 mt-2">{change.notes}</p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-2">
+                    Changed by {change.changed_by_name} on {formatDate(change.changed_at)}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -902,6 +1216,87 @@ export default function Salaries() {
               <Button type="submit" variant="destructive">Process Exit</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Salary Ladder Config Modal */}
+      <Dialog open={showLadderConfig} onOpenChange={setShowLadderConfig}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Salary Ladder Configuration</DialogTitle>
+            <DialogDescription>Define reference salary levels (guidance only, not enforced)</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+            {ladderData.map((level, index) => (
+              <div key={level.level} className="grid grid-cols-5 gap-3 items-center p-3 bg-gray-50 rounded-lg">
+                <Input
+                  value={level.name}
+                  onChange={(e) => {
+                    const newData = [...ladderData];
+                    newData[index].name = e.target.value;
+                    setLadderData(newData);
+                  }}
+                  placeholder="Level Name"
+                />
+                <Input
+                  type="number"
+                  value={level.min_salary}
+                  onChange={(e) => {
+                    const newData = [...ladderData];
+                    newData[index].min_salary = parseFloat(e.target.value) || 0;
+                    setLadderData(newData);
+                  }}
+                  placeholder="Min Salary"
+                />
+                <Input
+                  type="number"
+                  value={level.max_salary}
+                  onChange={(e) => {
+                    const newData = [...ladderData];
+                    newData[index].max_salary = parseFloat(e.target.value) || 0;
+                    setLadderData(newData);
+                  }}
+                  placeholder="Max Salary"
+                />
+                <Input
+                  type="number"
+                  value={level.order}
+                  onChange={(e) => {
+                    const newData = [...ladderData];
+                    newData[index].order = parseInt(e.target.value) || 0;
+                    setLadderData(newData);
+                  }}
+                  placeholder="Order"
+                />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setLadderData(ladderData.filter((_, i) => i !== index))}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setLadderData([...ladderData, {
+                level: `level_${ladderData.length + 1}`,
+                name: `Level ${ladderData.length + 1}`,
+                min_salary: 0,
+                max_salary: 0,
+                order: ladderData.length
+              }])}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Level
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setShowLadderConfig(false)}>Cancel</Button>
+            <Button onClick={handleSaveLadder}>Save Configuration</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
