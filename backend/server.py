@@ -1476,9 +1476,11 @@ AVAILABLE_PERMISSIONS = {
 }
 
 # Default permissions for each role (for backward compatibility)
+# NOTE: These are TEMPLATES only - Admin can modify any user's permissions freely
+# Role selection pre-fills defaults but remains fully editable
 DEFAULT_ROLE_PERMISSIONS = {
     "Admin": [
-        # Admin gets everything
+        # Admin gets everything - CRM
         "presales.view", "presales.create", "presales.update", "presales.convert",
         "leads.view", "leads.view_all", "leads.create", "leads.update", "leads.convert",
         "projects.view", "projects.view_all", "projects.manage_collaborators",
@@ -1488,22 +1490,38 @@ DEFAULT_ROLE_PERMISSIONS = {
         "warranty.view", "warranty.update", "service.view", "service.view_all", "service.create", "service.update",
         "academy.view", "academy.manage",
         "admin.manage_users", "admin.assign_permissions", "admin.view_reports", "admin.system_settings",
-        # Finance permissions - Admin gets all
+        # Finance permissions - Admin gets all (new granular)
+        "finance.cashbook.view", "finance.cashbook.create", "finance.cashbook.edit", "finance.cashbook.delete",
+        "finance.cashbook.verify", "finance.daily_closing.view", "finance.daily_closing.create", "finance.daily_closing.lock",
+        "finance.transaction.reverse",
+        "finance.accounts.view", "finance.accounts.create", "finance.accounts.edit", "finance.accounts.opening_balance",
+        "finance.receipts.view", "finance.receipts.create", "finance.receipts.download",
+        "finance.invoices.view", "finance.invoices.create", "finance.invoices.cancel",
+        "finance.refunds.view", "finance.refunds.create", "finance.refunds.approve",
+        "finance.project.view", "finance.project.allocate_funds", "finance.project.vendor_mapping",
+        "finance.project.cost_edit", "finance.project.override_budget",
+        "finance.expenses.view", "finance.expenses.create", "finance.expenses.approve",
+        "finance.expenses.record", "finance.expenses.track_refunds",
+        "finance.reports.view", "finance.reports.export", "finance.reports.profit", "finance.reports.margin",
+        "finance.monthly_snapshot", "finance.founder_dashboard",
+        "finance.categories.view", "finance.categories.manage", "finance.vendors.view", "finance.vendors.manage",
+        "finance.payment_schedule.view", "finance.payment_schedule.edit", "finance.payment_schedule.override",
+        "finance.writeoff.approve", "finance.exception.mark", "finance.audit_log.view",
+        "finance.import_data", "finance.cancellation.mark",
+        # Legacy permissions (backward compatibility)
         "finance.view_dashboard", "finance.view_cashbook", "finance.view_bankbook",
         "finance.add_transaction", "finance.edit_transaction", "finance.delete_transaction",
         "finance.verify_transaction", "finance.close_day", "finance.view_reports",
         "finance.manage_accounts", "finance.manage_categories", "finance.set_opening_balance",
-        "finance.import_data", "finance.export_data",
-        "finance.view_project_finance", "finance.edit_vendor_mapping",
-        "finance.daily_closing", "finance.monthly_snapshot", "finance.founder_dashboard",
-        "finance.view_vendors", "finance.manage_vendors", "finance.view_audit_log",
-        # Payment & Receipt permissions
+        "finance.export_data", "finance.view_project_finance", "finance.edit_vendor_mapping",
+        "finance.daily_closing", "finance.view_vendors", "finance.manage_vendors", "finance.view_audit_log",
         "finance.add_receipt", "finance.view_receipts", "finance.edit_payment_schedule",
         "finance.create_invoice", "finance.issue_refund", "finance.mark_cancellation",
-        # Leak-Proof Spend Control - Admin gets all
         "finance.create_expense_request", "finance.approve_expense", "finance.record_expense",
         "finance.allow_over_budget", "finance.view_expense_requests", "finance.track_refunds"
     ],
+    
+    # ============ CRM ROLES (unchanged) ============
     "PreSales": [
         "presales.view", "presales.create", "presales.update", "presales.convert",
         "leads.view", "leads.create",
@@ -1537,6 +1555,7 @@ DEFAULT_ROLE_PERMISSIONS = {
         "academy.view", "academy.manage",
         "admin.view_reports",
         # Project Finance - view and edit vendor mapping
+        "finance.project.view", "finance.project.vendor_mapping",
         "finance.view_project_finance", "finance.edit_vendor_mapping"
     ],
     "OperationLead": [
@@ -1550,24 +1569,186 @@ DEFAULT_ROLE_PERMISSIONS = {
         "service.view", "service.update",
         "academy.view"
     ],
-    "Accountant": [
-        # Basic finance access - add and view transactions (CANNOT EDIT after save)
+    
+    # ============ FINANCE ROLES (New) ============
+    
+    # Junior Accountant - Basic data entry, view only, no delete/override
+    "JuniorAccountant": [
+        # Cashbook - View and create only, NO edit/delete
+        "finance.cashbook.view", "finance.cashbook.create",
+        "finance.daily_closing.view",
+        # Accounts - View only
+        "finance.accounts.view",
+        # Receipts & Invoices - View only
+        "finance.receipts.view", "finance.invoices.view", "finance.refunds.view",
+        # Project Finance - View only
+        "finance.project.view",
+        # Expense Requests - Create and view
+        "finance.expenses.view", "finance.expenses.create",
+        # Reports - Basic only, NO profit/margin
+        "finance.reports.view",
+        # Masters - View only
+        "finance.categories.view", "finance.vendors.view",
+        "finance.payment_schedule.view",
+        # Legacy permissions for backward compatibility
         "finance.view_dashboard", "finance.view_cashbook", "finance.view_bankbook",
         "finance.add_transaction", "finance.view_reports",
-        # Project Finance - view only
-        "finance.view_project_finance",
-        # Daily closing - view only
-        "finance.daily_closing"
+        "finance.view_project_finance", "finance.daily_closing",
+        "finance.view_receipts", "finance.view_vendors",
+        "finance.view_expense_requests", "finance.create_expense_request"
     ],
+    
+    # Senior Accountant - Everything Junior has + edit, verify, lock, invoices
     "SeniorAccountant": [
-        # Extended finance access - verify, close day, manage categories, all reports
+        # Cashbook - Full except delete
+        "finance.cashbook.view", "finance.cashbook.create", "finance.cashbook.edit",
+        "finance.cashbook.verify",
+        "finance.daily_closing.view", "finance.daily_closing.create", "finance.daily_closing.lock",
+        # Accounts - View and edit
+        "finance.accounts.view", "finance.accounts.edit",
+        # Receipts & Invoices - Create and manage
+        "finance.receipts.view", "finance.receipts.create", "finance.receipts.download",
+        "finance.invoices.view", "finance.invoices.create",
+        "finance.refunds.view", "finance.refunds.create",
+        # Project Finance - View and vendor mapping
+        "finance.project.view", "finance.project.vendor_mapping",
+        # Expense Requests - Create, approve (within budget)
+        "finance.expenses.view", "finance.expenses.create", "finance.expenses.approve",
+        "finance.expenses.record",
+        # Reports - Standard reports, NO profit/margin
+        "finance.reports.view", "finance.reports.export",
+        "finance.monthly_snapshot",
+        # Masters - Full management
+        "finance.categories.view", "finance.categories.manage",
+        "finance.vendors.view", "finance.vendors.manage",
+        "finance.payment_schedule.view", "finance.payment_schedule.edit",
+        # Legacy permissions for backward compatibility
         "finance.view_dashboard", "finance.view_cashbook", "finance.view_bankbook",
         "finance.add_transaction", "finance.edit_transaction", "finance.verify_transaction",
         "finance.close_day", "finance.view_reports", "finance.manage_categories", "finance.export_data",
-        # Project Finance - view only
-        "finance.view_project_finance",
-        # Daily & Monthly closing
-        "finance.daily_closing", "finance.monthly_snapshot"
+        "finance.view_project_finance", "finance.edit_vendor_mapping",
+        "finance.daily_closing",
+        "finance.view_receipts", "finance.add_receipt",
+        "finance.view_vendors", "finance.manage_vendors",
+        "finance.view_expense_requests", "finance.create_expense_request",
+        "finance.approve_expense", "finance.record_expense"
+    ],
+    
+    # Finance Manager - Full finance control, all approvals, budget overrides
+    "FinanceManager": [
+        # Cashbook - Full access including delete
+        "finance.cashbook.view", "finance.cashbook.create", "finance.cashbook.edit", "finance.cashbook.delete",
+        "finance.cashbook.verify", "finance.transaction.reverse",
+        "finance.daily_closing.view", "finance.daily_closing.create", "finance.daily_closing.lock",
+        # Accounts - Full access including opening balance
+        "finance.accounts.view", "finance.accounts.create", "finance.accounts.edit", "finance.accounts.opening_balance",
+        # Receipts & Invoices - Full control including cancellation
+        "finance.receipts.view", "finance.receipts.create", "finance.receipts.download",
+        "finance.invoices.view", "finance.invoices.create", "finance.invoices.cancel",
+        "finance.refunds.view", "finance.refunds.create", "finance.refunds.approve",
+        # Project Finance - Full control including budget override
+        "finance.project.view", "finance.project.allocate_funds", "finance.project.vendor_mapping",
+        "finance.project.cost_edit", "finance.project.override_budget",
+        # Expense Requests - Full control including over-budget approval
+        "finance.expenses.view", "finance.expenses.create", "finance.expenses.approve",
+        "finance.expenses.record", "finance.expenses.track_refunds",
+        # Reports - Full visibility including profit/margin
+        "finance.reports.view", "finance.reports.export", "finance.reports.profit", "finance.reports.margin",
+        "finance.monthly_snapshot", "finance.founder_dashboard",
+        # Masters - Full management
+        "finance.categories.view", "finance.categories.manage",
+        "finance.vendors.view", "finance.vendors.manage",
+        "finance.payment_schedule.view", "finance.payment_schedule.edit", "finance.payment_schedule.override",
+        # Controls & Overrides
+        "finance.writeoff.approve", "finance.exception.mark", "finance.audit_log.view",
+        "finance.import_data", "finance.cancellation.mark",
+        # Legacy permissions for backward compatibility
+        "finance.view_dashboard", "finance.view_cashbook", "finance.view_bankbook",
+        "finance.add_transaction", "finance.edit_transaction", "finance.delete_transaction",
+        "finance.verify_transaction", "finance.close_day", "finance.view_reports",
+        "finance.manage_accounts", "finance.manage_categories", "finance.set_opening_balance",
+        "finance.export_data", "finance.view_project_finance", "finance.edit_vendor_mapping",
+        "finance.daily_closing", "finance.view_vendors", "finance.manage_vendors", "finance.view_audit_log",
+        "finance.add_receipt", "finance.view_receipts", "finance.edit_payment_schedule",
+        "finance.create_invoice", "finance.issue_refund", "finance.mark_cancellation",
+        "finance.create_expense_request", "finance.approve_expense", "finance.record_expense",
+        "finance.allow_over_budget", "finance.view_expense_requests", "finance.track_refunds"
+    ],
+    
+    # Chartered Accountant (CA/Auditor) - READ-ONLY access, no operational edits
+    "CharteredAccountant": [
+        # Cashbook - View only
+        "finance.cashbook.view",
+        "finance.daily_closing.view",
+        # Accounts - View only
+        "finance.accounts.view",
+        # Receipts & Invoices - View and download only
+        "finance.receipts.view", "finance.receipts.download",
+        "finance.invoices.view",
+        "finance.refunds.view",
+        # Project Finance - View only
+        "finance.project.view",
+        # Expense Requests - View only
+        "finance.expenses.view",
+        # Reports - Full read access including profit/margin
+        "finance.reports.view", "finance.reports.export", "finance.reports.profit", "finance.reports.margin",
+        "finance.monthly_snapshot",
+        # Masters - View only
+        "finance.categories.view", "finance.vendors.view",
+        "finance.payment_schedule.view",
+        # Audit access
+        "finance.audit_log.view",
+        # Legacy permissions for backward compatibility
+        "finance.view_dashboard", "finance.view_cashbook", "finance.view_bankbook",
+        "finance.view_reports", "finance.export_data",
+        "finance.view_project_finance", "finance.daily_closing",
+        "finance.view_receipts", "finance.view_vendors", "finance.view_audit_log",
+        "finance.view_expense_requests"
+    ],
+    
+    # Founder/CEO - Full visibility, final override, not required for daily tasks
+    "Founder": [
+        # CRM visibility (read-only for oversight)
+        "presales.view", "leads.view", "leads.view_all", "projects.view", "projects.view_all",
+        "warranty.view", "service.view", "service.view_all",
+        "admin.view_reports",
+        # Finance - Full visibility
+        "finance.cashbook.view",
+        "finance.daily_closing.view",
+        "finance.accounts.view",
+        "finance.receipts.view", "finance.receipts.download",
+        "finance.invoices.view",
+        "finance.refunds.view", "finance.refunds.approve",
+        # Project Finance - Full view and override
+        "finance.project.view", "finance.project.override_budget",
+        # Expense Requests - Approve and override
+        "finance.expenses.view", "finance.expenses.approve",
+        # Reports - Full visibility
+        "finance.reports.view", "finance.reports.export", "finance.reports.profit", "finance.reports.margin",
+        "finance.monthly_snapshot", "finance.founder_dashboard",
+        # Masters - View only
+        "finance.categories.view", "finance.vendors.view",
+        "finance.payment_schedule.view", "finance.payment_schedule.override",
+        # Final override capabilities
+        "finance.writeoff.approve", "finance.exception.mark", "finance.audit_log.view",
+        # Legacy permissions for backward compatibility
+        "finance.view_dashboard", "finance.view_cashbook", "finance.view_bankbook",
+        "finance.view_reports", "finance.export_data",
+        "finance.view_project_finance", "finance.daily_closing", "finance.monthly_snapshot",
+        "finance.founder_dashboard", "finance.view_vendors", "finance.view_audit_log",
+        "finance.view_receipts", "finance.view_expense_requests",
+        "finance.approve_expense", "finance.allow_over_budget", "finance.issue_refund"
+    ],
+    
+    # Legacy roles kept for backward compatibility
+    "Accountant": [
+        # Maps to JuniorAccountant permissions
+        "finance.view_dashboard", "finance.view_cashbook", "finance.view_bankbook",
+        "finance.add_transaction", "finance.view_reports",
+        "finance.view_project_finance", "finance.daily_closing",
+        "finance.cashbook.view", "finance.cashbook.create",
+        "finance.accounts.view", "finance.project.view",
+        "finance.reports.view", "finance.daily_closing.view"
     ]
 }
 
