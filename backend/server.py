@@ -16522,6 +16522,14 @@ async def approve_or_reject_expense_request(request_id: str, action: ExpenseAppr
         }
     )
     
+    # Auto-create liability when expense request is approved
+    if action.action == "approve":
+        try:
+            await create_liability_from_expense_request(existing, user_doc)
+        except Exception as e:
+            # Log but don't fail the approval
+            print(f"Warning: Failed to create liability for ER {request_id}: {e}")
+    
     updated = await db.finance_expense_requests.find_one({"request_id": request_id}, {"_id": 0})
     return updated
 
