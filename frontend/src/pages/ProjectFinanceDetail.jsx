@@ -1647,11 +1647,16 @@ const ProjectFinanceDetail = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Account</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Paid To</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Remarks</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Docs</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {transactions.slice(0, 20).map((txn) => (
-                    <tr key={txn.transaction_id} className="hover:bg-slate-50">
+                    <tr 
+                      key={txn.transaction_id} 
+                      className="hover:bg-slate-50 cursor-pointer"
+                      onClick={() => setViewTransaction(txn)}
+                    >
                       <td className="px-4 py-3 text-sm text-slate-600">
                         {formatDate(txn.created_at)}
                       </td>
@@ -1678,6 +1683,19 @@ const ProjectFinanceDetail = () => {
                       <td className="px-4 py-3 text-sm text-slate-600">{txn.account_name}</td>
                       <td className="px-4 py-3 text-sm text-slate-600">{txn.paid_to || '-'}</td>
                       <td className="px-4 py-3 text-sm text-slate-600 max-w-[200px] truncate">{txn.remarks}</td>
+                      <td className="px-4 py-3 text-center">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewTransaction(txn);
+                          }}
+                          title="View details & documents"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
