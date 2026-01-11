@@ -80,6 +80,7 @@ const FounderDashboard = () => {
       setAlerts(alertsRes.data);
       setExpenseStats(expenseStatsRes.data);
       setSafeUseSummary(safeUseRes.data);
+      setLiabilitiesSummary(liabilitiesRes.data);
       setLastUpdated(new Date());
       
       // Fetch revenue reality check
