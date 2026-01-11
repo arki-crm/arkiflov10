@@ -17995,6 +17995,17 @@ async def freeze_project_spending(project_id: str, request: Request):
         upsert=True
     )
     
+    # Audit log for freeze
+    await create_audit_log(
+        entity_type="project_finance",
+        entity_id=project_id,
+        action="freeze",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"spending_frozen": True},
+        details=f"Spending frozen for project {project.get('pid')}"
+    )
+    
     return {"success": True, "message": f"Spending frozen for project {project.get('pid')}"}
 
 
@@ -18018,6 +18029,17 @@ async def unfreeze_project_spending(project_id: str, request: Request):
             "unfrozen_at": now,
             "updated_at": now
         }}
+    )
+    
+    # Audit log for unfreeze
+    await create_audit_log(
+        entity_type="project_finance",
+        entity_id=project_id,
+        action="freeze",
+        user_id=user.user_id,
+        user_name=user.name,
+        new_value={"spending_frozen": False},
+        details=f"Spending unfrozen for project"
     )
     
     return {"success": True, "message": "Spending unfrozen"}
