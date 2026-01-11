@@ -162,12 +162,16 @@ const AppRouter = () => {
         <Route path="/finance/reports" element={<FinanceReports />} />
         <Route path="/finance/reports/cash-flow" element={<CashFlowReport />} />
         <Route path="/finance/reports/project-profitability" element={<ProjectProfitabilityReport />} />
+        <Route path="/finance/payment-reminders" element={<PaymentReminders />} />
+        <Route path="/finance/recurring-transactions" element={<RecurringTransactions />} />
         
         {/* Settings Routes */}
         <Route path="/settings/company-profile" element={<CompanyProfile />} />
         
         {/* Admin Routes */}
         <Route path="/admin/import-export" element={<ImportExport />} />
+        <Route path="/admin/audit-trail" element={<AuditTrail />} />
+        <Route path="/admin/backup" element={<BackupManagement />} />
       </Route>
 
       {/* Redirect root to dashboard */}
