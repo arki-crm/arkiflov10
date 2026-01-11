@@ -52,6 +52,8 @@ const financeSubItems = [
   { path: '/finance/budgets', label: 'Budgets', icon: PiggyBank },
   { path: '/finance/cashbook', label: 'Cash Book', icon: Wallet },
   { path: '/finance/salaries', label: 'Salaries', icon: Banknote },
+  { path: '/finance/liabilities', label: 'Liabilities', icon: FileText },
+  { path: '/finance/pnl-snapshot', label: 'P&L Snapshot', icon: TrendingUp },
   { path: '/finance/expense-requests', label: 'Expense Requests', icon: FileCheck },
   { path: '/finance/receipts', label: 'Receipts', icon: Receipt },
   { path: '/finance/invoices', label: 'Invoices', icon: FileText },
