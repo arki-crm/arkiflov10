@@ -39,7 +39,10 @@ import {
   PiggyBank,
   TrendingUp,
   Banknote,
-  FileUp
+  FileUp,
+  History,
+  Database,
+  Mail
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 
