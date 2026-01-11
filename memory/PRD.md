@@ -551,17 +551,74 @@ A comprehensive, admin-controlled permission system for finance operations with 
 
 ---
 
+## ✅ Budgeting, Forecasting & Spend Control Module - COMPLETED Jan 2026
+
+A comprehensive financial planning and control system for the founder.
+
+### Features Implemented:
+- [x] **Budget Setup** - Create monthly/quarterly budgets by category
+- [x] **Budget Categories** - 10 predefined categories (Fixed: Salaries, Rent, Utilities | Variable: Marketing, Travel, Repairs, etc.)
+- [x] **Budget Activation** - Draft → Active workflow with single active budget per period
+- [x] **Budget vs Actual Tracking** - Auto-pulls from Cashbook, shows consumption
+- [x] **Budget Alerts** - Warns when categories exceed 80% or 100% of planned
+- [x] **Spend Approval Workflow** - Amount-based thresholds:
+  - ₹0-1,000: Auto-allowed (Petty Cash)
+  - ₹1,001-5,000: Finance Manager approval
+  - ₹5,001+: Founder/CEO mandatory
+- [x] **Financial Forecasting** - Cash runway, burn rate, health score
+- [x] **CEO Dashboard** - Sales pressure, commitments, monthly trends
+- [x] **Forecast Assumptions** - Configurable expected income and project values
+
+### New Permissions:
+| Permission | Description |
+|------------|-------------|
+| `finance.budget.view` | View budgets and budget tracking |
+| `finance.budget.edit` | Create and modify budgets |
+| `finance.forecast.view` | View financial forecast dashboard |
+| `finance.expenses.approve_petty` | Approve petty cash (≤₹1,000) |
+| `finance.expenses.approve_standard` | Approve standard expenses (₹1,001-5,000) |
+| `finance.expenses.approve_high` | Approve high-value expenses (>₹5,000) |
+
+### New API Endpoints:
+- `GET /api/finance/budgets` - List all budgets
+- `POST /api/finance/budgets` - Create new budget
+- `PUT /api/finance/budgets/{budget_id}` - Update budget
+- `POST /api/finance/budgets/{budget_id}/activate` - Activate budget
+- `POST /api/finance/budgets/{budget_id}/close` - Close budget
+- `GET /api/finance/budgets/current` - Get active budget with actuals
+- `GET /api/finance/budget-categories` - Get predefined categories
+- `GET /api/finance/budget-alerts` - Get over-budget alerts
+- `GET /api/finance/forecast` - Get financial forecast
+- `POST /api/finance/forecast/assumptions` - Save forecast assumptions
+- `GET /api/finance/expense-requests/approval-rules` - Get spend thresholds
+- `GET /api/finance/expense-requests/can-approve/{id}` - Check approval capability
+
+### New Pages:
+- `/finance/budgets` - Budget Management page
+- `/finance/forecast` - Financial Forecast dashboard
+
+### Key Data Models:
+- **`finance_budgets`**: budget_id, name, period_type, period_start, period_end, status (draft/active/closed), allocations[]
+- **`finance_forecast_assumptions`**: expected_monthly_income, expected_project_closures, average_project_value, fixed_commitments
+
+### Health Score Calculation:
+- Cash Runway Score (40%): >6mo=40, 3-6mo=30, 1-3mo=15, <1mo=0
+- Commitment Ratio Score (30%): <25%=30, 25-50%=20, 50-75%=10, >75%=0
+- Sales Pressure Score (30%): None=30, Low=20, Moderate=10, High=0
+
+---
+
 ### P3 - Future Features (Accounting Phase 2)
 - [x] **Account Master** - ✅ COMPLETED (Jan 2026)
 - [x] **Expense Category Master** - ✅ COMPLETED (Jan 2026)
 - [x] **Vendor Master** - ✅ COMPLETED (Jan 2026)
 - [x] **Audit Logging** - ✅ COMPLETED (Jan 2026)
+- [x] **Budget Forecasting Tools** - ✅ COMPLETED (Jan 2026)
 - [ ] Finance Reports (Cash Flow, P&L, Project Profitability)
 - [ ] Import/Export System
 - [ ] Transaction Safety (Reversal entries)
 - [ ] Historical Cost Intelligence
-- [ ] Import/Export for financial data
-- [ ] Budget forecasting tools
+- [ ] CA Mode (Read-only audit access)
 - [ ] SMS/Email integration for critical alerts
 
 ### P3 - Future Features (CRM)
