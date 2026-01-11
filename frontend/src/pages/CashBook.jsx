@@ -859,6 +859,17 @@ const CashBook = () => {
                           )}
                         </div>
                       </td>
+                      <td className="px-4 py-3 text-center">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setViewTransaction(txn)}
+                          className="text-xs"
+                          title="View details & attachments"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      </td>
                       {isAdminOrCEO && (
                         <td className="px-4 py-3 text-center">
                           {txn.needs_review && (
