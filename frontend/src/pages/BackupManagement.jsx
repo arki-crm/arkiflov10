@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
-import { Database, Plus, RotateCcw, Calendar, User, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { Database, Plus, RotateCcw, Calendar, User, AlertTriangle, CheckCircle, Loader2, Clock } from 'lucide-react';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -15,6 +15,7 @@ export default function BackupManagement() {
   const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState(null);
   const [confirmRestore, setConfirmRestore] = useState(null);
+  const [schedulerStatus, setSchedulerStatus] = useState(null);
 
   const fetchBackups = async () => {
     setLoading(true);
@@ -37,8 +38,23 @@ export default function BackupManagement() {
     }
   };
 
+  const fetchSchedulerStatus = async () => {
+    try {
+      const res = await fetch(`${API}/api/admin/backup/scheduler-status`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSchedulerStatus(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch scheduler status:', err);
+    }
+  };
+
   useEffect(() => {
     fetchBackups();
+    fetchSchedulerStatus();
   }, []);
 
   const handleCreateBackup = async () => {
