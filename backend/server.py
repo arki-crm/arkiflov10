@@ -22582,7 +22582,6 @@ async def list_finance_attachments(
     ).sort("uploaded_at", -1).to_list(100)
     
     return {"attachments": attachments, "count": len(attachments)}
-    )
 
 
 @api_router.delete("/finance/attachments/{attachment_id}")
@@ -22614,20 +22613,6 @@ async def delete_finance_attachment(attachment_id: str, request: Request):
     await db.finance_attachments.delete_one({"attachment_id": attachment_id})
     
     return {"success": True, "message": "Attachment deleted successfully"}
-
-
-@api_router.get("/finance/attachments/by-ids")
-async def get_attachments_by_ids(
-    request: Request,
-    ids: str = ""  # Comma-separated attachment IDs
-):
-    """
-    Get attachment metadata by multiple IDs (for exports).
-    """
-    user = await get_current_user(request)
-    
-    if not ids:
-        return {"attachments": []}
     
     attachment_ids = [aid.strip() for aid in ids.split(",") if aid.strip()]
     
