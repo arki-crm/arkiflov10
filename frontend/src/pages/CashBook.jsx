@@ -180,8 +180,10 @@ const CashBook = () => {
   useEffect(() => {
     fetchData();
     fetchProjects();
+    fetchApprovers();
+    fetchApprovedExpenseRequests();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate]);
+  }, [selectedDate, showNeedsReviewOnly]);
 
   const handleAddTransaction = async () => {
     if (!newTxn.amount || parseFloat(newTxn.amount) <= 0) {
