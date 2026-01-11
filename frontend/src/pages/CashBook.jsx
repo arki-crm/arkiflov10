@@ -892,6 +892,123 @@ const CashBook = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* View Transaction Dialog with Attachments */}
+      <Dialog open={!!viewTransaction} onOpenChange={(open) => !open && setViewTransaction(null)}>
+        <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
+          <DialogHeader className="flex-shrink-0">
+            <DialogTitle className="flex items-center gap-2">
+              {viewTransaction?.transaction_type === 'inflow' ? (
+                <ArrowDownCircle className="w-5 h-5 text-green-600" />
+              ) : (
+                <ArrowUpCircle className="w-5 h-5 text-red-600" />
+              )}
+              Transaction Details
+            </DialogTitle>
+            <DialogDescription>
+              {viewTransaction?.transaction_type === 'inflow' ? 'Money In' : 'Money Out'} • {formatDate(viewTransaction?.date || selectedDate)}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4 overflow-y-auto flex-1">
+            {/* Transaction Info */}
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <Label className="text-xs text-gray-500">Amount</Label>
+                <p className={cn(
+                  "font-bold text-lg",
+                  viewTransaction?.transaction_type === 'inflow' ? "text-green-600" : "text-red-600"
+                )}>
+                  {viewTransaction?.transaction_type === 'inflow' ? '+' : '-'}{formatCurrency(viewTransaction?.amount)}
+                </p>
+              </div>
+              <div>
+                <Label className="text-xs text-gray-500">Account</Label>
+                <p className="font-medium">{viewTransaction?.account_name}</p>
+              </div>
+              <div>
+                <Label className="text-xs text-gray-500">Category</Label>
+                <p>{viewTransaction?.category_name}</p>
+              </div>
+              <div>
+                <Label className="text-xs text-gray-500">Payment Mode</Label>
+                <p className="capitalize">{viewTransaction?.mode?.replace('_', ' ')}</p>
+              </div>
+              {viewTransaction?.project_name && (
+                <div className="col-span-2">
+                  <Label className="text-xs text-gray-500">Project</Label>
+                  <p>{viewTransaction?.project_name}</p>
+                </div>
+              )}
+              {viewTransaction?.remarks && (
+                <div className="col-span-2">
+                  <Label className="text-xs text-gray-500">Remarks</Label>
+                  <p>{viewTransaction?.remarks}</p>
+                </div>
+              )}
+              {viewTransaction?.paid_to && (
+                <div className="col-span-2">
+                  <Label className="text-xs text-gray-500">Paid To</Label>
+                  <p>{viewTransaction?.paid_to}</p>
+                </div>
+              )}
+              <div>
+                <Label className="text-xs text-gray-500">Requested By</Label>
+                <p>{viewTransaction?.requested_by_name || viewTransaction?.created_by_name}</p>
+              </div>
+              {viewTransaction?.approved_by_name && (
+                <div>
+                  <Label className="text-xs text-gray-500">Approved By</Label>
+                  <p className="text-green-600">{viewTransaction?.approved_by_name}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Status Badges */}
+            <div className="flex flex-wrap gap-2">
+              {viewTransaction?.is_verified && (
+                <Badge className="bg-green-100 text-green-700">
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                  Verified
+                </Badge>
+              )}
+              {viewTransaction?.needs_review && (
+                <Badge className="bg-amber-100 text-amber-700">
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  Needs Review
+                </Badge>
+              )}
+              {viewTransaction?.expense_request_id && (
+                <Badge className="bg-blue-100 text-blue-700">
+                  <FileCheck className="w-3 h-3 mr-1" />
+                  Expense Request Linked
+                </Badge>
+              )}
+            </div>
+
+            {/* Attachments Section */}
+            <div className="border-t pt-4">
+              <Label className="text-sm font-medium flex items-center gap-2 mb-3">
+                <Paperclip className="w-4 h-4" />
+                Supporting Documents
+              </Label>
+              {viewTransaction?.transaction_id && (
+                <AttachmentUploader
+                  entityType="cashbook"
+                  entityId={viewTransaction.transaction_id}
+                  readOnly={isDayLocked}
+                />
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="flex-shrink-0 border-t pt-4">
+            <Button variant="outline" onClick={() => setViewTransaction(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
