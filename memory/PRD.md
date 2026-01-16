@@ -1524,6 +1524,55 @@ Monthly recurring templates that create **pending payables** (not auto cashbook 
 
 ---
 
+## ✅ Docker Deployment Package - COMPLETED Jan 16, 2026
+
+Complete Docker-based deployment package for Contabo VPS (or any Ubuntu server).
+
+**Deployment Method:** Docker + Docker Compose
+
+### Files Created
+
+| File | Purpose |
+|------|---------|
+| `docker-compose.yml` | Orchestrates all 3 services |
+| `mongo-init.js` | Creates MongoDB app user with restricted access |
+| `.env.example` | Root environment template |
+| `backend/Dockerfile` | Python FastAPI container |
+| `backend/.env.example` | Backend env template |
+| `frontend/Dockerfile` | Multi-stage React + Nginx build |
+| `frontend/nginx.conf` | Production Nginx config with API proxy |
+| `frontend/.env.example` | Frontend env template |
+| `README_DEPLOYMENT.md` | Complete deployment guide |
+| `validate-deployment.sh` | Post-deployment verification script |
+
+### Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| MongoDB | 27017 | Database with authentication |
+| Backend | 8001 | FastAPI server |
+| Frontend | 80, 443 | Nginx serving React |
+
+### MongoDB Security
+- Authentication ENABLED (mandatory)
+- Two users: `admin` (full), `arkiflo_app` (readWrite only)
+- No hardcoded credentials
+- App fails clearly if credentials wrong
+
+### Volumes (Persistent)
+- `arkiflo_mongo_data` - Database
+- `arkiflo_uploads` - File uploads
+- `arkiflo_backups` - Backup files
+
+### Deployment Commands (4 only)
+```bash
+git clone <repo> && cd arkiflo
+cp .env.example .env && nano .env  # Set passwords & URL
+docker compose up -d
+```
+
+---
+
 ## 🔜 Upcoming Tasks
 
 ### P0 - High Priority
