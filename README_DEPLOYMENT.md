@@ -1,402 +1,748 @@
-# 🚀 ARKIFLO - Deployment Guide
+# 🚀 ARKIFLO - Complete Deployment Guide
 
-**Simple Docker Deployment for Contabo VPS (or any Ubuntu server)**
+**Step-by-step deployment for Contabo VPS (Ubuntu 22.04)**
 
----
-
-## 📋 What You'll Deploy
-
-| Service | Description |
-|---------|-------------|
-| **Frontend** | React app served via Nginx (Port 80) |
-| **Backend** | Python FastAPI server (Port 8001) |
-| **MongoDB** | Database with authentication enabled |
+This guide is written for non-technical users. Follow each step exactly as shown.
 
 ---
 
-## ⚙️ Prerequisites
+## 📋 Table of Contents
 
-### 1. Server Requirements
-- Ubuntu 22.04 (recommended)
-- Minimum 2GB RAM, 20GB disk
-- Root or sudo access
+1. [Server Prerequisites](#1-server-prerequisites)
+2. [One-time Server Setup](#2-one-time-server-setup)
+3. [Project Setup](#3-project-setup)
+4. [Environment Configuration](#4-environment-configuration)
+5. [Deployment Commands](#5-deployment-commands)
+6. [Post-Deployment Verification](#6-post-deployment-verification)
+7. [Common Errors & Fixes](#7-common-errors--fixes)
+8. [Re-deploy / Update Flow](#8-re-deploy--update-flow)
+9. [Backup & Restore](#9-backup--restore)
+10. [Quick Reference](#10-quick-reference)
 
-### 2. Install Docker & Docker Compose
+---
 
-SSH into your Contabo server and run:
+## 1. Server Prerequisites
+
+### Operating System
+- **Required:** Ubuntu 22.04 LTS (recommended)
+- Also works on: Ubuntu 20.04, Debian 11/12
+
+### Minimum Hardware
+| Resource | Minimum | Recommended |
+|----------|---------|-------------|
+| RAM | 2 GB | 4 GB |
+| Disk | 20 GB | 50 GB |
+| CPU | 1 vCPU | 2 vCPU |
+
+### Ports to Open
+
+You must open these ports in your Contabo firewall/security settings:
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| **22** | TCP | SSH access (already open) |
+| **80** | TCP | HTTP (website) |
+| **443** | TCP | HTTPS (secure website) |
+
+> **Note:** Port 27017 (MongoDB) should NOT be opened to public. It's only accessible internally.
+
+### How to Open Ports on Contabo
+
+1. Log in to Contabo Control Panel
+2. Go to your VPS → "Firewall" or "Network"
+3. Add rules for ports 80 and 443
+4. Save changes
+
+---
+
+## 2. One-time Server Setup
+
+### Step 2.1: Connect to Your Server
+
+Open your terminal (Mac/Linux) or PowerShell (Windows) and connect:
 
 ```bash
-# Update system
-sudo apt update && sudo apt upgrade -y
+ssh root@YOUR_SERVER_IP
+```
 
-# Install Docker
+Replace `YOUR_SERVER_IP` with your actual Contabo server IP address.
+
+Example:
+```bash
+ssh root@123.45.67.89
+```
+
+Enter your password when prompted.
+
+---
+
+### Step 2.2: Update the System
+
+Run these commands one by one:
+
+```bash
+# Update package list
+sudo apt update
+
+# Upgrade all packages
+sudo apt upgrade -y
+```
+
+This may take 2-5 minutes.
+
+---
+
+### Step 2.3: Install Docker
+
+```bash
+# Download Docker installation script
 curl -fsSL https://get.docker.com -o get-docker.sh
+
+# Run the installation script
 sudo sh get-docker.sh
 
-# Install Docker Compose
-sudo apt install docker-compose-plugin -y
-
-# Verify installation
-docker --version
-docker compose version
-
-# Allow running without sudo (optional, requires re-login)
-sudo usermod -aG docker $USER
+# Clean up
+rm get-docker.sh
 ```
 
 ---
 
-## 🚀 Deployment (4 Simple Commands)
-
-### Step 1: Get the Code
+### Step 2.4: Install Docker Compose
 
 ```bash
-# Clone or copy your project to the server
-git clone YOUR_REPOSITORY_URL arkiflo
+# Install Docker Compose plugin
+sudo apt install docker-compose-plugin -y
+```
+
+---
+
+### Step 2.5: Verify Installation
+
+Run these commands to confirm everything is installed:
+
+```bash
+# Check Docker version
+docker --version
+```
+Expected output: `Docker version 24.x.x` or higher
+
+```bash
+# Check Docker Compose version
+docker compose version
+```
+Expected output: `Docker Compose version v2.x.x` or higher
+
+```bash
+# Test Docker is working
+sudo docker run hello-world
+```
+Expected output: "Hello from Docker!" message
+
+---
+
+### Step 2.6: (Optional) Run Docker Without Sudo
+
+This lets you run docker commands without typing `sudo` every time:
+
+```bash
+# Add your user to docker group
+sudo usermod -aG docker $USER
+
+# Apply changes (or log out and log back in)
+newgrp docker
+```
+
+---
+
+## 3. Project Setup
+
+### Step 3.1: Navigate to Home Directory
+
+```bash
+cd ~
+```
+
+---
+
+### Step 3.2: Clone the Repository
+
+Replace `YOUR_GITHUB_REPO_URL` with your actual repository URL:
+
+```bash
+git clone YOUR_GITHUB_REPO_URL arkiflo
+```
+
+Example:
+```bash
+git clone https://github.com/yourusername/arkiflo.git arkiflo
+```
+
+---
+
+### Step 3.3: Enter Project Directory
+
+```bash
 cd arkiflo
 ```
 
-### Step 2: Configure Environment
+---
+
+### Step 3.4: Understand the Folder Structure
+
+```
+arkiflo/
+├── docker-compose.yml      ← Main Docker configuration
+├── mongo-init.js           ← MongoDB user creation script
+├── .env.example            ← Environment template (ROOT - COPY THIS)
+├── backend/
+│   ├── Dockerfile          ← Backend container config
+│   ├── .env.example        ← Backend env template (reference only)
+│   ├── server.py           ← Main backend code
+│   └── requirements.txt    ← Python dependencies
+├── frontend/
+│   ├── Dockerfile          ← Frontend container config
+│   ├── nginx.conf          ← Web server configuration
+│   ├── .env.example        ← Frontend env template (reference only)
+│   └── src/                ← React source code
+├── README_DEPLOYMENT.md    ← This file
+└── validate-deployment.sh  ← Deployment verification script
+```
+
+---
+
+## 4. Environment Configuration
+
+### Step 4.1: Create the Environment File
+
+You only need to create ONE `.env` file in the root folder:
 
 ```bash
-# Copy environment templates
 cp .env.example .env
 ```
 
-### Step 3: Edit Passwords & URL
+---
 
-Open `.env` and change these values:
+### Step 4.2: Edit the Environment File
+
+Open the file for editing:
 
 ```bash
 nano .env
 ```
 
-```env
-# CHANGE THESE PASSWORDS (use strong passwords!)
-MONGO_ROOT_PASSWORD=YourStrongRootPassword123!
-MONGO_APP_PASSWORD=YourStrongAppPassword456!
+You will see this content:
 
-# SET YOUR SERVER IP OR DOMAIN
-REACT_APP_BACKEND_URL=http://YOUR_SERVER_IP
+```env
+# ============ MONGODB CREDENTIALS ============
+MONGO_ROOT_USER=admin
+MONGO_ROOT_PASSWORD=CHANGE_THIS_STRONG_PASSWORD_123
+
+MONGO_APP_USER=arkiflo_app
+MONGO_APP_PASSWORD=CHANGE_THIS_APP_PASSWORD_456
+
+# ============ FRONTEND ============
+REACT_APP_BACKEND_URL=http://YOUR_SERVER_IP_OR_DOMAIN
 ```
 
-**Example with real values:**
+---
+
+### Step 4.3: Configure Each Variable
+
+#### Understanding the Variables
+
+| Variable | What It Is | Example Value |
+|----------|------------|---------------|
+| `MONGO_ROOT_USER` | Admin username for database | `admin` (keep as is) |
+| `MONGO_ROOT_PASSWORD` | Admin password for database | `MyStr0ng!Pass#2024` |
+| `MONGO_APP_USER` | App username for database | `arkiflo_app` (keep as is) |
+| `MONGO_APP_PASSWORD` | App password for database | `App$ecure#Pass456` |
+| `REACT_APP_BACKEND_URL` | Your server's public URL | `http://123.45.67.89` |
+
+---
+
+### Step 4.4: Fill In Your Values
+
+Replace the placeholder values with your own:
+
 ```env
-MONGO_ROOT_PASSWORD=xK9#mP2$vL8@nQ4wR7
-MONGO_APP_PASSWORD=hJ6!bN3%cM9&dF5gT2
+# ============ MONGODB CREDENTIALS ============
+MONGO_ROOT_USER=admin
+MONGO_ROOT_PASSWORD=MyStr0ng!Pass#2024
+
+MONGO_APP_USER=arkiflo_app
+MONGO_APP_PASSWORD=App$ecure#Pass456
+
+# ============ FRONTEND ============
 REACT_APP_BACKEND_URL=http://123.45.67.89
 ```
 
-Save and exit (Ctrl+X, Y, Enter).
-
-### Step 4: Deploy!
-
-```bash
-docker compose up -d
-```
-
-**That's it!** 🎉
-
-Your app is now running at: `http://YOUR_SERVER_IP`
+> ⚠️ **IMPORTANT PASSWORD RULES:**
+> - Use at least 16 characters
+> - Include uppercase, lowercase, numbers, and symbols
+> - Do NOT use these example passwords - create your own!
+> - Do NOT use spaces in passwords
 
 ---
 
-## ✅ Verify Deployment
+### Step 4.5: Save and Exit
+
+1. Press `Ctrl + X` to exit
+2. Press `Y` to confirm save
+3. Press `Enter` to confirm filename
+
+---
+
+### Step 4.6: Verify Your Configuration
 
 ```bash
-# Check all services are running
+cat .env
+```
+
+Make sure:
+- ✅ Both passwords are changed from defaults
+- ✅ Server IP is correct (no http:// typos)
+- ✅ No extra spaces or quotes around values
+
+---
+
+## 5. Deployment Commands
+
+### Step 5.1: Build and Start All Services
+
+This single command does everything:
+
+```bash
+docker compose up -d --build
+```
+
+**What this does:**
+- Downloads required images (MongoDB, Python, Node.js, Nginx)
+- Builds your backend and frontend containers
+- Creates the database with authentication
+- Starts all services in the background
+
+**Expected output:**
+```
+[+] Building 120.5s (25/25) FINISHED
+[+] Running 4/4
+ ✔ Network arkiflo_arkiflo_network  Created
+ ✔ Volume "arkiflo_mongo_data"      Created
+ ✔ Volume "arkiflo_uploads"         Created
+ ✔ Volume "arkiflo_backups"         Created
+ ✔ Container arkiflo_mongo          Started
+ ✔ Container arkiflo_backend        Started
+ ✔ Container arkiflo_frontend       Started
+```
+
+> ⏱️ **First build takes 3-10 minutes.** This is normal.
+
+---
+
+### Step 5.2: Wait for Services to Start
+
+Wait 30 seconds for all services to initialize:
+
+```bash
+sleep 30
+```
+
+---
+
+### Step 5.3: Check Service Status
+
+```bash
 docker compose ps
+```
 
-# Expected output:
-# NAME               STATUS          PORTS
-# arkiflo_mongo      Up (healthy)    27017
-# arkiflo_backend    Up (healthy)    8001
-# arkiflo_frontend   Up (healthy)    80, 443
+**Expected output (all should show "Up" and "healthy"):**
+```
+NAME                STATUS              PORTS
+arkiflo_mongo       Up (healthy)        0.0.0.0:27017->27017/tcp
+arkiflo_backend     Up (healthy)        0.0.0.0:8001->8001/tcp
+arkiflo_frontend    Up (healthy)        0.0.0.0:80->80/tcp
+```
 
-# Check backend health
+---
+
+## 6. Post-Deployment Verification
+
+### Step 6.1: Verify Backend is Running
+
+```bash
+curl http://localhost:8001/api/health
+```
+
+**Expected output:**
+```json
+{"status":"healthy","timestamp":"2024-01-16T12:00:00.000000+00:00"}
+```
+
+If you see this, the backend is working! ✅
+
+---
+
+### Step 6.2: Verify Frontend is Running
+
+```bash
+curl -I http://localhost:80
+```
+
+**Expected output (first line):**
+```
+HTTP/1.1 200 OK
+```
+
+If you see "200 OK", the frontend is working! ✅
+
+---
+
+### Step 6.3: Verify MongoDB Authentication
+
+```bash
+docker exec arkiflo_mongo mongosh --eval "db.adminCommand('ping')" --quiet
+```
+
+**Expected output:**
+```
+{ ok: 1 }
+```
+
+If you see `{ ok: 1 }`, MongoDB is working! ✅
+
+---
+
+### Step 6.4: Access Your Application
+
+Open your web browser and go to:
+
+```
+http://YOUR_SERVER_IP
+```
+
+Example:
+```
+http://123.45.67.89
+```
+
+You should see the Arkiflo login page! 🎉
+
+---
+
+### Step 6.5: Run Automated Verification (Optional)
+
+```bash
+chmod +x validate-deployment.sh
+./validate-deployment.sh
+```
+
+This script checks everything automatically and reports pass/fail.
+
+---
+
+## 7. Common Errors & Fixes
+
+### Error: "docker: command not found"
+
+**Cause:** Docker is not installed.
+
+**Fix:**
+```bash
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+```
+
+---
+
+### Error: "permission denied while trying to connect to Docker"
+
+**Cause:** User doesn't have Docker permissions.
+
+**Fix:**
+```bash
+sudo usermod -aG docker $USER
+# Then log out and log back in, or run:
+newgrp docker
+```
+
+---
+
+### Error: "port is already allocated" or "address already in use"
+
+**Cause:** Another service is using port 80 or 8001.
+
+**Fix:**
+```bash
+# Find what's using port 80
+sudo lsof -i :80
+
+# Stop the service (example: Apache)
+sudo systemctl stop apache2
+sudo systemctl disable apache2
+
+# Or kill the process directly
+sudo kill -9 $(sudo lsof -t -i:80)
+```
+
+---
+
+### Error: "MongoDB authentication failed"
+
+**Cause:** Wrong password or database not initialized properly.
+
+**Fix (if first time deploying):**
+```bash
+# Stop everything
+docker compose down
+
+# Remove the database volume (WARNING: deletes all data!)
+docker volume rm arkiflo_mongo_data
+
+# Check your .env passwords are correct
+cat .env
+
+# Start fresh
+docker compose up -d --build
+```
+
+---
+
+### Error: Backend keeps restarting
+
+**Cause:** Usually a MongoDB connection issue.
+
+**Fix:**
+```bash
+# Check backend logs
+docker compose logs backend --tail=50
+
+# Look for error messages about:
+# - "authentication failed" → Check .env passwords
+# - "connection refused" → MongoDB not ready, wait and retry
+```
+
+---
+
+### Error: Frontend shows blank page
+
+**Cause:** Backend URL misconfigured or backend not running.
+
+**Fix:**
+```bash
+# 1. Check backend is healthy
 curl http://localhost:8001/api/health
 
-# View logs if something is wrong
-docker compose logs -f
+# 2. Check REACT_APP_BACKEND_URL in .env is correct
+cat .env | grep REACT_APP
+
+# 3. Rebuild frontend if you changed .env
+docker compose up -d --build frontend
 ```
 
 ---
 
-## 🔐 MongoDB Security
+### Error: "Cannot connect to server" in browser
 
-### User Accounts
+**Cause:** Firewall blocking ports.
 
-| User | Purpose | Access |
-|------|---------|--------|
-| `admin` | Database administration, backups | Full admin |
-| `arkiflo_app` | Application database access | readWrite on `arkiflo` only |
-
-### Where Credentials Are Stored
-
-| File | Contains |
-|------|----------|
-| `.env` (root) | All credentials for docker-compose |
-
-### Changing Passwords
-
-**⚠️ IMPORTANT: To change passwords after first deployment:**
-
-1. Stop services:
-   ```bash
-   docker compose down
-   ```
-
-2. Delete MongoDB data (WARNING: loses all data!):
-   ```bash
-   docker volume rm arkiflo_mongo_data
-   ```
-
-3. Update `.env` with new passwords
-
-4. Restart:
-   ```bash
-   docker compose up -d
-   ```
-
-**For production password rotation without data loss**, use MongoDB shell commands.
-
----
-
-## 📁 Data Persistence
-
-All data persists across container restarts:
-
-| Data | Location | Docker Volume |
-|------|----------|---------------|
-| Database | MongoDB storage | `arkiflo_mongo_data` |
-| File uploads | `/app/uploads` | `arkiflo_uploads` |
-| Backups | `/app/backups` | `arkiflo_backups` |
-
-### View volumes:
+**Fix:**
+1. Check Contabo firewall settings (ports 80, 443 must be open)
+2. Check Ubuntu firewall:
 ```bash
-docker volume ls
-```
+# Check UFW status
+sudo ufw status
 
-### Backup data manually:
-```bash
-# Backup MongoDB
-docker exec arkiflo_mongo mongodump \
-  --username admin \
-  --password YOUR_ROOT_PASSWORD \
-  --authenticationDatabase admin \
-  --out /dump
-
-# Copy dump from container
-docker cp arkiflo_mongo:/dump ./backup_$(date +%Y%m%d)
+# Allow ports if UFW is active
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw reload
 ```
 
 ---
 
-## 🔄 Redeployment (Updates)
+## 8. Re-deploy / Update Flow
 
-When you have code updates:
+### When You Have Code Updates
+
+Follow these steps to deploy new code changes:
+
+#### Step 8.1: Navigate to Project Folder
 
 ```bash
-# Pull latest code
-git pull
+cd ~/arkiflo
+```
 
-# Rebuild and restart
+#### Step 8.2: Pull Latest Code from GitHub
+
+```bash
+git pull origin main
+```
+
+(Replace `main` with your branch name if different)
+
+#### Step 8.3: Rebuild and Restart
+
+```bash
 docker compose down
 docker compose up -d --build
 ```
 
-**Note:** Your data is safe. Only code is updated.
+#### Step 8.4: Verify Everything Works
+
+```bash
+docker compose ps
+curl http://localhost:8001/api/health
+```
 
 ---
 
-## 💾 Backup & Restore
+### Quick Update (Single Command)
+
+For quick updates without full rebuild:
+
+```bash
+cd ~/arkiflo && git pull && docker compose down && docker compose up -d --build
+```
+
+---
+
+## 9. Backup & Restore
 
 ### Automatic Backups
-The app creates daily backups automatically at midnight.
-Backups are stored in the `arkiflo_backups` volume.
 
-### Access Backup Files
+The application creates automatic daily backups at midnight. These are stored inside the Docker volume.
+
+### View Backup Files
+
 ```bash
-# List backups
 docker exec arkiflo_backend ls -la /app/backups
-
-# Copy backup to host
-docker cp arkiflo_backend:/app/backups ./local_backups
 ```
 
-### Manual Database Backup
+### Create Manual Backup
+
 ```bash
 # Create backup
-docker exec arkiflo_mongo mongodump \
-  --username admin \
-  --password YOUR_ROOT_PASSWORD \
-  --authenticationDatabase admin \
-  --archive=/data/db/backup_$(date +%Y%m%d).archive
+docker exec arkiflo_backend python -c "
+import asyncio
+from motor.motor_asyncio import AsyncIOMotorClient
+import json
+import os
+from datetime import datetime
 
-# Copy to host
-docker cp arkiflo_mongo:/data/db/backup_*.archive ./
+async def backup():
+    client = AsyncIOMotorClient(os.environ.get('MONGO_URL'))
+    db = client['arkiflo']
+    
+    backup_dir = f'/app/backups/manual_{datetime.now().strftime(\"%Y%m%d_%H%M%S\")}'
+    os.makedirs(backup_dir, exist_ok=True)
+    
+    collections = await db.list_collection_names()
+    for coll in collections:
+        docs = await db[coll].find({}, {'_id': 0}).to_list(100000)
+        with open(f'{backup_dir}/{coll}.json', 'w') as f:
+            json.dump(docs, f, default=str)
+    print(f'Backup created: {backup_dir}')
+
+asyncio.run(backup())
+"
 ```
 
-### Restore Database
-```bash
-# Copy backup file to container
-docker cp backup_20240115.archive arkiflo_mongo:/data/db/
+### Copy Backup to Your Computer
 
-# Restore
-docker exec arkiflo_mongo mongorestore \
-  --username admin \
-  --password YOUR_ROOT_PASSWORD \
-  --authenticationDatabase admin \
-  --archive=/data/db/backup_20240115.archive
+```bash
+# Copy all backups to current directory
+docker cp arkiflo_backend:/app/backups ./my_backups
+```
+
+### Download Backup via SCP (from your local computer)
+
+```bash
+scp -r root@YOUR_SERVER_IP:~/arkiflo/backups ./local_backups
 ```
 
 ---
 
-## 🌐 Domain & SSL (Optional)
+## 10. Quick Reference
 
-### Using a Domain Name
-
-1. Point your domain to your server IP (DNS A record)
-2. Update `.env`:
-   ```env
-   REACT_APP_BACKEND_URL=https://app.yourdomain.com
-   ```
-3. Rebuild frontend:
-   ```bash
-   docker compose up -d --build frontend
-   ```
-
-### Adding SSL (HTTPS)
-
-For free SSL with Let's Encrypt, add Certbot:
-
-```bash
-# Install Certbot
-sudo apt install certbot -y
-
-# Stop frontend temporarily
-docker compose stop frontend
-
-# Get certificate
-sudo certbot certonly --standalone -d app.yourdomain.com
-
-# Certificates will be in /etc/letsencrypt/live/app.yourdomain.com/
-```
-
-Then update `frontend/nginx.conf` to use SSL certificates.
-
----
-
-## 🔧 Troubleshooting
-
-### Backend won't start
-```bash
-# Check logs
-docker compose logs backend
-
-# Common issues:
-# - MongoDB not ready: Wait 30 seconds, try again
-# - Wrong credentials: Check .env matches
-```
-
-### MongoDB authentication failed
-```bash
-# Check MongoDB logs
-docker compose logs mongo
-
-# Verify credentials match between .env files
-# If first time: just fix .env and restart
-# If data exists: must reset volume (loses data)
-```
-
-### Frontend shows blank page
-```bash
-# Check if backend is healthy
-curl http://localhost:8001/api/health
-
-# Check frontend logs
-docker compose logs frontend
-
-# Rebuild frontend
-docker compose up -d --build frontend
-```
-
-### Can't connect to database
-```bash
-# Test MongoDB connection
-docker exec -it arkiflo_mongo mongosh \
-  --username admin \
-  --password YOUR_ROOT_PASSWORD \
-  --authenticationDatabase admin
-```
-
-### View all logs
-```bash
-docker compose logs -f --tail=100
-```
-
----
-
-## 📊 Service Management
-
-```bash
-# Start all services
-docker compose up -d
-
-# Stop all services
-docker compose down
-
-# Restart specific service
-docker compose restart backend
-
-# View running containers
-docker compose ps
-
-# View resource usage
-docker stats
-```
-
----
-
-## 🗑️ Complete Cleanup (Danger!)
-
-**WARNING: This deletes ALL data!**
-
-```bash
-# Stop and remove everything
-docker compose down -v
-
-# Remove all volumes
-docker volume rm arkiflo_mongo_data arkiflo_uploads arkiflo_backups
-```
-
----
-
-## 📞 Quick Reference
+### Essential Commands
 
 | Task | Command |
 |------|---------|
-| Start app | `docker compose up -d` |
-| Stop app | `docker compose down` |
-| View logs | `docker compose logs -f` |
-| Restart | `docker compose restart` |
-| Rebuild | `docker compose up -d --build` |
+| Start application | `docker compose up -d` |
+| Stop application | `docker compose down` |
+| Restart application | `docker compose restart` |
+| Rebuild and start | `docker compose up -d --build` |
+| View all logs | `docker compose logs -f` |
+| View backend logs | `docker compose logs -f backend` |
+| View frontend logs | `docker compose logs -f frontend` |
+| View MongoDB logs | `docker compose logs -f mongo` |
 | Check status | `docker compose ps` |
+| Check disk usage | `docker system df` |
+
+### Service URLs
+
+| Service | Internal URL | External URL |
+|---------|--------------|--------------|
+| Frontend | http://localhost:80 | http://YOUR_IP |
+| Backend API | http://localhost:8001 | http://YOUR_IP/api |
+| MongoDB | mongodb://localhost:27017 | Not exposed |
+
+### File Locations
+
+| What | Location |
+|------|----------|
+| Application code | `~/arkiflo/` |
+| Environment config | `~/arkiflo/.env` |
+| Docker config | `~/arkiflo/docker-compose.yml` |
+| Logs | `docker compose logs` |
+| Uploaded files | Docker volume `arkiflo_uploads` |
+| Backups | Docker volume `arkiflo_backups` |
+| Database | Docker volume `arkiflo_mongo_data` |
 
 ---
 
 ## ✅ Deployment Checklist
 
-- [ ] Docker & Docker Compose installed
-- [ ] `.env` file created with strong passwords
-- [ ] Server IP/domain configured in `.env`
-- [ ] `docker compose up -d` successful
-- [ ] All 3 services showing "healthy"
-- [ ] Can access app in browser
-- [ ] Can login to application
-- [ ] Tested file upload works
-- [ ] Backup location accessible
+Use this checklist to verify your deployment:
+
+- [ ] Server meets minimum requirements (2GB RAM, 20GB disk)
+- [ ] Docker installed and working (`docker --version`)
+- [ ] Docker Compose installed (`docker compose version`)
+- [ ] Repository cloned to `~/arkiflo`
+- [ ] `.env` file created with YOUR passwords (not defaults!)
+- [ ] `docker compose up -d --build` completed successfully
+- [ ] All 3 containers showing "healthy" in `docker compose ps`
+- [ ] Backend health check returns "healthy"
+- [ ] Can access application in web browser
+- [ ] Can log in to the application
+- [ ] Ports 80 and 443 open in firewall
 
 ---
 
-**Need help?** Check the logs first: `docker compose logs -f`
+## 🆘 Need Help?
+
+1. **Check logs first:**
+   ```bash
+   docker compose logs -f --tail=100
+   ```
+
+2. **Check container status:**
+   ```bash
+   docker compose ps
+   ```
+
+3. **Restart everything:**
+   ```bash
+   docker compose down && docker compose up -d
+   ```
+
+4. **Full reset (WARNING: loses database):**
+   ```bash
+   docker compose down -v
+   docker compose up -d --build
+   ```
+
+---
+
+**Document Version:** 1.0  
+**Last Updated:** January 2026  
+**Application:** Arkiflo - Interior Design Workflow System
