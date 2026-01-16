@@ -1711,6 +1711,13 @@ const ProjectFinanceDetail = () => {
         </CardContent>
       </Card>
 
+      {/* Execution Ledger Section */}
+      <ExecutionLedger 
+        projectId={projectId}
+        userRole={user?.role}
+        transactions={transactions}
+      />
+
       {/* Project Receipts Section */}
       {hasPermission('finance.view_receipts') && (
         <Card className="border-slate-200">
