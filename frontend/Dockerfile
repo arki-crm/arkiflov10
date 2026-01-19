@@ -4,12 +4,16 @@
 # ============================================
 
 # -------- Stage 1: Build React App --------
-FROM node:18-alpine AS builder
+# Use full Node image (not Alpine) to avoid native module issues with AJV
+FROM node:18-bullseye-slim AS builder
 
-# Install build dependencies for native modules
-# - python3, make, g++: Required for node-gyp (native module compilation)
-# - git: Some packages fetch from git repos
-RUN apk add --no-cache python3 make g++ git
+# Install build essentials for any native modules
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -17,15 +21,14 @@ WORKDIR /app
 ARG REACT_APP_BACKEND_URL
 ENV REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL
 
-# Increase Node memory for large builds
+# Increase Node memory for large builds (critical for low-memory VPS)
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Copy package files first (better layer caching)
 COPY package.json yarn.lock ./
 
-# Install dependencies
-# --network-timeout: Prevent timeout on slow connections
-# --frozen-lockfile: Ensure reproducible builds
+# Install dependencies with yarn (matching packageManager in package.json)
+# --network-timeout: Prevent timeout on slow VPS connections
 RUN yarn install --frozen-lockfile --network-timeout 600000
 
 # Copy source code
