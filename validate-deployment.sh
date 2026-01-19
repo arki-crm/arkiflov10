@@ -84,6 +84,33 @@ else
 fi
 
 echo ""
+echo "5. Checking login API (requires .env values)..."
+echo "------------------------------------------------"
+
+# Check if .env exists and read seed credentials
+if [ -f ".env" ]; then
+    SEED_EMAIL=$(grep SEED_ADMIN_EMAIL .env | cut -d '=' -f2)
+    SEED_PASSWORD=$(grep SEED_ADMIN_PASSWORD .env | cut -d '=' -f2)
+    
+    if [ -n "$SEED_EMAIL" ] && [ -n "$SEED_PASSWORD" ]; then
+        LOGIN_RESPONSE=$(curl -s -X POST http://localhost:8001/api/auth/local-login \
+          -H "Content-Type: application/json" \
+          -d "{\"email\":\"$SEED_EMAIL\",\"password\":\"$SEED_PASSWORD\"}")
+        
+        if echo "$LOGIN_RESPONSE" | grep -q '"success":true'; then
+            check 0 "Login API working (authentication successful)"
+        else
+            check 1 "Login API working"
+            echo "  Response: $LOGIN_RESPONSE"
+        fi
+    else
+        echo -e "${YELLOW}⚠${NC} Skipping login test - SEED credentials not found in .env"
+    fi
+else
+    echo -e "${YELLOW}⚠${NC} Skipping login test - .env file not found"
+fi
+
+echo ""
 echo "=================================="
 echo -e "Results: ${GREEN}$PASS passed${NC}, ${RED}$FAIL failed${NC}"
 echo ""
