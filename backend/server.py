@@ -22744,19 +22744,21 @@ async def seed_initial_admin():
             seed_email = os.environ.get('SEED_ADMIN_EMAIL', 'admin@arkiflo.com')
             seed_password = os.environ.get('SEED_ADMIN_PASSWORD', 'Admin123!')
             
-            # Hash the password
-            password_hash = hashlib.sha256(seed_password.encode()).hexdigest()
+            # Hash the password using the same method as local_login
+            # IMPORTANT: Must use hash_password() to be compatible with verify_password()
+            hashed_password = hash_password(seed_password)
             
-            # Create admin user
+            # Create admin user with local_password field for local login compatibility
             admin_user = {
                 "user_id": f"user_{uuid.uuid4().hex[:12]}",
                 "email": seed_email,
-                "password_hash": password_hash,
+                "local_password": hashed_password,  # Must be 'local_password' for local_login endpoint
                 "name": "System Admin",
                 "role": "Admin",
-                "is_active": True,
+                "status": "Active",  # Must be 'Active' for login check
                 "auth_provider": "local",
                 "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
                 "permissions": {}
             }
             
