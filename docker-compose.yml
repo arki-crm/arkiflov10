@@ -36,6 +36,11 @@ services:
       # Pass credentials for seeding
       - SEED_ADMIN_EMAIL=${SEED_ADMIN_EMAIL:-admin@arkiflo.com}
       - SEED_ADMIN_PASSWORD=${SEED_ADMIN_PASSWORD:-Admin123!}
+      # Google OAuth (Direct - No Emergent)
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REDIRECT_URI=${REACT_APP_BACKEND_URL}/api/auth/google/callback
+      - FRONTEND_URL=${REACT_APP_BACKEND_URL}
     volumes:
       - uploads_data:/app/uploads
       - backups_data:/app/backups
