@@ -1099,6 +1099,191 @@ async def logout(request: Request, response: Response):
     return {"message": "Logged out successfully"}
 
 
+# ============ DIRECT GOOGLE OAUTH ============
+
+@api_router.get("/auth/google/login")
+async def google_login(request: Request):
+    """
+    Initiates Google OAuth flow.
+    Redirects user to Google's consent screen.
+    """
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise HTTPException(
+            status_code=500, 
+            detail="Google OAuth not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET."
+        )
+    
+    # Build the Google OAuth URL
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "select_account"
+    }
+    
+    auth_url = f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
+    logger.info(f"Redirecting to Google OAuth: {auth_url}")
+    
+    return RedirectResponse(url=auth_url)
+
+
+@api_router.get("/auth/google/callback")
+async def google_callback(request: Request, response: Response, code: str = None, error: str = None):
+    """
+    Handles Google OAuth callback.
+    Exchanges authorization code for tokens, creates/updates user, sets session cookie.
+    """
+    if error:
+        logger.error(f"Google OAuth error: {error}")
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?error={error}")
+    
+    if not code:
+        logger.error("No authorization code received from Google")
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?error=no_code")
+    
+    try:
+        # Exchange authorization code for tokens
+        async with httpx.AsyncClient() as client_http:
+            token_response = await client_http.post(
+                GOOGLE_TOKEN_URL,
+                data={
+                    "client_id": GOOGLE_CLIENT_ID,
+                    "client_secret": GOOGLE_CLIENT_SECRET,
+                    "code": code,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": GOOGLE_REDIRECT_URI
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"}
+            )
+            
+            if token_response.status_code != 200:
+                logger.error(f"Token exchange failed: {token_response.text}")
+                return RedirectResponse(url=f"{FRONTEND_URL}/login?error=token_exchange_failed")
+            
+            tokens = token_response.json()
+            id_token_jwt = tokens.get("id_token")
+            access_token = tokens.get("access_token")
+            
+            if not id_token_jwt:
+                logger.error("No ID token in response")
+                return RedirectResponse(url=f"{FRONTEND_URL}/login?error=no_id_token")
+        
+        # Verify the ID token using Google's public keys
+        try:
+            idinfo = id_token.verify_oauth2_token(
+                id_token_jwt,
+                google_requests.Request(),
+                GOOGLE_CLIENT_ID
+            )
+            
+            # Extract user info from verified token
+            email = idinfo.get("email")
+            name = idinfo.get("name", email.split("@")[0])
+            picture = idinfo.get("picture")
+            google_sub = idinfo.get("sub")  # Google's unique user ID
+            
+            if not email:
+                logger.error("No email in ID token")
+                return RedirectResponse(url=f"{FRONTEND_URL}/login?error=no_email")
+                
+        except ValueError as e:
+            logger.error(f"ID token verification failed: {e}")
+            return RedirectResponse(url=f"{FRONTEND_URL}/login?error=invalid_token")
+        
+        now = datetime.now(timezone.utc)
+        
+        # Check if user exists by email
+        existing_user = await db.users.find_one({"email": email}, {"_id": 0})
+        
+        if existing_user:
+            user_id = existing_user["user_id"]
+            
+            # Check if user is inactive
+            if existing_user.get("status") == "Inactive":
+                logger.warning(f"Inactive user attempted login: {email}")
+                return RedirectResponse(url=f"{FRONTEND_URL}/login?error=account_inactive")
+            
+            # Update user info and last_login
+            initials = "".join([n[0].upper() for n in name.split()[:2]]) if name else "U"
+            await db.users.update_one(
+                {"user_id": user_id},
+                {"$set": {
+                    "name": name,
+                    "picture": picture,
+                    "initials": initials,
+                    "google_sub": google_sub,
+                    "last_login": now.isoformat(),
+                    "updated_at": now.isoformat()
+                }}
+            )
+            role = existing_user["role"]
+            logger.info(f"Existing user logged in via Google: {email}")
+        else:
+            # Check if this is the first user (becomes Admin)
+            user_count = await db.users.count_documents({})
+            role = "Admin" if user_count == 0 else "Designer"
+            
+            # Create new user
+            user_id = f"user_{uuid.uuid4().hex[:12]}"
+            initials = "".join([n[0].upper() for n in name.split()[:2]]) if name else "U"
+            new_user = {
+                "user_id": user_id,
+                "email": email,
+                "name": name,
+                "picture": picture,
+                "role": role,
+                "phone": None,
+                "status": "Active",
+                "initials": initials,
+                "google_sub": google_sub,
+                "auth_provider": "google",
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+                "last_login": now.isoformat()
+            }
+            await db.users.insert_one(new_user)
+            logger.info(f"New user created via Google OAuth: {email} (role: {role})")
+        
+        # Create session token
+        session_token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+        
+        # Remove old sessions for this user
+        await db.user_sessions.delete_many({"user_id": user_id})
+        
+        # Create new session
+        await db.user_sessions.insert_one({
+            "user_id": user_id,
+            "session_token": session_token,
+            "expires_at": expires_at.isoformat(),
+            "created_at": now.isoformat(),
+            "login_type": "google"
+        })
+        
+        # Create redirect response with cookie
+        redirect_response = RedirectResponse(url=f"{FRONTEND_URL}/dashboard", status_code=302)
+        
+        # Set session cookie (same flags as local login)
+        redirect_response.set_cookie(
+            key="session_token",
+            value=session_token,
+            httponly=True,
+            secure=True,
+            samesite="none",
+            max_age=7 * 24 * 60 * 60,
+            path="/"
+        )
+        
+        logger.info(f"Google OAuth successful for: {email}")
+        return redirect_response
+        
+    except Exception as e:
+        logger.error(f"Google OAuth callback error: {str(e)}")
+        return RedirectResponse(url=f"{FRONTEND_URL}/login?error=callback_failed")
+
+
 # ============ LOCAL LOGIN SYSTEM ============
 
 @api_router.post("/auth/local-login")
