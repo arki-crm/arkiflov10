@@ -22733,6 +22733,45 @@ async def run_scheduled_backup():
 
 
 @app.on_event("startup")
+async def seed_initial_admin():
+    """Create initial admin user if no users exist (first deployment)"""
+    try:
+        # Check if any users exist
+        user_count = await db.users.count_documents({})
+        
+        if user_count == 0:
+            # Get seed credentials from environment
+            seed_email = os.environ.get('SEED_ADMIN_EMAIL', 'admin@arkiflo.com')
+            seed_password = os.environ.get('SEED_ADMIN_PASSWORD', 'Admin123!')
+            
+            # Hash the password
+            password_hash = hashlib.sha256(seed_password.encode()).hexdigest()
+            
+            # Create admin user
+            admin_user = {
+                "user_id": f"user_{uuid.uuid4().hex[:12]}",
+                "email": seed_email,
+                "password_hash": password_hash,
+                "name": "System Admin",
+                "role": "Admin",
+                "is_active": True,
+                "auth_provider": "local",
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "permissions": {}
+            }
+            
+            await db.users.insert_one(admin_user)
+            logger.info(f"✓ Created initial admin user: {seed_email}")
+            logger.info(f"  Login with: {seed_email} / {seed_password}")
+        else:
+            logger.info(f"Database has {user_count} users, skipping seed")
+            
+    except Exception as e:
+        logger.error(f"Failed to seed admin user: {e}")
+        # Don't crash the app, just log the error
+
+
+@app.on_event("startup")
 async def start_backup_scheduler():
     """Start the backup scheduler on application startup"""
     # Schedule daily backup at midnight (00:00 server time)
