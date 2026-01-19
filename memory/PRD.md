@@ -1651,3 +1651,85 @@ curl -X POST http://localhost:8001/api/auth/local-login \
 - [x] `/app/README_DEPLOYMENT.md` - Complete deployment guide
 - [x] `/app/validate-deployment.sh` - Post-deployment verification
 - [x] `/app/backend/server.py` - Fixed seed_initial_admin() function
+
+---
+
+## ✅ Direct Google OAuth Migration - COMPLETED Jan 19, 2026
+
+**Removed Emergent as OAuth middleman.** Google authentication is now handled entirely by our backend.
+
+### What Changed
+
+| Component | Before | After |
+|-----------|--------|-------|
+| OAuth Flow | Via `auth.emergentagent.com` | Direct to Google |
+| Token Verification | Emergent API | Google's public keys |
+| Client ID | Emergent's | Your own (Google Cloud Console) |
+| Control | Third-party dependency | Full ownership |
+
+### New Backend Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/auth/google/login` | GET | Redirects to Google consent screen |
+| `/api/auth/google/callback` | GET | Handles Google response, creates session |
+
+### New Environment Variables
+
+```env
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-your-secret
+```
+
+### Files Modified
+
+- `/app/backend/server.py` - Added Google OAuth endpoints and imports
+- `/app/backend/requirements.txt` - Added google-auth libraries
+- `/app/backend/.env` - Added Google OAuth variables
+- `/app/frontend/src/pages/Login.jsx` - Changed Google button to use our backend
+- `/app/docker-compose.yml` - Added Google OAuth env vars to backend service
+- `/app/.env.example` - Added Google OAuth configuration section
+
+### Files Created
+
+- `/app/GOOGLE_OAUTH_SETUP.md` - Step-by-step Google Cloud Console setup guide
+
+### Session Handling
+
+Uses **exactly the same mechanism** as local login:
+- `session_token` in httpOnly cookie
+- `user_sessions` collection in MongoDB
+- 7-day expiration
+- Same cookie flags (secure, samesite=none)
+
+### Backward Compatibility
+
+- ✅ Local login (`/api/auth/local-login`) unchanged and working
+- ✅ User schema unchanged (added optional `google_sub` field)
+- ✅ Session handling unchanged
+- ✅ All other auth endpoints unchanged
+
+---
+
+## ✅ Frontend Docker Build Fix - Jan 19, 2026
+
+Fixed AJV/node-gyp module errors in Docker build.
+
+### Change
+
+| Before | After |
+|--------|-------|
+| `node:18-alpine` | `node:18-bullseye-slim` |
+
+**Reason:** Alpine uses musl libc which causes issues with some native npm modules (like AJV's optional native dependencies). Debian-based image (bullseye-slim) uses glibc which is more compatible.
+
+### Dockerfile Changes
+
+```dockerfile
+# Before
+FROM node:18-alpine AS builder
+
+# After  
+FROM node:18-bullseye-slim AS builder
+RUN apt-get update && apt-get install -y python3 make g++ git
+```
