@@ -22932,45 +22932,12 @@ async def run_scheduled_backup():
         logger.error(f"Scheduled backup failed: {str(e)}")
 
 
-@app.on_event("startup")
-async def seed_initial_admin():
-    """Create initial admin user if no users exist (first deployment)"""
-    try:
-        # Check if any users exist
-        user_count = await db.users.count_documents({})
-        
-        if user_count == 0:
-            # Get seed credentials from environment
-            seed_email = os.environ.get('SEED_ADMIN_EMAIL', 'admin@arkiflo.com')
-            seed_password = os.environ.get('SEED_ADMIN_PASSWORD', 'Admin123!')
-            
-            # Hash the password using the same method as local_login
-            # IMPORTANT: Must use hash_password() to be compatible with verify_password()
-            hashed_password = hash_password(seed_password)
-            
-            # Create admin user with local_password field for local login compatibility
-            admin_user = {
-                "user_id": f"user_{uuid.uuid4().hex[:12]}",
-                "email": seed_email,
-                "local_password": hashed_password,  # Must be 'local_password' for local_login endpoint
-                "name": "System Admin",
-                "role": "Admin",
-                "status": "Active",  # Must be 'Active' for login check
-                "auth_provider": "local",
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-                "permissions": {}
-            }
-            
-            await db.users.insert_one(admin_user)
-            logger.info(f"✓ Created initial admin user: {seed_email}")
-            logger.info(f"  Login with: {seed_email} / {seed_password}")
-        else:
-            logger.info(f"Database has {user_count} users, skipping seed")
-            
-    except Exception as e:
-        logger.error(f"Failed to seed admin user: {e}")
-        # Don't crash the app, just log the error
+# DISABLED: Auto-seeding removed to prevent duplicate admin conflicts
+# The first user to log in via Google OAuth with Admin-designated email becomes Admin
+# @app.on_event("startup")
+# async def seed_initial_admin():
+#     """DISABLED - Use Google OAuth for admin creation"""
+#     pass
 
 
 @app.on_event("startup")
