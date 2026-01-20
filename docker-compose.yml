@@ -14,12 +14,7 @@ services:
       - ./mongo-init.js:/docker-entrypoint-initdb.d/01-create-app-user.js:ro
     networks:
       - arkiflo_network
-    healthcheck:
-      test: ["CMD", "mongosh", "-u", "${MONGO_ROOT_USER:-admin}", "-p", "${MONGO_ROOT_PASSWORD}", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+    # NO ports - internal only
 
   # ============ BACKEND ============
   backend:
@@ -29,34 +24,25 @@ services:
     container_name: arkiflo_backend
     restart: unless-stopped
     environment:
-      # CRITICAL: authSource=admin because user is created in admin database
       - MONGO_URL=mongodb://${MONGO_APP_USER:-arkiflo_app}:${MONGO_APP_PASSWORD:?MongoDB app password required}@mongo:27017/arkiflo?authSource=admin
       - DB_NAME=arkiflo
       - ENVIRONMENT=production
-      # Pass credentials for seeding
       - SEED_ADMIN_EMAIL=${SEED_ADMIN_EMAIL:-admin@arkiflo.com}
       - SEED_ADMIN_PASSWORD=${SEED_ADMIN_PASSWORD:-Admin123!}
-      # Google OAuth (Direct - No Emergent)
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      - GOOGLE_REDIRECT_URI=${REACT_APP_BACKEND_URL}/api/auth/google/callback
-      - FRONTEND_URL=${REACT_APP_BACKEND_URL}
+      - GOOGLE_REDIRECT_URI=https://arkiflo.arkidots.com/api/auth/google/callback
+      - FRONTEND_URL=https://arkiflo.arkidots.com
     volumes:
       - uploads_data:/app/uploads
       - backups_data:/app/backups
-    ports:
-      - "8001:8001"
-    depends_on:
-      mongo:
-        condition: service_healthy
     networks:
       - arkiflo_network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
+    depends_on:
+      - mongo
+    # LOCALHOST ONLY - nginx will proxy to this
+    ports:
+      - "127.0.0.1:8001:8001"
 
   # ============ FRONTEND ============
   frontend:
@@ -64,16 +50,16 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - REACT_APP_BACKEND_URL=${REACT_APP_BACKEND_URL:?Backend URL required}
+        - REACT_APP_BACKEND_URL=https://arkiflo.arkidots.com
     container_name: arkiflo_frontend
     restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      backend:
-        condition: service_healthy
     networks:
       - arkiflo_network
+    depends_on:
+      - backend
+    # LOCALHOST ONLY - nginx will proxy to this
+    ports:
+      - "127.0.0.1:3000:80"
 
 networks:
   arkiflo_network:
