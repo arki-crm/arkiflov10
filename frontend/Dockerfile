@@ -29,13 +29,13 @@ COPY package.json yarn.lock ./
 
 # Install dependencies with yarn (matching packageManager in package.json)
 # --network-timeout: Prevent timeout on slow VPS connections
-RUN yarn install --frozen-lockfile --network-timeout 600000
+#RUN yarn install --frozen-lockfile --network-timeout 600000
 
 # Copy source code
 COPY . .
 
 # Build production bundle
-RUN yarn build
+RUN npm ci
 
 # -------- Stage 2: Serve with Nginx --------
 FROM nginx:alpine
