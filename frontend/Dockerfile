@@ -3,7 +3,7 @@
 # ============================================
 
 # -------- Stage 1: Build React App --------
-FROM node:18-bullseye-slim AS builder
+FROM node:20-alpine AS build
 
 # Install build tools
 RUN apt-get update && apt-get install -y \
