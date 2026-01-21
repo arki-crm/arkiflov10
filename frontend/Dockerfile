@@ -1,7 +1,6 @@
 # ============================================
 # ARKIFLO FRONTEND - Production Dockerfile
 # ============================================
-
 # -------- Stage 1: Build React App --------
 FROM node:18-alpine AS builder
 
@@ -23,6 +22,7 @@ ENV NODE_OPTIONS="--max-old-space-size=4096"
 ENV npm_config_loglevel=warn
 ENV npm_config_progress=false
 
+ENV CI=false
 # Copy package files
 COPY package.json package-lock.json* ./
 
