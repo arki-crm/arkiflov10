@@ -30,8 +30,7 @@ COPY frontend/package.json ./
 RUN npm install --legacy-peer-deps
 
 # Copy frontend source only
-COPY frontend ./
-
+COPY . .
 # Build React app
 RUN npm run build
 
