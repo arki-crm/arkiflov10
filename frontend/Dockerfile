@@ -23,7 +23,7 @@ ENV REACT_APP_BACKEND_URL=$REACT_APP_BACKEND_URL
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 
 # Copy ONLY frontend package.json
-COPY frontend/package.json ./frontend/  # Fix path if needed
+COPY frontend/package.json ./
 RUN cd frontend && npm install
 COPY frontend/ ./frontend/
 RUN cd frontend && npm run build
